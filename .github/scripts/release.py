@@ -42,7 +42,7 @@ def validate():
     version = metadata['version']
     if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', version):
         raise ValueError('Expected a stable version such as 9.8.6')
-    installer = ROOT / 'dist' / 'Vizu-Setup.exe'
+    installer = ROOT / 'dist' / f'Vizu_Setup_{version}_x64.exe'
     digest = hashlib.sha256(installer.read_bytes()).hexdigest()
     if digest != metadata['sha256'].lower():
         raise ValueError('Installer does not match latest.json SHA-256')
@@ -105,7 +105,7 @@ def publish():
     if release is None:
         history = (ROOT / 'README.md').read_text(encoding='utf-8')
         entry = next((line for line in history.splitlines() if line.startswith(f'- **v{version}**')), '')
-        notes = (entry + '\n\n' if entry else '') + 'Para instalar ou atualizar, baixe e execute **Vizu-Setup.exe**.\n\n'
+        notes = (entry + '\n\n' if entry else '') + 'Para instalar ou atualizar, baixe e execute **' + installer.name + '**.\n\n'
         notes += f'Compilação e testes aprovados para o commit `{sha[:7]}`.\n\nSHA-256 do instalador: `{digest}`.'
         release = api('releases', 'POST', {'tag_name': tag, 'target_commitish': sha,
                      'name': 'Vizu ' + version, 'body': notes, 'draft': True, 'prerelease': False})
@@ -123,7 +123,7 @@ def publish():
     summary = os.environ.get('GITHUB_STEP_SUMMARY')
     if summary:
         with open(summary, 'a', encoding='utf-8') as output:
-            output.write(f'Published [{tag}]({release["html_url"]}) with verified Vizu-Setup.exe.\n')
+            output.write(f'Published [{tag}]({release["html_url"]}) with verified {installer.name}.\n')
 
 
 if __name__ == '__main__':

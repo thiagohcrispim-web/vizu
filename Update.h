@@ -8,7 +8,7 @@
 
 namespace upd {
 
-static const wchar_t* kVersion = L"9.8.10";
+static const wchar_t* kVersion = L"9.8.11";
 // Arquivo no próprio repositório com a versão, o link do instalador e o SHA-256 dele.
 static const wchar_t* kLatestJson = L"/thiagohcrispim-web/vizu/main/latest.json";
 
@@ -75,7 +75,11 @@ inline bool Latest(Release* out) {
 inline bool Download(const std::wstring& url, std::wstring* path, const std::string& sha256) {
     wchar_t tmp[MAX_PATH];
     if (!GetTempPathW(MAX_PATH, tmp)) return false;
-    *path = std::wstring(tmp) + L"Vizu-Setup.exe";
+    // O arquivo recebe o nome da release (Vizu_Setup_9.8.11_x64.exe), só com caracteres seguros.
+    std::wstring name = url.substr(url.find_last_of(L'/') + 1);
+    for (auto& c : name) if (!((c >= L'a' && c <= L'z') || (c >= L'A' && c <= L'Z') || (c >= L'0' && c <= L'9') || c == L'.' || c == L'_' || c == L'-')) c = L'_';
+    if (name.empty() || name.size() > 100) name = L"Vizu_Setup.exe";
+    *path = std::wstring(tmp) + name;
     DeleteFileW(path->c_str());
     if (FAILED(URLDownloadToFileW(nullptr, url.c_str(), path->c_str(), 0, nullptr))) return false;
     std::string want = sha256; for (auto& c : want) c = (char)tolower((unsigned char)c);

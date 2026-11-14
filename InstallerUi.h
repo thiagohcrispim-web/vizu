@@ -63,11 +63,15 @@ struct Window {
             if (hov) p.Fill(r, 12*s, C(0xFFFFFF, 0.14f));
             p.Text(label, r, 15, body.onAccent, DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
         };
-        auto outline = [&](D2D1_RECT_F r, const std::wstring& label, int id) {
+        // Botão Cancelar do protótipo: contorno cinza de 2 px. Devolve a borda direita para alinhar o resto do rodapé.
+        auto ghost = [&](float x, const wchar_t* label, int id) {
+            float w = p.Measure(label, 15, DWRITE_FONT_WEIGHT_NORMAL) / s + 52;
+            auto r = rect(x, 548, x + w, 596);
             bool hov = hit(id, r);
             if (hov) p.Fill(r, 12*s, C(0xFFFFFF, 0.08f));
-            p.Stroke(r, 12*s, hov ? accent : text2);
-            p.Text(label, r, 14, hov ? accent : text, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER);
+            p.Stroke(r, 12*s, C(0x7A808A), 2*s);
+            p.Text(label, r, 15, hov ? text : text2, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER);
+            return x + w;
         };
         auto keycap = [&](D2D1_RECT_F r, const wchar_t* label) {
             p.Fill(D2D1::RectF(r.left, r.bottom - 5*s, r.right, r.bottom), 4*s, C(0xFF6633, 0.18f));
@@ -76,7 +80,7 @@ struct Window {
         };
         bool done = page == 2;
         ui::Brand(rt, body, L*s, (done ? 40 : 44)*s, (done ? 60 : 44)*s);
-        p.Text(L"9.8.10", rect(R-120, done ? 40 : 44, R, done ? 100 : 88), 13, text2, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_TRAILING);
+        p.Text(L"9.8.11", rect(R-120, done ? 40 : 44, R, done ? 100 : 88), 13, text2, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_TRAILING);
         if (page == 0) {
             ph.Text(installed ? T(L"Atualize ou troque a versão:",L"Update or switch edition:",L"Actualiza o cambia la versión:") : T(L"Escolha uma versão:",L"Choose an edition:",L"Elige una versión:"), rect(L,112,R,152), 32, text, DWRITE_FONT_WEIGHT_BOLD);
             p.Text(T(L"Para trocar depois, rode o instalador de novo.",L"To switch later, run the installer again.",L"Para cambiar después, ejecuta el instalador de nuevo."), rect(L,158,R,182), 15, text2);
@@ -113,11 +117,9 @@ struct Window {
             p.Text(edition==0?T(L"O Lite não tem menu circular, conversões, OCR nem relógio.",L"Lite has no radial menu, conversions, OCR or clock.",L"Lite no tiene menú circular, conversiones, OCR ni reloj."):
                    T(L"O Ultra baixa o motor vetorial uma única vez e confere a integridade antes de instalar.",L"Ultra downloads the vector engine once and checks its integrity before installing.",L"Ultra descarga el motor vectorial una sola vez y verifica su integridad antes de instalar."),
                    rect(L, top+3*row+22, R, top+3*row+44), 13, text2);
-            auto cancel = rect(L-4, 548, L+80, 596);
-            bool hc = hit(3, cancel);
-            p.Text(T(L"Cancelar",L"Cancel",L"Cancelar"), cancel, 15, hc ? text : text2, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER);
+            float cx = ghost(L, T(L"Cancelar",L"Cancel",L"Cancelar"), 3);
             if (installed) {
-                auto un = rect(L+96, 548, L+200, 596);
+                auto un = rect(cx + 12, 548, cx + 116, 596);
                 p.Text(T(L"Desinstalar",L"Uninstall",L"Desinstalar"), un, 15, hit(4, un) ? body.danger : text2, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER);
             }
             const wchar_t* go = installed ? T(L"Atualizar Vizu",L"Update Vizu",L"Actualizar Vizu") : T(L"Instalar Vizu",L"Install Vizu",L"Instalar Vizu");
@@ -158,8 +160,8 @@ struct Window {
                 else if (i == current) { p.Stroke(ic, 8*s, accent, 1.5f*s); p.Fill(rect(L+6.5f, y+10.5f, L+9.5f, y+13.5f), 1.5f*s, accent); p.Text(label, rect(L+28, y, R, y+24), 15, C(0xFF8A5C), DWRITE_FONT_WEIGHT_SEMI_BOLD); }
                 else { p.Stroke(ic, 8*s, dim, 1.5f*s); p.Text(label, rect(L+28, y, R, y+24), 15, dim); }
             }
-            if (ultra) p.Text(T(L"Se a conexão cair, o download continua de onde parou.",L"If the connection drops, the download resumes where it stopped.",L"Si se cae la conexión, la descarga continúa donde se detuvo."), rect(L, 552, R-130, 592), 13, text2);
-            outline(rect(R-110, 552, R, 592), T(L"Cancelar",L"Cancel",L"Cancelar"), 3);
+            float cx = ghost(L, T(L"Cancelar",L"Cancel",L"Cancelar"), 3);
+            if (ultra) p.Text(T(L"Se a conexão cair, o download continua de onde parou.",L"If the connection drops, the download resumes where it stopped.",L"Si se cae la conexión, la descarga continúa donde se detuvo."), rect(cx + 20, 552, R, 592), 13, text2, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_TRAILING);
         } else {
             if (success) {
                 auto ring = rect(L, 168, L+64, 232);
