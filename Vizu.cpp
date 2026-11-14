@@ -143,7 +143,7 @@ static bool FontInstalled(const wchar_t* face) {
 }
 static const wchar_t* DefaultUiFont() { // Inter, como no Design System Vizu; sem ela, a fonte do Windows
     static const wchar_t* f = nullptr;
-    if (!f) f = FontInstalled(L"Inter") ? L"Inter" : FontInstalled(L"Segoe UI Variable Text") ? L"Segoe UI Variable Text" : L"Segoe UI";
+    if (!f) f = (fonts::Has(L"Inter") || FontInstalled(L"Inter")) ? L"Inter" : FontInstalled(L"Segoe UI Variable Text") ? L"Segoe UI Variable Text" : L"Segoe UI";
     return f;
 }
 static DWORD g_animStart;
@@ -2624,7 +2624,7 @@ static void PaintSettings(HWND h) {
     rt->PushAxisAlignedClip(view, D2D1_ANTIALIAS_MODE_ALIASED);
     float x = 20 * s, w = sz.width - 40 * s, y = top - g_setScroll;
     auto section = [&](const wchar_t* title) {
-        p.Text(title, D2D1::RectF(x + 10 * s, y, x + w, y + 22 * s), 11.5f, th.text2, DWRITE_FONT_WEIGHT_SEMI_BOLD);
+        p.Text(title, D2D1::RectF(x + 4 * s, y, x + w, y + 22 * s), 13, th.text, DWRITE_FONT_WEIGHT_MEDIUM); // títulos de seção do canvas
         y += 26 * s;
     };
 
@@ -2634,14 +2634,14 @@ static void PaintSettings(HWND h) {
     auto drawCard = [&](std::vector<SRow>& rows) {
         float hsum = 0;
         for (auto& r : rows) hsum += r.h;
-        D2D1_RECT_F c = D2D1::RectF(x, y, x + w, y + hsum + 8 * s);
-        p.Glass(c, 16 * s);
+        D2D1_RECT_F c = D2D1::RectF(x, y, x + w, y + hsum + 8 * s); // sem cartão no nível de cima: filetes entre as linhas, como no canvas
         float yy = c.top + 4 * s;
         for (size_t i = 0; i < rows.size(); ++i) { // fundo dos subitens, um bloco por sequência
             if (rows[i].level && (i == 0 || !rows[i - 1].level)) {
                 float y0 = yy, y1 = yy;
                 for (size_t j = i; j < rows.size() && rows[j].level; ++j) y1 += rows[j].h;
                 p.Fill(D2D1::RectF(c.left + 10 * s, y0 + 2 * s, c.right - 10 * s, y1 - 2 * s), 12 * s, subBg);
+                p.Stroke(D2D1::RectF(c.left + 10 * s, y0 + 2 * s, c.right - 10 * s, y1 - 2 * s), 12 * s, th.stroke);
             }
             yy += rows[i].h;
         }
@@ -2680,31 +2680,31 @@ static void PaintSettings(HWND h) {
     std::vector<SRow> rows;
 
     // VER
-    section(T(L"VER", L"VIEW", L"VER"));
+    section(T(L"Ver", L"View", L"Ver"));
     rows = {
         {RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Ver com a barra de espaço", L"View with the Space bar", L"Ver con la barra espaciadora"), T(L"Selecione um arquivo e aperte Espaço", L"Select a file and press Space", L"Selecciona un archivo y pulsa Espacio")); rtoggle(kTogSpace, r, g_cfg.space); }},
-        {RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Conta-gotas", L"Color picker", L"Cuentagotas"), T(L"HEX, CMYK e PANTONE aproximado; clique copia o HEX", L"HEX, CMYK and approximate PANTONE; click copies the HEX", L"HEX, CMYK y PANTONE aproximado; clic copia el HEX")); rtoggle(kTogPicker, r, g_cfg.picker); }},
+        {RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Conta-gotas", L"Color picker", L"Cuentagotas"), T(L"HEX, CMYK e PANTONE sugeridos; clique copia o HEX", L"HEX, CMYK and suggested PANTONE; click copies the HEX", L"HEX, CMYK y PANTONE sugeridos; clic copia el HEX")); rtoggle(kTogPicker, r, g_cfg.picker); }},
     };
     drawCard(rows);
 
     if (!g_lite) { // Lite: só VER, SISTEMA e TEMAS
     // CONVERTER
-    section(T(L"CONVERTER", L"CONVERT", L"CONVERTIR"));
+    section(T(L"Converter", L"Convert", L"Convertir"));
     rows = {
         {RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Menu circular ao segurar Alt", L"Radial menu when holding Alt", L"Menú circular al mantener Alt"), T(L"Roda do mouse ou clique no centro troca de lado", L"Mouse wheel or center click flips sides", L"Rueda del ratón o clic al centro cambia de lado")); rtoggle(kTogAlt, r, g_cfg.alt); }},
-        {RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Tempo segurando", L"Hold time", L"Tiempo manteniendo"), nullptr); rstep(r, kDelayMinus, kDelayPlus, std::to_wstring(g_cfg.altDelay) + L" ms"); }},
-        {RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Resolução", L"Resolution", L"Resolución"), nullptr); rseg(r, 180 * s, {L"72 dpi", L"300 dpi"}, g_cfg.dpi300 ? 1 : 0, kDpi72); }},
-        {RH, 0, [&](D2D1_RECT_F r) { rlabel(r, L"PDF", nullptr); rseg(r, 240 * s, {T(L"Compactado", L"Compressed", L"Comprimido"), T(L"Sem compressão", L"Uncompressed", L"Sin compresión")}, g_cfg.pdfRaw ? 1 : 0, kPdfSmall); }},
+        {RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Tempo segurando", L"Hold time", L"Tiempo manteniendo"), T(L"Quanto tempo Alt precisa ficar pressionado", L"How long Alt must be held", L"Cuánto tiempo hay que mantener Alt")); rstep(r, kDelayMinus, kDelayPlus, std::to_wstring(g_cfg.altDelay) + L" ms"); }},
+        {RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Resolução", L"Resolution", L"Resolución"), T(L"Para os formatos de imagem", L"For image formats", L"Para los formatos de imagen")); rseg(r, 180 * s, {L"72 dpi", L"300 dpi"}, g_cfg.dpi300 ? 1 : 0, kDpi72); }},
+        {RH, 0, [&](D2D1_RECT_F r) { rlabel(r, L"PDF", T(L"Compacto ou sem compressão", L"Compressed or uncompressed", L"Comprimido o sin compresión")); rseg(r, 240 * s, {T(L"Compactado", L"Compressed", L"Comprimido"), T(L"Sem compressão", L"Uncompressed", L"Sin compresión")}, g_cfg.pdfRaw ? 1 : 0, kPdfSmall); }},
         {RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Qualidade JPG e PDF", L"JPG and PDF quality", L"Calidad JPG y PDF"), nullptr); rstep(r, kQualMinus, kQualPlus, std::to_wstring(g_cfg.quality) + L"%"); }},
         {RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Qualidade WEBP", L"WEBP quality", L"Calidad WEBP"), T(L"Menor = arquivo menor (75 é o ponto ideal)", L"Lower = smaller file (75 is the sweet spot)", L"Menor = archivo más pequeño (75 es lo ideal)")); rstep(r, kWebpMinus, kWebpPlus, std::to_wstring(g_cfg.webpQuality) + L"%"); }},
     };
-    if (vec::Available()) rows.insert(rows.begin()+4, {RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Texto em SVG / EPS", L"Text in SVG / EPS", L"Texto en SVG / EPS"), T(L"CDR/SVG: instale as fontes originais", L"CDR/SVG: install the original fonts", L"CDR/SVG: instala las fuentes originales")); rseg(r, 240 * s, {T(L"Editável", L"Editable", L"Editable"), T(L"Em curvas", L"As paths", L"En curvas")}, g_cfg.vectorTextPaths ? 1 : 0, kVecText); }});
+    if (vec::Available()) rows.insert(rows.begin()+4, {RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Texto em SVG e EPS", L"Text in SVG and EPS", L"Texto en SVG y EPS"), T(L"Texto editável ou convertido em curvas", L"Editable text or converted to outlines", L"Texto editable o convertido en curvas")); rseg(r, 240 * s, {T(L"Editável", L"Editable", L"Editable"), T(L"Em curvas", L"As paths", L"En curvas")}, g_cfg.vectorTextPaths ? 1 : 0, kVecText); }});
     drawCard(rows);
 
     // TEMPO: Relógio (com opções) e Agenda
-    section(T(L"TEMPO", L"TIME", L"TIEMPO"));
+    section(T(L"Tempo", L"Time", L"Tiempo"));
     rows.clear();
-    rows.push_back({RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Ativar Relógio", L"Enable Clock", L"Activar Reloj"), T(L"Relógio na área de trabalho", L"Desktop clock", L"Reloj en el escritorio")); rtoggle(kClockOn, r, g_clock.on); }});
+    rows.push_back({RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Relógio na área de trabalho", L"Desktop clock", L"Reloj en el escritorio"), T(L"Mostra hora e data no fundo do Windows", L"Shows time and date on the Windows desktop", L"Muestra hora y fecha en el escritorio de Windows")); rtoggle(kClockOn, r, g_clock.on); }});
     if (g_clock.on) {
         rows.push_back({SH, 1, [&](D2D1_RECT_F r) { rlabel(r, T(L"Tamanho do relógio", L"Clock size", L"Tamaño del reloj"), nullptr); rseg(r, 200 * s, {L"100%", L"90%", L"70%"}, g_clock.scalePct == 90 ? 1 : g_clock.scalePct == 70 ? 2 : 0, kClk100); }});
         rows.push_back({SH, 1, [&](D2D1_RECT_F r) { rlabel(r, T(L"Fonte do relógio", L"Clock font", L"Fuente del reloj"), T(L"Qualquer fonte instalada no Windows", L"Any font installed in Windows", L"Cualquier fuente instalada en Windows")); wchar_t b[96]; swprintf(b, 96, L"%ls · %lu px", g_clock.font.c_str(), g_clock.fontPx); rpill(r, kClockFont, b, 170 * s); }});
@@ -2714,7 +2714,7 @@ static void PaintSettings(HWND h) {
             rows.push_back({SH, 2, [&](D2D1_RECT_F r) { rlabel(r, T(L"Histórico", L"History", L"Historial"), T(L"Hoje e últimos 7 dias", L"Today and last 7 days", L"Hoy y últimos 7 días")); rpill(r, kTheftHist, T(L"Abrir", L"Open", L"Abrir"), 90 * s); }});
         rows.push_back({SH, 1, [&](D2D1_RECT_F r) { rlabel(r, T(L"Ativar Foco · Pomodoro", L"Enable Focus · Pomodoro", L"Activar Enfoque · Pomodoro"), T(L"Foco e pausa por cores", L"Focus and break by color", L"Enfoque y pausa por colores")); rtoggle(kFocoOn, r, g_clock.pomoOn); }});
         if (g_clock.pomoOn) {
-            rows.push_back({SH, 2, [&](D2D1_RECT_F r) { rlabel(r, T(L"Tempos", L"Times", L"Tiempos"), T(L"Foco · pausa · pausa longa (min)", L"Focus · break · long break (min)", L"Enfoque · pausa · pausa larga (min)")); rseg(r, 270 * s, {L"25 · 5 · 15", L"50 · 10 · 20", L"15 · 3 · 10"}, (int)g_clock.pomoTimes, kPomoT0); }});
+            rows.push_back({SH, 2, [&](D2D1_RECT_F r) { rlabel(r, T(L"Tempos", L"Times", L"Tiempos"), T(L"Foco · pausa · pausa longa, em minutos", L"Focus · break · long break, in minutes", L"Enfoque · pausa · pausa larga, en minutos")); rseg(r, 270 * s, {L"25 · 5 · 15", L"50 · 10 · 20", L"15 · 3 · 10"}, (int)g_clock.pomoTimes, kPomoT0); }});
             rows.push_back({SH, 2, [&](D2D1_RECT_F r) {
                 rlabel(r, T(L"Cores do Pomodoro", L"Pomodoro colors", L"Colores del Pomodoro"), T(L"Foco / pausa", L"Focus / break", L"Enfoque / pausa"));
                 D2D1_RECT_F box = rbox(r, 3 * 50 * s);
@@ -2731,12 +2731,12 @@ static void PaintSettings(HWND h) {
             }});
         }
     }
-    rows.push_back({RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Ativar Agenda", L"Enable Agenda", L"Activar Agenda"), T(L"Seu dia e avisos antes dos eventos", L"Your day and reminders before events", L"Tu día y avisos antes de los eventos")); rtoggle(kAgendaOn, r, g_clock.agendaOn); }});
+    rows.push_back({RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Ativar Agenda", L"Enable Agenda", L"Activar Agenda"), T(L"Mostra seus próximos compromissos", L"Shows your upcoming appointments", L"Muestra tus próximos compromisos")); rtoggle(kAgendaOn, r, g_clock.agendaOn); }});
     drawCard(rows);
 
-    section(T(L"OUTROS", L"OTHER", L"OTROS"));
+    section(T(L"Outros", L"Other", L"Otros"));
     rows.clear();
-    rows.push_back({RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Ativar OCR", L"Enable OCR", L"Activar OCR"), T(L"Lê o texto de qualquer área da tela · Ctrl+Alt+T", L"Reads text from any area of the screen · Ctrl+Alt+T", L"Lee el texto de cualquier área de la pantalla · Ctrl+Alt+T")); rtoggle(kOcrOn, r, g_clock.ocr); }});
+    rows.push_back({RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"OCR", L"OCR", L"OCR"), T(L"Lê o texto de qualquer área da tela · Ctrl+Alt+T", L"Reads text from any area of the screen · Ctrl+Alt+T", L"Lee el texto de cualquier área de la pantalla · Ctrl+Alt+T")); rtoggle(kOcrOn, r, g_clock.ocr); }});
     if (g_clock.ocr) {
         rows.push_back({SH, 1, [&](D2D1_RECT_F r) { rlabel(r, T(L"Quebras de linha", L"Line breaks", L"Saltos de línea"), T(L"Ao copiar o texto lido", L"When copying the text", L"Al copiar el texto")); rseg(r, 200 * s, {T(L"Manter", L"Keep", L"Mantener"), T(L"Juntar", L"Join", L"Unir")}, ReadDword(L"OcrJoin", 1) ? 1 : 0, kOcrKeep); }});
         rows.push_back({SH, 1, [&](D2D1_RECT_F r) {
@@ -2749,7 +2749,7 @@ static void PaintSettings(HWND h) {
         std::wstring names;
         for (auto& n : FolderList()) names += (names.empty() ? L"" : L", ") + n;
         names += T(L" · cada uma com _Morto", L" · each with _Morto", L" · cada una con _Morto");
-        rlabel(r, T(L"Pastas Padrão Vizu", L"Vizu folder set", L"Carpetas estándar Vizu"), names.c_str()); rpill(r, kBtnFolders, T(L"Editar", L"Edit", L"Editar"), 90 * s); }});
+        rlabel(r, T(L"Pastas padrão Vizu", L"Vizu folder set", L"Carpetas estándar Vizu"), names.c_str()); rpill(r, kBtnFolders, T(L"Editar", L"Edit", L"Editar"), 90 * s); }});
     rows.push_back({RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Limpeza", L"Cleanup", L"Limpieza"), T(L"Excluir temporários direto, sem passar pela Lixeira", L"Delete temp files directly, skipping the Recycle Bin", L"Eliminar temporales directamente, sin pasar por la Papelera")); rtoggle(kTogTempDel, r, g_cfg.tempPermanent); }});
     drawCard(rows);
     } // !g_lite
@@ -2785,7 +2785,7 @@ static void PaintSettings(HWND h) {
     }
 
     // TEMAS: miniaturas
-    section(T(L"TEMAS", L"THEMES", L"TEMAS"));
+    section(T(L"Temas", L"Themes", L"Temas"));
     rows.clear();
     rows.push_back({112 * s, 0, [&](D2D1_RECT_F r) {
         struct TC { const wchar_t* name; UINT bg, panel, acc; int mode; };
@@ -3669,6 +3669,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmd, int) {
     if (FAILED(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_d2d)) ||
         FAILED(DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), (IUnknown**)&g_dw)))
         return 1;
+    fonts::Init(g_dw); // Inter e Space Grotesk embutidas: a interface não depende de fonte instalada
 
     WNDCLASSW wc = {};
     wc.style = CS_DBLCLKS;

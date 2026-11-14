@@ -10,6 +10,7 @@
 #include <cstdlib>
 #include <cmath>
 #include "Feather.h"
+#include "Fonts.h"
 
 namespace ui {
 
@@ -76,7 +77,7 @@ inline Theme ClassicTheme() {
     t.panel = Rgba(0x4A4F57); t.panelHot = Rgba(0x5C6472); t.stroke = Rgba(0x5C6472);
     t.text = Rgba(0xFFFFFF); t.text2 = Rgba(0xBCC2CC);
     t.accent = Rgba(0xFF6633); t.onAccent = Rgba(0x000000); t.danger = Rgba(0xFF6961);
-    t.track = Rgba(0x23272E); t.knob = Rgba(0xBCC2CC); t.knobOn = Rgba(0x000000);
+    t.track = Rgba(0x5C6472); t.knob = Rgba(0xF2F2F2); t.knobOn = Rgba(0xF2F2F2);
     t.segFill = Rgba(0xF2F2F2); t.segText = Rgba(0x1E2126); t.icon = Rgba(0xFFFFFF);
     t.glow = 0xFFFFFF; t.glowA = 0.05f;
     return t;
@@ -89,12 +90,14 @@ inline Theme MakeTheme(int mode, bool glass) {
     bool dark = mode == kThemeDark || (mode == kThemeWindows && SystemDark());
     t.dark = dark; t.glass = glass;
     if (mode == kThemeDark) { // preto x chumbo, sem cor
-        t.tint = glass ? Rgba(0x0B0B0C, 0.80f) : Rgba(0x0B0B0C);
-        t.panel = Rgba(0xFFFFFF, 0.05f); t.panelHot = Rgba(0xFFFFFF, 0.10f); t.stroke = Rgba(0xFFFFFF, 0.10f);
-        t.text = Rgba(0xEDEDEF); t.text2 = Rgba(0x8D8D93);
-        t.accent = Rgba(0x4A4F57); t.onAccent = Rgba(0xFFFFFF); t.danger = Rgba(0xFF6961); // grafite (Ardósia) da Vizu
-        t.track = Rgba(0xFFFFFF, 0.12f); t.knob = Rgba(0x9AA1AD); t.knobOn = Rgba(0xFFFFFF);
-        t.segFill = Rgba(0x4A4F57); t.segText = Rgba(0xFFFFFF); t.icon = Rgba(0x9AA1AD);
+        // Escuro do canvas: preto (#0F0F11), cinza-claro para o que fica ligado, sem cor.
+        t.tint = glass ? Rgba(0x0F0F11, 0.80f) : Rgba(0x0F0F11);
+        t.panel = Rgba(0xFFFFFF, 0.05f); t.panelHot = Rgba(0xFFFFFF, 0.10f); t.stroke = Rgba(0x2A2A2E);
+        t.text = Rgba(0xEDEDEF); t.text2 = Rgba(0xA1A1A8);
+        t.accent = Rgba(0xEDEDEF); t.onAccent = Rgba(0x0F0F11); t.danger = Rgba(0xFF6961);
+        // Ligado: trilha clara com knob escuro (com knob claro sobre trilha clara o interruptor some).
+        t.track = Rgba(0x2A2A2E); t.knob = Rgba(0xF2F2F2); t.knobOn = Rgba(0x0F0F11);
+        t.segFill = Rgba(0xEDEDEF); t.segText = Rgba(0x0F0F11); t.icon = Rgba(0x9AA1AD);
         t.glow = 0xFFFFFF; t.glowA = 0.10f;
     } else if (dark) { // Padrão Windows, escuro
         t.tint = glass ? Rgba(0x1C1C1E, 0.62f) : Rgba(0x1C1C1E);
@@ -113,6 +116,13 @@ inline Theme MakeTheme(int mode, bool glass) {
         t.track = Rgba(0x000000, 0.10f); t.knob = Rgba(0xFFFFFF); t.knobOn = Rgba(0xFFFFFF);
         t.glow = win ? SystemAccent() : 0xFFFFFF; t.glowA = win ? 0.16f : 0.30f;
         t.segFill = Rgba(0xFFFFFF); t.segText = t.text; t.icon = t.text;
+        if (!win) { // Claro do canvas: branco, preto e laranja só nos interruptores e seleções
+            t.tint = Rgba(0xFFFFFF); t.stroke = Rgba(0xD5D9DF);
+            t.text = Rgba(0x000000); t.text2 = Rgba(0x4A4F57);
+            t.accent = Rgba(0xFF6633); t.onAccent = Rgba(0x000000);
+            t.track = Rgba(0xD5D9DF); t.knob = Rgba(0xF2F2F2); t.knobOn = Rgba(0xF2F2F2);
+            t.segFill = Rgba(0x000000); t.segText = Rgba(0xFFFFFF); t.icon = Rgba(0x000000);
+        }
     }
     return t;
 }
@@ -326,7 +336,8 @@ public:
     IDWriteTextFormat* Format(float size, DWRITE_FONT_WEIGHT weight, DWRITE_TEXT_ALIGNMENT align, const wchar_t* family = nullptr, bool wrap = false) {
         IDWriteTextFormat* f = nullptr;
         if (!family) family = th.font;
-        if (FAILED(dw->CreateTextFormat(family, nullptr, weight, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, size * s, L"pt-br", &f))) return nullptr;
+        IDWriteFontCollection* coll = fonts::Has(family) ? fonts::Collection() : nullptr; // Inter e Space Grotesk vêm no .exe
+        if (FAILED(dw->CreateTextFormat(family, coll, weight, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, size * s, L"pt-br", &f))) return nullptr;
         f->SetTextAlignment(align);
         f->SetParagraphAlignment(wrap ? DWRITE_PARAGRAPH_ALIGNMENT_NEAR : DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
         if (!wrap) {
@@ -363,12 +374,24 @@ public:
         f->Release();
     }
     // Texto com quebra de linha; retorna a altura usada.
-    float Paragraph(const std::wstring& t, float x, float y, float width, float size, D2D1_COLOR_F c, bool draw = true) {
-        IDWriteTextFormat* f = Format(size, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_LEADING, nullptr, true);
+    // lineScale: altura da linha em múltiplos do corpo (1.45 padrão; 1.12 para títulos do protótipo).
+    // **trecho** sai em negrito (o protótipo usa <b>).
+    float Paragraph(const std::wstring& src, float x, float y, float width, float size, D2D1_COLOR_F c, bool draw = true, float lineScale = 1.45f,
+                    DWRITE_FONT_WEIGHT weight = DWRITE_FONT_WEIGHT_NORMAL) {
+        std::wstring t; std::vector<std::pair<UINT32, UINT32>> bold; UINT32 start = 0; bool on = false;
+        for (size_t i = 0; i < src.size();) {
+            if (src[i] == L'*' && i + 1 < src.size() && src[i + 1] == L'*') {
+                if (on) bold.push_back({start, (UINT32)t.size() - start}); else start = (UINT32)t.size();
+                on = !on; i += 2; continue;
+            }
+            t.push_back(src[i++]);
+        }
+        IDWriteTextFormat* f = Format(size, weight, DWRITE_TEXT_ALIGNMENT_LEADING, nullptr, true);
         IDWriteTextLayout* lay = nullptr;
         float h = 0;
         if (f && SUCCEEDED(dw->CreateTextLayout(t.c_str(), (UINT32)t.size(), f, width, 10000, &lay))) {
-            lay->SetLineSpacing(DWRITE_LINE_SPACING_METHOD_UNIFORM, size * s * 1.45f, size * s * 1.1f);
+            for (auto& r : bold) lay->SetFontWeight(DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_RANGE{r.first, r.second});
+            lay->SetLineSpacing(DWRITE_LINE_SPACING_METHOD_UNIFORM, size * s * lineScale, size * s * 1.1f);
             DWRITE_TEXT_METRICS m; lay->GetMetrics(&m); h = m.height;
             ID2D1SolidColorBrush* b = nullptr;
             if (draw && SUCCEEDED(rt->CreateSolidColorBrush(c, &b))) { rt->DrawTextLayout(D2D1::Point2F(x, y), lay, b); b->Release(); }

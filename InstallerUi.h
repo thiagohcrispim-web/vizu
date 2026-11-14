@@ -47,6 +47,21 @@ struct Window {
             else rt->Clear(C(0x1B2029));
             if (bg) bg->Release(); if (coll) coll->Release();
         }
+        { // Grão do protótipo (feTurbulence): pontinhos claros e finos em mosaico sobre o degradê.
+            const UINT32 N = 96; std::vector<UINT32> px(N * N, 0); UINT32 seed = 20260501u;
+            for (auto& v : px) {
+                seed = seed * 1664525u + 1013904223u;
+                UINT32 a = ((seed >> 16) & 0xFF) > 246 ? 24u : 0u; // ~4% dos pixels, bem fracos
+                v = (a << 24) | (a << 16) | (a << 8) | a;          // BGRA pré-multiplicado (cinza claro)
+            }
+            ID2D1Bitmap* bmp = nullptr; ID2D1BitmapBrush* grain = nullptr;
+            if (SUCCEEDED(rt->CreateBitmap(D2D1::SizeU(N, N), px.data(), N * 4,
+                                           D2D1::BitmapProperties(D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED)), &bmp)) &&
+                SUCCEEDED(rt->CreateBitmapBrush(bmp, D2D1::BitmapBrushProperties(D2D1_EXTEND_MODE_WRAP, D2D1_EXTEND_MODE_WRAP), &grain))) {
+                rt->FillRectangle(D2D1::RectF(0, 0, w, h), grain);
+            }
+            if (grain) grain->Release(); if (bmp) bmp->Release();
+        }
         ui::Theme body = theme, head = theme;
         body.text = C(0xF2F2F2); body.text2 = C(0xCDD2DA); body.accent = C(0xFF6633); body.onAccent = C(0x0A0B0D); body.neon = true;
         body.font = L"Inter"; head = body; head.font = L"Space Grotesk";
@@ -56,9 +71,17 @@ struct Window {
         float width = w / s, L = 48, R = width - 48;
         hits.clear();
         auto hit = [&](int id, D2D1_RECT_F r) { hits.push_back({id,r}); return hot == id; };
+        // Brilho laranja do botão primário (box-shadow do protótipo): camadas que enfraquecem para fora.
+        auto halo = [&](D2D1_RECT_F r, float radius, float spread, float alpha, float dy) {
+            for (int i = 1; i <= 12; ++i) {
+                float g = spread * i / 12.0f;
+                p.Fill(D2D1::RectF(r.left - g, r.top - g + dy, r.right + g, r.bottom + g + dy), radius + g, C(0xFF6633, alpha / 12.0f));
+            }
+        };
         auto primary = [&](D2D1_RECT_F r, const std::wstring& label, int id) {
             bool hov = hit(id, r);
-            p.Glow(r, 12*s);
+            halo(r, 12*s, 46*s, 0.32f, 6*s);
+            p.Stroke(r, 12*s, C(0xFF6633, 0.6f), 1*s);
             p.Fill(r, 12*s, accent);
             if (hov) p.Fill(r, 12*s, C(0xFFFFFF, 0.14f));
             p.Text(label, r, 15, body.onAccent, DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
@@ -74,23 +97,26 @@ struct Window {
             return x + w;
         };
         auto keycap = [&](D2D1_RECT_F r, const wchar_t* label) {
-            p.Fill(D2D1::RectF(r.left, r.bottom - 5*s, r.right, r.bottom), 4*s, C(0xFF6633, 0.18f));
-            p.Stroke(r, 9*s, accent, 2*s);
-            ph.TextSpaced(label, r, 15, accent, DWRITE_FONT_WEIGHT_BOLD, 0.1f);
+            // Tecla do protótipo: moldura externa de 1,5 px, moldura interna com lábio inferior de 9 px.
+            p.Stroke(r, 10*s, C(0xFF6633, 0.22f), 6*s);
+            p.Stroke(r, 10*s, accent, 1.5f*s);
+            D2D1_RECT_F in = D2D1::RectF(r.left + 4*s, r.top + 3*s, r.right - 4*s, r.bottom - 9*s);
+            p.Stroke(in, 7*s, accent, 1.5f*s);
+            ph.TextSpaced(label, in, 14, accent, DWRITE_FONT_WEIGHT_BOLD, 0.1f);
         };
         bool done = page == 2;
-        ui::Brand(rt, body, L*s, (done ? 40 : 44)*s, (done ? 60 : 44)*s);
-        p.Text(L"9.8.11", rect(R-120, done ? 40 : 44, R, done ? 100 : 88), 13, text2, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_TRAILING);
+        ui::Brand(rt, body, L*s, 44*s, 32*s); // logotipo 125 x 32, como no protótipo
+        p.Text(L"9.8.12", rect(R-120, 44, R, 76), 13, text2, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_TRAILING);
         if (page == 0) {
-            ph.Text(installed ? T(L"Atualize ou troque a versão:",L"Update or switch edition:",L"Actualiza o cambia la versión:") : T(L"Escolha uma versão:",L"Choose an edition:",L"Elige una versión:"), rect(L,112,R,152), 32, text, DWRITE_FONT_WEIGHT_BOLD);
-            p.Text(T(L"Para trocar depois, rode o instalador de novo.",L"To switch later, run the installer again.",L"Para cambiar después, ejecuta el instalador de nuevo."), rect(L,158,R,182), 15, text2);
+            ph.Text(installed ? T(L"Atualize ou troque a versão:",L"Update or switch edition:",L"Actualiza o cambia la versión:") : T(L"Escolha uma versão:",L"Choose an edition:",L"Elige una versión:"), rect(L,102,R,138), 32, text, DWRITE_FONT_WEIGHT_BOLD);
+            p.Text(T(L"Para trocar depois, rode o instalador de novo.",L"To switch later, run the installer again.",L"Para cambiar después, ejecuta el instalador de nuevo."), rect(L,146,R,168), 15, text2);
             struct Ed { const wchar_t* name; const wchar_t* desc; const wchar_t* size; int bar; };
             Ed eds[3] = {
                 {L"Lite", T(L"Prévia com Espaço e miniaturas",L"Space preview and thumbnails",L"Vista con Espacio y miniaturas"), L"2 MB", 2},
                 {L"Vizu", T(L"Converter, menu circular, PDF, OCR, relógio e agenda",L"Convert, radial menu, PDF, OCR, clock and calendar",L"Convertir, menú circular, PDF, OCR, reloj y agenda"), L"2 MB", 2},
                 {L"Vizu Ultra", T(L"Tudo do Vizu, mais SVG e EPS vetoriais a partir de CDR",L"All of Vizu, plus vector SVG and EPS from CDR",L"Todo lo de Vizu, más SVG y EPS vectoriales desde CDR"), T(L"+ 100 MB de download",L"+ 100 MB download",L"+ 100 MB de descarga"), 100},
             };
-            float top = 206, row = 76;
+            float top = 194, row = 76;
             for (int i = 0; i < 3; ++i) {
                 float y = top + i*row;
                 auto box = rect(L, y, R, y + row);
@@ -107,7 +133,7 @@ struct Window {
                 float right = R - 150;
                 p.Text(eds[i].name, rect(L+38, y+16, right-16, y+40), 17, text, DWRITE_FONT_WEIGHT_SEMI_BOLD);
                 p.Text(eds[i].desc, rect(L+38, y+40, right-16, y+60), 14, text2);
-                p.Text(eds[i].size, rect(right, y+20, R, y+38), 12, i == 2 ? text : text2);
+                p.Text(eds[i].size, rect(right, y+24, R, y+42), 12, i == 2 ? text : text2);
                 p.Fill(rect(right, y+44, R, y+48), 2*s, line);
                 float fill = eds[i].bar >= 100 ? 150 : 4;
                 if (eds[i].bar >= 100 && sel) p.Glow(rect(right, y+44, right+fill, y+48), 2*s);
@@ -116,7 +142,7 @@ struct Window {
             p.Fill(rect(L, top+3*row, R, top+3*row+1), 0, line);
             p.Text(edition==0?T(L"O Lite não tem menu circular, conversões, OCR nem relógio.",L"Lite has no radial menu, conversions, OCR or clock.",L"Lite no tiene menú circular, conversiones, OCR ni reloj."):
                    T(L"O Ultra baixa o motor vetorial uma única vez e confere a integridade antes de instalar.",L"Ultra downloads the vector engine once and checks its integrity before installing.",L"Ultra descarga el motor vectorial una sola vez y verifica su integridad antes de instalar."),
-                   rect(L, top+3*row+22, R, top+3*row+44), 13, text2);
+                   rect(L, top+3*row+26, R, top+3*row+48), 13, text2);
             float cx = ghost(L, T(L"Cancelar",L"Cancel",L"Cancelar"), 3);
             if (installed) {
                 auto un = rect(cx + 12, 548, cx + 116, 596);
@@ -130,8 +156,8 @@ struct Window {
             { std::lock_guard<std::mutex> lock(mutex); value = percent; phaseText = phase; d = dl; }
             bool ultra = edition == 2, downloading = d.total > 0;
             auto mb = [](unsigned long long bytes) { return std::to_wstring((bytes + 524288) / 1048576); };
-            ph.Text(downloading ? T(L"Baixando o motor vetorial",L"Downloading the vector engine",L"Descargando el motor vectorial") : T(L"Instalando o Vizu",L"Installing Vizu",L"Instalando Vizu"), rect(L,112,R,152), 32, text, DWRITE_FONT_WEIGHT_BOLD);
-            p.Text(downloading ? T(L"Acontece só na primeira vez. As atualizações reaproveitam o motor.",L"This only happens once. Updates reuse the engine.",L"Solo ocurre la primera vez. Las actualizaciones reutilizan el motor.") : T(L"Estamos preparando tudo para você.",L"We're getting everything ready for you.",L"Estamos preparando todo para ti."), rect(L,158,R,182), 15, text2);
+            ph.Text(downloading ? T(L"Baixando o motor vetorial",L"Downloading the vector engine",L"Descargando el motor vectorial") : T(L"Instalando o Vizu",L"Installing Vizu",L"Instalando Vizu"), rect(L,102,R,138), 32, text, DWRITE_FONT_WEIGHT_BOLD);
+            p.Text(downloading ? T(L"Acontece só na primeira vez. As atualizações reaproveitam o motor.",L"This only happens once. Updates reuse the engine.",L"Solo ocurre la primera vez. Las actualizaciones reutilizan el motor.") : T(L"Estamos preparando tudo para você.",L"We're getting everything ready for you.",L"Estamos preparando todo para ti."), rect(L,146,R,168), 15, text2);
             auto card = rect(L, 208, R, 352);
             p.Fill(card, 14*s, C(0xFFFFFF, 0.05f)); p.Stroke(card, 14*s, C(0xFFFFFF, 0.10f));
             ph.Text(std::to_wstring(value) + L"%", rect(L+22, 226, R-22, 276), 40, text, DWRITE_FONT_WEIGHT_BOLD);
@@ -164,28 +190,29 @@ struct Window {
             if (ultra) p.Text(T(L"Se a conexão cair, o download continua de onde parou.",L"If the connection drops, the download resumes where it stopped.",L"Si se cae la conexión, la descarga continúa donde se detuvo."), rect(cx + 20, 552, R, 592), 13, text2, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_TRAILING);
         } else {
             if (success) {
-                auto ring = rect(L, 168, L+64, 232);
-                p.Fill(rect(L-8, 160, L+72, 240), 40*s, C(0xFF6633, 0.14f));
+                auto ring = rect(L, 121, L+64, 185);
+                p.Fill(rect(L-8, 113, L+72, 193), 40*s, C(0xFF6633, 0.14f));
                 p.Glow(ring, 32*s);
                 p.Fill(ring, 32*s, accent);
                 p.Feather("M20 6L9 17l-5-5", ring, 30*s, C(0x0A0B0D), 2.4f);
-                ph.Paragraph(T(L"Tudo pronto. Agora é a sua vez de testar.",L"All set. Now it's your turn to try it.",L"Todo listo. Ahora te toca probarlo."), (L+84)*s, 164*s, (R-L-84)*s, 32, C(0xFFFFFF));
+                ph.Paragraph(T(L"Tudo pronto. Agora é\na sua vez de testar.",L"All set. Now it's\nyour turn to try it.",L"Todo listo. Ahora te toca\nprobarlo."), (L+84)*s, 116*s, (R-L-84)*s, 32, C(0xFFFFFF), true, 1.125f, DWRITE_FONT_WEIGHT_BOLD);
                 struct Tip { const wchar_t* key; const wchar_t* lead; const wchar_t* title; const wchar_t* body; float cap; };
                 Tip tips[2] = {
-                    {T(L"ESPAÇO",L"SPACE",L"ESPACIO"), nullptr, T(L"Espaço",L"Space",L"Espacio"), T(L"Escolha uma imagem ou PDF no Explorer e aperte ESPAÇO para abrir a prévia. Aperte de novo para fechar.",L"Pick an image or PDF in Explorer and press SPACE to open the preview. Press it again to close.",L"Elige una imagen o PDF en el Explorador y pulsa ESPACIO para abrir la vista. Pulsa de nuevo para cerrar."), 180},
-                    {L"ALT", T(L"Segure a tecla",L"Hold the key",L"Mantén la tecla"), L"Alt", T(L"Com o arquivo selecionado, escolha o formato no menu que aparece.",L"With the file selected, choose the format in the menu that appears.",L"Con el archivo seleccionado, elige el formato en el menú que aparece."), 72},
+                    {T(L"ESPAÇO",L"SPACE",L"ESPACIO"), nullptr, T(L"Espaço",L"Space",L"Espacio"), T(L"Escolha uma imagem ou PDF no Explorer e aperte **ESPAÇO** para abrir a prévia. **Aperte de novo para fechar.**",L"Pick an image or PDF in Explorer and press **SPACE** to open the preview. **Press it again to close.**",L"Elige una imagen o PDF en el Explorador y pulsa **ESPACIO** para abrir la vista. **Pulsa de nuevo para cerrar.**"), 180},
+                    {L"ALT", T(L"Segure a tecla",L"Hold the key",L"Mantén la tecla"), L"Alt", T(L"com o arquivo selecionado, **escolha o formato no menu que aparece.**",L"with the file selected, **choose the format in the menu that appears.**",L"con el archivo seleccionado, **elige el formato en el menú que aparece.**"), 72},
                 };
                 int n = edition == 0 ? 1 : 2; // o Lite não tem o menu do Alt
                 for (int i = 0; i < n; ++i) {
-                    float y = 262 + i*124;
-                    auto card = rect(L, y, R, y+110);
+                    // Cartões do protótipo: 130 px (espaço) e 108 px (alt), com 16 px entre eles.
+                    float y = i == 0 ? 230 : 376, h = i == 0 ? 130 : 108;
+                    auto card = rect(L, y, R, y+h);
                     p.Fill(card, 14*s, C(0xFFFFFF, 0.05f)); p.Stroke(card, 14*s, C(0xFFFFFF, 0.10f));
-                    float kx = L+20;
-                    if (tips[i].lead) { p.Text(tips[i].lead, rect(kx, y+34, kx+110, y+76), 14, accent); kx += 199 - tips[i].cap; }
-                    keycap(rect(kx, y+34, kx+tips[i].cap, y+76), tips[i].key);
+                    float keyY = y + (h - 48) / 2, kx = L+20;
+                    if (tips[i].lead) { float lw = p.Measure(tips[i].lead, 14) / s; p.Text(tips[i].lead, rect(kx, keyY, kx+lw+2, keyY+48), 14, accent); kx += lw + 12; }
+                    keycap(rect(kx, keyY, kx+tips[i].cap, keyY+48), tips[i].key);
                     float tx = L+20+199+18;
-                    ph.Text(tips[i].title, rect(tx, y+12, R-20, y+36), 18, text, DWRITE_FONT_WEIGHT_BOLD);
-                    p.Paragraph(tips[i].body, tx*s, (y+38)*s, (R-20-tx)*s, 14, C(0xE3E6EB));
+                    ph.Text(tips[i].title, rect(tx, y+20, R-20, y+44), 18, text, DWRITE_FONT_WEIGHT_BOLD);
+                    p.Paragraph(tips[i].body, tx*s, (y+46)*s, (R-20-tx)*s, 15, C(0xE3E6EB), true, 1.5f);
                 }
             } else {
                 ph.Text(T(L"Não foi possível concluir.",L"Couldn't finish installation.",L"No se pudo completar."), rect(L,168,R,212), 32, text, DWRITE_FONT_WEIGHT_BOLD);
@@ -249,6 +276,7 @@ struct Window {
     }
     int Show(HINSTANCE instance) {
         if(FAILED(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED,&factory)) || FAILED(DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED,__uuidof(IDWriteFactory),reinterpret_cast<IUnknown**>(&write))))return 1;
+        fonts::Init(write); // Inter e Space Grotesk embutidas (sem elas, o Windows troca por outra fonte)
         WNDCLASSW wc={};wc.lpfnWndProc=Proc;wc.hInstance=instance;wc.hCursor=LoadCursor(nullptr,IDC_ARROW);wc.hIcon=LoadIconW(instance,MAKEINTRESOURCEW(1));wc.lpszClassName=L"VizuInstaller";RegisterClassW(&wc);
         POINT point;GetCursorPos(&point);MONITORINFO monitor={sizeof(monitor)};GetMonitorInfoW(MonitorFromPoint(point,MONITOR_DEFAULTTONEAREST),&monitor);
         HDC dc=GetDC(nullptr);float s=GetDeviceCaps(dc,LOGPIXELSX)/96.0f;ReleaseDC(nullptr,dc);
