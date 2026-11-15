@@ -20,3 +20,4 @@ Janela Limpeza (antigo CrispyClean). Plano em `../limpeza-plano.md`.
 - `Limpeza-B1` a `B8`: Analisando, Resultado, Mapa, Confirmar, Fechar programas, Limpando, Relatório e a seção nas Configurações, em Vizu Classic e Claro.
 - `Limpeza-B9`: widget de disco nos 5 temas (normal, pouco espaço, aberto).
 - `Limpeza-B10`: resultado nos 5 temas e a janela na largura mínima (560 px).
+- `Limpeza-B11`: widget de desempenho nos 5 temas (leve, lento, aberto com o que está pesando).

@@ -10,7 +10,7 @@ O CrispyClean deixa de ser um app separado e vira a **Limpeza**, um recurso do V
 | Visual | Segue o tema escolhido no Vizu (Claro, Escuro, Windows, Vizu Classic, Vizu Crispy), com Inter e Space Grotesk. Da direção "Alumínio" do CrispyClean ficam só a hierarquia, os estados e o movimento. |
 | Lugar | Janela própria "Limpeza", como a Agenda. |
 | Edições | Vizu e Ultra. A Lite continua só com prévia e miniaturas. |
-| Monitor de disco | Widget flutuante separado, como no CrispyClean. |
+| Monitores | Widgets flutuantes separados, como no CrispyClean: espaço em disco e desempenho (diz se o PC está lento e o que está pesando). |
 
 ## Como abre
 
@@ -35,6 +35,7 @@ O CrispyClean deixa de ser um app separado e vira a **Limpeza**, um recurso do V
 - `targets.json` do CrispyClean embutido como recurso (`Vizu.rc`).
 - `CleanUi.inc.h`: janela Limpeza, desenhada em Direct2D com `ui::Theme`.
 - `DiskWidget.inc.h`: widget de disco.
+- `PerfWidget.inc.h`: widget de desempenho (CPU, memória e atividade do disco por `GetSystemTimes`, `GlobalMemoryStatusEx` e PDH; processos mais pesados por `NtQuerySystemInformation`/Toolhelp). "Lento" quando CPU, memória ou disco passam do limite por alguns segundos seguidos, não num pico isolado.
 - `tests/clean_tests.cpp`: os 21 testes do CrispyClean, rodando no workflow de build.
 - I18n: pt, en e es, como o resto do Vizu.
 
@@ -57,6 +58,7 @@ toda a largura. Na largura mínima (560 px) a faixa quebra em duas linhas e o bo
 | `Limpeza-B8` | Seção Limpeza nas Configurações |
 | `Limpeza-B9` | Widget de disco nos 5 temas: normal, pouco espaço e aberto |
 | `Limpeza-B10` | Resultado nos 5 temas e na largura mínima |
+| `Limpeza-B11` | Widget de desempenho nos 5 temas: leve, lento e aberto com o que está pesando |
 
 No tema Escuro o destaque é cinza-claro (sem laranja) e no Padrão Windows é a cor de destaque do sistema, como no
 resto do Vizu.
