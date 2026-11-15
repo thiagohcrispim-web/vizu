@@ -138,10 +138,11 @@ static void WidgetRender(int k) {
     D2D1_COLOR_F hi = g_cfg.themeMode == ui::kThemeDark ? th.text : c.accent;
     float M = 14 * s; // margem para a sombra
     std::vector<clean::Disk> disks;
-    if (k == kWDisk) { disks = ReadDword(L"DiskAll", 0) ? clean::FixedDisks() : std::vector<clean::Disk>{clean::SystemDisk()}; if (disks.empty()) disks.push_back(clean::Disk()); }
-    bool alert = k == kWDisk ? DiskLow(disks[0]) : g_perf.slow;
+    if (k == kWDisk) { disks = ReadDword(L"DiskAll", 0) ? clean::AllDisks() : std::vector<clean::Disk>{clean::SystemDisk()}; if (disks.empty()) disks.push_back(clean::SystemDisk()); }
+    bool alert = g_perf.slow;
+    if (k == kWDisk) { alert = false; for (auto& d : disks) alert |= DiskLow(d); }
     float W = (wd.open ? (k == kWPerf ? 280 : 260) : 220) * s, H;
-    if (!wd.open) H = (k == kWDisk ? 56 : 60) * s;
+    if (!wd.open) H = (k == kWDisk ? 56 + (disks.size() - 1) * 30 : 60) * s; // "Todos": uma linha por disco
     else if (k == kWDisk) H = (16 + disks.size() * 44 + 12 + 22 + 10 + 36 + 16) * s;
     else H = (16 + 48 + 4 * 40 + 22 + g_perf.top.size() * 32 + 14 + 36 + 16) * s;
     UINT Wt = (UINT)(W + 2 * M), Ht = (UINT)(H + 2 * M);
@@ -167,14 +168,18 @@ static void WidgetRender(int k) {
     const char* icoAct = "M22 12h-4l-3 9L9 3l-3 9H2";
     wchar_t b[160];
     if (k == kWDisk && !wd.open) {
-        const clean::Disk& d = disks[0];
-        p.Feather(icoDisk, D2D1::RectF(x, card.top, x + 16 * s, card.bottom), 16 * s, alert ? hi : th.text2);
+        p.Feather(icoDisk, D2D1::RectF(x, card.top, x + 16 * s, card.top + 56 * s), 16 * s, alert ? hi : th.text2);
         float tx = x + 28 * s;
-        swprintf(b, 160, L"%lc:", d.letter);
-        ClText(p, b, D2D1::RectF(tx, card.top + 11 * s, xr, card.top + 29 * s), 13, th.text, DWRITE_FONT_WEIGHT_SEMI_BOLD);
-        swprintf(b, 160, T(L"%ls livres", L"%ls free", L"%ls libres"), CleanSize(d.free).c_str());
-        ClText(p, b, D2D1::RectF(tx, card.top + 11 * s, xr, card.top + 29 * s), 13, alert ? th.text : th.text2, alert ? DWRITE_FONT_WEIGHT_SEMI_BOLD : DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_TRAILING);
-        bar(D2D1::RectF(tx, card.top + 35 * s, xr, card.top + 41 * s), d.total ? 100.0 * (d.total - d.free) / d.total : 0, alert ? hi : c.used);
+        for (size_t i = 0; i < disks.size(); ++i) {
+            const clean::Disk& d = disks[i];
+            bool low = DiskLow(d);
+            float ry = card.top + i * 30 * s;
+            swprintf(b, 160, L"%lc:", d.letter);
+            ClText(p, b, D2D1::RectF(tx, ry + 11 * s, xr, ry + 29 * s), 13, th.text, DWRITE_FONT_WEIGHT_SEMI_BOLD);
+            swprintf(b, 160, T(L"%ls livres", L"%ls free", L"%ls libres"), CleanSize(d.free).c_str());
+            ClText(p, b, D2D1::RectF(tx, ry + 11 * s, xr, ry + 29 * s), 13, low ? th.text : th.text2, low ? DWRITE_FONT_WEIGHT_SEMI_BOLD : DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_TRAILING);
+            bar(D2D1::RectF(tx, ry + 35 * s, xr, ry + 41 * s), d.total ? 100.0 * (d.total - d.free) / d.total : 0, low ? hi : c.used);
+        }
     } else if (k == kWDisk) {
         y += 16 * s;
         for (auto& d : disks) {
@@ -349,7 +354,9 @@ static void WidgetEnable(int k, bool on) {
     if (x == 0x80000000 || !MonitorFromPoint(pt, MONITOR_DEFAULTTONULL)) { // canto de cima, à direita; o de desempenho logo abaixo
         MONITORINFO mi = {sizeof(mi)}; GetMonitorInfoW(MonitorFromPoint({0, 0}, MONITOR_DEFAULTTOPRIMARY), &mi);
         float s = GetDpiForSystem() / 96.0f;
-        pt.x = mi.rcWork.right - (LONG)(240 * s); pt.y = mi.rcWork.top + (LONG)((k == kWDisk ? 20 : 92) * s);
+        size_t n = ReadDword(L"DiskAll", 0) ? max((size_t)1, clean::AllDisks().size()) : 1; // o de desempenho fica logo abaixo do de disco
+        float below = WidgetOn(kWDisk) ? 20 + 56 + (n - 1) * 30 + 16 : 20;
+        pt.x = mi.rcWork.right - (LONG)(240 * s); pt.y = mi.rcWork.top + (LONG)((k == kWDisk ? 20 : below) * s);
     }
     wd.ax = pt.x; wd.ay = pt.y;
     if (k == kWPerf) PerfSample();

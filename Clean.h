@@ -640,6 +640,25 @@ inline std::vector<Disk> FixedDisks() {
     }
     return out;
 }
+// Para o widget: o disco do Windows primeiro, depois os outros internos e os externos (USB) com mídia.
+inline std::vector<Disk> AllDisks() {
+    std::vector<Disk> out;
+    wchar_t w[MAX_PATH]; GetWindowsDirectoryW(w, MAX_PATH);
+    UINT oldMode = SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX); // leitor de cartão vazio não abre aviso
+    DWORD mask = GetLogicalDrives();
+    for (int i = 2; i < 26; ++i) {
+        wchar_t r[] = {(wchar_t)(L'A' + i), L':', L'\\', 0};
+        if (!(mask & (1u << i))) continue;
+        UINT type = GetDriveTypeW(r);
+        if (type != DRIVE_FIXED && type != DRIVE_REMOVABLE) continue; // rede e CD ficam de fora
+        ULARGE_INTEGER fr, tot;
+        if (!GetDiskFreeSpaceExW(r, &fr, &tot, nullptr) || !tot.QuadPart) continue;
+        Disk d = {r[0], tot.QuadPart, fr.QuadPart};
+        if (towupper(w[0]) == d.letter) out.insert(out.begin(), d); else out.push_back(d);
+    }
+    SetErrorMode(oldMode);
+    return out;
+}
 inline Disk SystemDisk() {
     wchar_t w[MAX_PATH]; GetWindowsDirectoryW(w, MAX_PATH);
     for (auto& d : FixedDisks()) if (towupper(w[0]) == d.letter) return d;

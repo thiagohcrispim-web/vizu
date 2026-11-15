@@ -2481,7 +2481,7 @@ static void CleanOnTheme() {
 enum { kTogSpace = 1, kTogAlt, kDelayMinus, kDelayPlus, kDpi72, kDpi300, kPdfSmall, kPdfRaw, kQualMinus, kQualPlus, kTogAuto, kBtnFolder, kBtnQuit, kBtnClose,
        kTogPicker, kBtnFolders, kLangPt, kLangEn, kLangEs, kTogUpdate, kBtnUpdate, kTheme0, kTheme1, kTheme2, kTheme3, kWebpMinus, kWebpPlus, kTogTray, kTogTempDel, kNeon0, kNeon1, kNeon2, kNeon3, kNeon4, kNeon5, kNeonRgb,
        kClockOn, kClockFont, kPomoT0, kPomoT1, kPomoT2, kPomoC0, kPomoC1, kPomoC2, kPomoC3, kTheftHist, kUiFont, kOcrOn, kOcrKeep, kOcrJoin, kOcrLang, kClk100, kClk90, kClk70, kClockDock, kSte, kTheme4, kTheftOn, kFocoOn, kAgendaOn, kVecText, kVecCurves, kSysToggle,
-       kClOpen, kAge1, kAge7, kAge30, kTogCleanBin, kTogDiskW, kTogDiskWarn, kDiskLimMinus, kDiskLimPlus, kDiskAll0, kDiskAll1, kTogPerfW };
+       kClOpen, kAge1, kAge7, kAge30, kTogCleanBin, kTogDiskW, kTogDiskWarn, kDiskLimMinus, kDiskLimPlus, kDiskAll0, kDiskAll1, kTogPerfW, kTogClockClean };
 static const UINT kNeonPresets[6] = {0xFF6633, 0xFF2D95, 0x00E5FF, 0xB6FF3B, 0xA855F7, 0xFFD400};
 
 
@@ -2591,13 +2591,17 @@ static void SettingsAction(int id) {
     }
     case kTogTempDel: g_cfg.tempPermanent = !g_cfg.tempPermanent; break;
     case kClOpen: OpenCleanWindow(); return;
+    case kTogClockClean: g_clock.clean = !g_clock.clean; WriteDword(L"ClockClean", g_clock.clean); ClockRender(); return;
     case kAge1: case kAge7: case kAge30: WriteDword(L"CleanAgeDays", id == kAge1 ? 1 : id == kAge7 ? 7 : 30); return;
     case kTogCleanBin: WriteDword(L"CleanRecycle", !ReadDword(L"CleanRecycle", 1)); return;
     case kTogDiskW: WriteDword(L"DiskWidget", !WidgetOn(kWDisk)); WidgetEnable(kWDisk, WidgetOn(kWDisk)); return;
     case kTogPerfW: WriteDword(L"PerfWidget", !WidgetOn(kWPerf)); WidgetEnable(kWPerf, WidgetOn(kWPerf)); return;
     case kTogDiskWarn: WriteDword(L"DiskWarn", !ReadDword(L"DiskWarn", 1)); WidgetsRenderAll(); return;
     case kDiskLimMinus: case kDiskLimPlus: { int v = (int)ReadDword(L"DiskLimit", 10) + (id == kDiskLimPlus ? 5 : -5); WriteDword(L"DiskLimit", (DWORD)max(5, min(30, v))); WidgetsRenderAll(); return; }
-    case kDiskAll0: case kDiskAll1: WriteDword(L"DiskAll", id == kDiskAll1); WidgetsRenderAll(); return;
+    case kDiskAll0: case kDiskAll1:
+        WriteDword(L"DiskAll", id == kDiskAll1); WidgetsRenderAll();
+        if (ReadDword(L"PerfWidgetX", 0x80000000) == 0x80000000 && WidgetOn(kWPerf)) { WidgetEnable(kWPerf, false); WidgetEnable(kWPerf, true); } // não arrastado: desce junto
+        return;
     case kTheftOn: if (g_clock.theft) ToggleTheft(); g_clock.theftOn = !g_clock.theftOn; WriteDword(L"ClockTheft", g_clock.theftOn); ClockRender(); break;
     case kFocoOn: if (g_clock.phase) PomoStop(); g_clock.pomoOn = !g_clock.pomoOn; WriteDword(L"ClockPomo", g_clock.pomoOn); ClockRender(); break;
     case kAgendaOn: g_clock.agendaOn = !g_clock.agendaOn; WriteDword(L"ClockAgenda", g_clock.agendaOn); ClockRender(); break;
@@ -2763,6 +2767,7 @@ static void PaintSettings(HWND h) {
     section(T(L"Limpeza", L"Cleanup", L"Limpieza"));
     rows.clear();
     rows.push_back({RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Abrir a Limpeza", L"Open Cleanup", L"Abrir Limpieza"), T(L"Também no botão direito do fundo da pasta e na bandeja", L"Also from a folder's background right-click and the tray", L"También con clic derecho en el fondo de la carpeta y en la bandeja")); rpill(r, kClOpen, T(L"Abrir", L"Open", L"Abrir"), 90 * s); }});
+    if (g_clock.on) rows.push_back({RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Botão no relógio", L"Button on the clock", L"Botón en el reloj"), T(L"A vassoura antes do OCR abre a Limpeza", L"The broom before OCR opens Cleanup", L"La escoba antes del OCR abre Limpieza")); rtoggle(kTogClockClean, r, g_clock.clean); }});
     rows.push_back({RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Excluir direto", L"Delete directly", L"Eliminar directamente"), T(L"Revisar também sai de vez, sem passar pela Lixeira", L"Review items also skip the Recycle Bin", L"Revisar también se elimina sin pasar por la Papelera")); rtoggle(kTogTempDel, r, g_cfg.tempPermanent); }});
     rows.push_back({RH, 0, [&](D2D1_RECT_F r) { DWORD a = ReadDword(L"CleanAgeDays", 1); rlabel(r, T(L"Idade dos temporários", L"Temp file age", L"Antigüedad de temporales"), T(L"Só sai o que não foi mexido há mais tempo que isso", L"Only files untouched for longer than this go", L"Solo sale lo que no se tocó en más tiempo que esto"));
         rseg(r, 230 * s, {T(L"1 dia", L"1 day", L"1 día"), T(L"7 dias", L"7 days", L"7 días"), T(L"30 dias", L"30 days", L"30 días")}, a == 7 ? 1 : a == 30 ? 2 : 0, kAge1); }});

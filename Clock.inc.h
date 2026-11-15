@@ -35,17 +35,18 @@ struct ClockState {
     ULONGLONG theftStart = 0; // GetTickCount64
     SYSTEMTIME theftWall = {};
     int hot = -1, lastSec = -1;
-    D2D1_RECT_F rTri{}, rChip[4]{};
+    D2D1_RECT_F rTri{}, rChip[5]{}; // 0 roubo, 1 Pomodoro, 2 atalho, 3 OCR, 4 Limpeza
     float s = 1;
     bool reminderOpen = false;
     bool ocr = true;          // botão e atalho Ctrl+Alt+T do OCR
+    bool clean = true;        // botão da Limpeza (antes do OCR)
     bool theftOn = true, pomoOn = true, agendaOn = true; // recursos do relógio que o usuário pode desligar
     DWORD scalePct = 100;     // tamanho: 100, 90 ou 70%
     bool docked = false;      // anexado à barra de tarefas
     RECT tb{};                // barra de tarefas quando anexado
 };
 static ClockState g_clock;
-enum { kClkTri = 0, kClkChip0 = 1, kClkChip1, kClkChip2, kClkChip3 };
+enum { kClkTri = 0, kClkChip0 = 1, kClkChip1, kClkChip2, kClkChip3, kClkChip4 };
 
 static ULONGLONG ClockLeft() {
     if (!g_clock.phase) return 0;
@@ -396,7 +397,7 @@ static void ClockRender() {
     }
     float timeW = 2 * w2 + wc, chip = 40 * s, gap = 6 * s, theftW = g_clock.theft ? 104 * s : chip;
     bool showTri = pomo || g_clock.agendaOn;
-    float Wc = 14 * s + (showTri ? 20 * s + 12 * s : 0) + timeW + 12 * s + (g_clock.theftOn ? theftW + gap : 0) + (g_clock.pomoOn ? chip + gap : 0) + chip + (g_clock.ocr ? gap + chip : 0) + 10 * s;
+    float Wc = 14 * s + (showTri ? 20 * s + 12 * s : 0) + timeW + 12 * s + (g_clock.theftOn ? theftW + gap : 0) + (g_clock.pomoOn ? chip + gap : 0) + chip + (g_clock.clean ? gap + chip : 0) + (g_clock.ocr ? gap + chip : 0) + 10 * s;
     UINT W = (UINT)(Wc + 2 * M), Ht = (UINT)(H + 2 * M);
     fmt::Canvas cv(W, Ht);
     if (!cv.rt) return;
@@ -506,6 +507,11 @@ static void ClockRender() {
         p.Fill(g_clock.rChip[2], chip / 2, g_clock.hot == kClkChip2 ? hotBg : chipBg);
         p.FeatherIcon("message-circle", g_clock.rChip[2], 18 * s, th.icon);
     }
+    if (g_clock.clean) { // Limpeza (vem antes do OCR)
+        g_clock.rChip[4] = chipRect(chip);
+        p.Fill(g_clock.rChip[4], chip / 2, g_clock.hot == kClkChip4 ? hotBg : chipBg);
+        p.FeatherIcon("broom", g_clock.rChip[4], 18 * s, th.icon);
+    }
     if (g_clock.ocr) { // ler texto da tela (OCR)
         g_clock.rChip[3] = chipRect(chip);
         p.Fill(g_clock.rChip[3], chip / 2, g_clock.hot == kClkChip3 ? hotBg : chipBg);
@@ -532,7 +538,7 @@ static void ClockRender() {
 static int ClockHit(POINT pt) {
     auto in = [&](const D2D1_RECT_F& r) { return pt.x >= r.left && pt.x < r.right && pt.y >= r.top && pt.y < r.bottom; };
     if (in(g_clock.rTri)) return kClkTri;
-    for (int i = 0; i < 4; ++i) if (in(g_clock.rChip[i])) return kClkChip0 + i;
+    for (int i = 0; i < 5; ++i) if (in(g_clock.rChip[i])) return kClkChip0 + i;
     return -1;
 }
 
@@ -645,6 +651,7 @@ static LRESULT CALLBACK ClockProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             if (g_clock.phase) PomoStop();
             else ShellExecuteW(nullptr, L"open", g_clock.app.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
         } else if (hit == kClkChip3) { StartOcr(); return 0; }
+        else if (hit == kClkChip4) { OpenCleanWindow(); return 0; }
         ClockRender();
         return 0;
     }
@@ -747,11 +754,12 @@ static void ClockLoad() {
     g_clock.pomoColors = min(2ul, (unsigned long)ReadDword(L"PomoColors", 0));
     g_clock.app = ReadStr(L"ClockApp", L"https://chatgpt.com");
     g_clock.ocr = ReadDword(L"OcrOn", 1) != 0;
+    g_clock.clean = ReadDword(L"ClockClean", 1) != 0;
     g_clock.theftOn = ReadDword(L"ClockTheft", 1) != 0;
     g_clock.pomoOn = ReadDword(L"ClockPomo", 1) != 0;
     g_clock.agendaOn = ReadDword(L"ClockAgenda", 1) != 0;
     { DWORD sc = ReadDword(L"ClockScale", 100); g_clock.scalePct = sc == 90 || sc == 70 ? sc : 100; }
     g_clock.docked = ReadDword(L"ClockDocked", 0) != 0;
-    if (g_lite) { g_clock.ocr = false; return; } // Vizu Lite: sem relógio nem OCR
+    if (g_lite) { g_clock.ocr = false; g_clock.clean = false; return; } // Vizu Lite: sem relógio nem OCR
     if (ReadDword(L"ClockOn", 0)) ClockEnable(true); // desligado até o usuário ativar
 }
