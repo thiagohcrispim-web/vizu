@@ -43,7 +43,7 @@ static void RmTree(const std::wstring& p) {
 static clean::Target T(const std::wstring& paths, int ageHours = 0, const wchar_t* pattern = L"*", const wchar_t* exclude = L"", bool recursive = true, int keep = 0) {
     static std::vector<std::wstring> keepAlive; // a tabela guarda ponteiros
     keepAlive.push_back(paths);
-    return {clean::kGTemp, L"teste", nullptr, keepAlive.back().c_str(), clean::kSafe, ageHours, L"", pattern, exclude, recursive, keep, clean::kFolder};
+    return {clean::kGSystem, L"teste", nullptr, keepAlive.back().c_str(), clean::kSafe, ageHours, L"", pattern, exclude, recursive, keep, clean::kFolder, true, L"", L"teste"};
 }
 static clean::Outcome Run(const clean::Target& t) {
     clean::Leaf l; l.custom = &t; l.on = true;
@@ -57,11 +57,14 @@ int wmain() {
     try {
         wchar_t tmp[MAX_PATH]; GetTempPathW(MAX_PATH, tmp);
         std::wstring base = std::wstring(tmp) + L"vizu-clean-tests-" + std::to_wstring(GetCurrentProcessId());
+        RmTree(clean::Lp(base)); // sobra de uma execução que falhou (o Wine repete o número do processo)
         base = clean::RealPath((Dir(base), base));
         std::wstring allowed = base + L"\\perfil", outside = base + L"\\fora", personal = allowed + L"\\Documentos", own = allowed + L"\\Vizu";
         Dir(allowed); Dir(outside); Dir(personal); Dir(own);
         clean::Context& ctx = clean::Ctx();
-        ctx.allowed = {allowed}; ctx.temp.clear(); ctx.personal = {personal}; ctx.own = {own};
+        std::wstring appdata = allowed + L"\\AppData", sys = base + L"\\Windows";
+        Dir(appdata); Dir(sys);
+        ctx.allowed = {allowed, sys}; ctx.temp.clear(); ctx.personal = {personal}; ctx.own = {own}; ctx.ancestors = {allowed, appdata}; ctx.system = {sys};
 
         // --- utilidades ---
         Check(clean::Match(L"*.nupkg", L"app-1.2.nupkg") && !clean::Match(L"*.nupkg", L"app.nupkg.txt"), "curinga de nome");
@@ -83,6 +86,9 @@ int wmain() {
         Dir(personal + L"\\Cache");
         Check(!clean::SafeRoot(personal) && !clean::SafeRoot(personal + L"\\Cache"), "nada dentro de pasta pessoal");
         Check(!clean::SafeRoot(own), "pasta do próprio Vizu é recusada");
+        Check(!clean::SafeRoot(appdata), "AppData em si nunca é alvo");
+        Dir(appdata + L"\\App"); Check(clean::SafeRoot(appdata + L"\\App"), "pasta dentro de AppData pode ser alvo");
+        Dir(sys + L"\\Temp"); Check(!clean::SafeRoot(sys + L"\\Temp"), "nada dentro do Windows (pede administrador)");
 
         // --- curingas e versões ---
         Dir(allowed + L"\\Nav"); Dir(allowed + L"\\Nav\\Default"); Dir(allowed + L"\\Nav\\Profile 1"); Dir(allowed + L"\\Nav\\Vazio");
@@ -156,22 +162,58 @@ int wmain() {
         Check(clean::SafeItem(cache, cache + L"\\y.tmp", false), "arquivo comum dentro da raiz é aceito");
         Check(!clean::SafeItem(cache, cache + L"\\y.tmp", true), "tipo trocado (arquivo x pasta) é recusado");
 
-        // --- tabela: todo alvo de pasta fica no perfil do usuário ---
-        clean::Context real; // contexto de verdade, só para a conferência
-        for (auto v : {L"%LOCALAPPDATA%", L"%APPDATA%", L"%TEMP%"}) real.allowed.push_back(clean::Expand(v));
-        for (int i = 0; i < clean::kTargetCount; ++i) {
-            const clean::Target& t = clean::kTargets[i];
-            if (t.kind != clean::kFolder) continue;
-            for (auto& p : clean::Split(t.paths)) {
-                std::wstring e = clean::Expand(p);
-                bool ok = false;
-                for (auto& r : real.allowed) if (!r.empty() && clean::SameOrInside(r, e)) ok = true;
-                Check(ok, "todo alvo da tabela fica em %LOCALAPPDATA%, %APPDATA% ou %TEMP%");
-            }
-            Check(t.risk != clean::kSafe || t.ageHours != 0 || t.procs[0] || t.group == clean::kGWindows || t.group == clean::kGTemp, "cache seguro sem idade tem programa dono");
+        // --- caminho com mais de 260 caracteres (caches do Service Worker) ---
+        {
+            std::wstring deep = cache;
+            while (deep.size() < 300) { deep += L"\\pasta_bem_comprida_de_cache"; CreateDirectoryW(clean::Lp(deep).c_str(), nullptr); }
+            std::wstring f = deep + L"\\fundo.bin";
+            HANDLE hf = CreateFileW(clean::Lp(f).c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, 0, nullptr);
+            if (hf != INVALID_HANDLE_VALUE) { DWORD w; WriteFile(hf, "x", 1, &w, nullptr); CloseHandle(hf); }
+            Check(GetFileAttributesW(clean::Lp(f).c_str()) != INVALID_FILE_ATTRIBUTES, "arquivo de teste no caminho longo");
+            Check(Measure(T(cache, 0, L"fundo.bin")).files == 1, "a análise enxerga arquivo em caminho longo");
+            Run(T(cache, 0, L"fundo.bin"));
+            Check(GetFileAttributesW(clean::Lp(f).c_str()) == INVALID_FILE_ATTRIBUTES, "e a limpeza apaga");
         }
 
-        RmTree(base);
+        // --- "só informa" nunca é limpo ---
+        {
+            File(cache + L"\\info.tmp", 300);
+            clean::Target ti = T(cache, 0, L"info.tmp"); ti.risk = clean::kInform;
+            clean::Leaf li; li.custom = &ti; li.on = true;
+            std::atomic<bool> stop(false);
+            clean::CleanLeaf(li, 1, true, stop);
+            Check(Exists(cache + L"\\info.tmp") && !clean::Actionable(li), "alvo que só informa nunca apaga");
+        }
+
+        // --- detecção automática: app Electron com Cache + Code Cache ---
+        {
+            std::wstring roaming = appdata + L"\\Roaming";
+            Dir(roaming); Dir(roaming + L"\\MeuApp"); Dir(roaming + L"\\MeuApp\\Cache"); Dir(roaming + L"\\MeuApp\\Code Cache"); Dir(roaming + L"\\MeuApp\\Outra");
+            File(roaming + L"\\MeuApp\\Cache\\data_1", 4096);
+            Dir(roaming + L"\\SoUmCache"); Dir(roaming + L"\\SoUmCache\\Cache"); // um marcador só: não é perfil
+            SetEnvironmentVariableW(L"APPDATA", roaming.c_str());
+            SetEnvironmentVariableW(L"LOCALAPPDATA", (appdata + L"\\NaoExiste").c_str());
+            SetEnvironmentVariableW(L"USERPROFILE", (appdata + L"\\NaoExiste").c_str());
+            auto found = clean::DetectApps();
+            bool meu = false, so = false;
+            for (auto* t : found) { if (!wcscmp(t->item, L"MeuApp")) { meu = true; Check(std::wstring(t->paths).find(L"Outra") == std::wstring::npos, "só as pastas de cache do perfil"); } if (!wcscmp(t->item, L"SoUmCache")) so = true; }
+            Check(meu, "perfil com dois marcadores é detectado");
+            Check(!so, "pasta com um marcador só não é perfil");
+            Check(clean::DetectApps().size() == found.size() && clean::Detected().size() == found.size(), "detecção repetida reaproveita os mesmos alvos");
+        }
+
+        // --- tabela gerada do targets.json ---
+        for (int i = 0; i < clean::kTargetCount; ++i) {
+            const clean::Target& t = clean::kTargets[i];
+            Check(t.id && *t.id && t.item && *t.item, "todo alvo tem id e programa");
+            Check(t.risk != clean::kInform || !t.on, "o que só informa nunca vem marcado");
+            for (auto& p : clean::Split(t.paths)) {
+                Check(p.find(L"%SystemRoot%") == std::wstring::npos && p.find(L"%ProgramFiles") == std::wstring::npos, "nada que peça administrador");
+                Check(p.size() > 2 && p[0] == L'%', "todo caminho começa numa pasta conhecida (%VAR%)");
+            }
+        }
+
+        RmTree(clean::Lp(base));
     } catch (const std::exception& e) {
         std::cout << "FALHOU: " << e.what() << " (depois de " << checks << " verificações)\n";
         return 1;

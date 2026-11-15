@@ -1,0 +1,834 @@
+{
+  "versao": 2,
+
+  "deteccao": {
+    "ativa": true,
+    "bases": [
+      "%APPDATA%",
+      "%LOCALAPPDATA%",
+      "%USERPROFILE%\\AppData\\LocalLow",
+      "%LOCALAPPDATA%\\Packages\\*\\LocalCache"
+    ],
+    "profundidade": 4,
+    "marcadores": ["Cache", "Code Cache", "GPUCache"],
+    "pastas": [
+      "Cache", "Code Cache", "GPUCache", "DawnCache", "DawnGraphiteCache", "DawnWebGPUCache",
+      "Service Worker\\CacheStorage", "Service Worker\\ScriptCache", "Crashpad\\reports"
+    ],
+    "pastas_do_pai": ["ShaderCache", "GrShaderCache", "GraphiteDawnCache", "Crashpad\\reports"],
+    "nomes": {
+      "discord": "Discord",
+      "Opera Software": "Opera",
+      "Google": "Google (outros apps)",
+      "Voicemod.exe": "Voicemod",
+      "EpicGamesLauncher": "Epic Games Launcher",
+      "Epic Games": "Epic Games",
+      "hydralauncher": "Hydra Launcher",
+      "WhatsAppDesktop": "WhatsApp",
+      "SpotifyMusic": "Spotify",
+      "com.freepik.magnific.desktop": "Magnific",
+      "CocCoc": "Cốc Cốc",
+      "Code": "VS Code",
+      "Codex": "Codex",
+      "AcroCef": "Acrobat"
+    },
+    "categorias": {
+      "Steam": "Jogos",
+      "EpicGamesLauncher": "Jogos",
+      "Epic Games": "Jogos",
+      "hydralauncher": "Jogos",
+      "WeMod": "Jogos",
+      "GOG.com": "Jogos",
+      "Battle.net": "Jogos",
+      "WhatsAppDesktop": "Mensageiros",
+      "Telegram Desktop": "Mensageiros",
+      "Signal": "Mensageiros",
+      "Code": "Desenvolvimento",
+      "Cursor": "Desenvolvimento",
+      "Codex": "Desenvolvimento",
+      "GitHub Desktop": "Desenvolvimento",
+      "Postman": "Desenvolvimento",
+      "Adobe": "Adobe",
+      "AcroCef": "Adobe"
+    }
+  },
+
+  "alvos": [
+    {
+      "id": "photoshop-temp",
+      "limpeza_periodica": true,
+      "nome": "Photoshop – arquivos de scratch/temp",
+      "programa": "Photoshop",
+      "categoria": "Adobe",
+      "caminhos": ["%TEMP%"],
+      "padrao": "Photoshop Temp*",
+      "recursivo": false,
+      "marcado_por_padrao": true,
+      "risco": "seguro",
+      "processos": ["Photoshop.exe"],
+      "descricao": "Memória virtual do Photoshop. Sobra no disco quando o programa fecha de forma inesperada.",
+      "consequencia": "Nenhuma. Os arquivos da sessão aberta ficam travados e são pulados."
+    },
+    {
+      "id": "photoshop-scratch-discos",
+      "limpeza_periodica": true,
+      "nome": "Photoshop – scratch em outros discos",
+      "programa": "Photoshop",
+      "categoria": "Adobe",
+      "tipo": "photoshop-scratch",
+      "marcado_por_padrao": true,
+      "risco": "seguro",
+      "processos": ["Photoshop.exe"],
+      "descricao": "Arquivos \"Photoshop Temp\" na raiz dos discos configurados como scratch.",
+      "consequencia": "Nenhuma. Só arquivos com esse nome exato são considerados; os que estão em uso são pulados."
+    },
+    {
+      "id": "photoshop-cache",
+      "nome": "Photoshop – cache de fontes e logs",
+      "programa": "Photoshop",
+      "categoria": "Adobe",
+      "caminhos": [
+        "%APPDATA%\\Adobe\\Adobe Photoshop *\\CT Font Cache",
+        "%APPDATA%\\Adobe\\Adobe Photoshop *\\FontFeatureCache",
+        "%APPDATA%\\Adobe\\Adobe Photoshop *\\Logs"
+      ],
+      "marcado_por_padrao": true,
+      "risco": "seguro",
+      "processos": ["Photoshop.exe"],
+      "consequencia": "O Photoshop refaz a lista de fontes na próxima abertura, que pode demorar um pouco mais."
+    },
+    {
+      "id": "photoshop-autorecover",
+      "nome": "Photoshop – AutoRecover",
+      "programa": "Photoshop",
+      "categoria": "Adobe",
+      "caminhos": ["%APPDATA%\\Adobe\\Adobe Photoshop *\\AutoRecover"],
+      "marcado_por_padrao": false,
+      "risco": "atenção",
+      "processos": ["Photoshop.exe"],
+      "descricao": "Cópias de recuperação de documentos que estavam abertos quando o Photoshop travou.",
+      "consequencia": "Você perde a chance de recuperar esses documentos. Arquivos .psd e .psb nunca são apagados."
+    },
+    {
+      "id": "illustrator-recovery",
+      "nome": "Illustrator – DataRecovery",
+      "programa": "Illustrator",
+      "categoria": "Adobe",
+      "caminhos": ["%APPDATA%\\Adobe\\Adobe Illustrator * Settings\\*\\x64\\DataRecovery"],
+      "marcado_por_padrao": false,
+      "risco": "atenção",
+      "processos": ["Illustrator.exe"],
+      "descricao": "Dados de recuperação automática do Illustrator, inclusive de versões antigas.",
+      "consequencia": "Você perde a chance de recuperar documentos não salvos de travamentos anteriores. Arquivos .ai nunca são apagados."
+    },
+    {
+      "id": "illustrator-cache",
+      "nome": "Illustrator – cache e logs",
+      "programa": "Illustrator",
+      "categoria": "Adobe",
+      "caminhos": [
+        "%APPDATA%\\Adobe\\Adobe Illustrator\\*\\Cache*",
+        "%LOCALAPPDATA%\\Adobe\\Adobe Illustrator *\\Cache*",
+        "%APPDATA%\\Adobe\\Logs\\Adobe Illustrator"
+      ],
+      "marcado_por_padrao": true,
+      "risco": "seguro",
+      "processos": ["Illustrator.exe"]
+    },
+    {
+      "id": "indesign-cache",
+      "nome": "InDesign – cache",
+      "programa": "InDesign",
+      "categoria": "Adobe",
+      "caminhos": [
+        "%LOCALAPPDATA%\\Adobe\\InDesign\\Version *\\*\\Caches\\HTTPAssetsCache",
+        "%LOCALAPPDATA%\\Adobe\\InDesign\\Version *\\*\\Caches\\GPULog",
+        "%LOCALAPPDATA%\\Adobe\\InDesign\\Version *\\*\\Caches\\FontMaskCache",
+        "%LOCALAPPDATA%\\Adobe\\InDesign\\Version *\\*\\Caches\\TypeQuestCache"
+      ],
+      "marcado_por_padrao": true,
+      "risco": "seguro",
+      "processos": ["InDesign.exe"]
+    },
+    {
+      "id": "indesign-scrap",
+      "nome": "InDesign – área de transferência temporária",
+      "programa": "InDesign",
+      "categoria": "Adobe",
+      "caminhos": ["%LOCALAPPDATA%\\Adobe\\InDesign\\Version *\\*\\Caches"],
+      "padrao": "InDesign ClipboardScrap*;InDesign DragDropScrap;FindChangeDataTmp",
+      "recursivo": false,
+      "marcado_por_padrao": true,
+      "risco": "seguro",
+      "processos": ["InDesign.exe"]
+    },
+    {
+      "id": "indesign-recovery",
+      "nome": "InDesign – Recovery",
+      "programa": "InDesign",
+      "categoria": "Adobe",
+      "caminhos": ["%LOCALAPPDATA%\\Adobe\\InDesign\\Version *\\*\\Caches\\InDesign Recovery"],
+      "marcado_por_padrao": false,
+      "risco": "atenção",
+      "processos": ["InDesign.exe"],
+      "descricao": "Dados de recuperação de documentos do InDesign.",
+      "consequencia": "Você perde a chance de recuperar documentos não salvos de travamentos anteriores."
+    },
+    {
+      "id": "indesign-logs",
+      "nome": "InDesign – logs",
+      "programa": "InDesign",
+      "categoria": "Adobe",
+      "caminhos": ["%APPDATA%\\Adobe\\InDesign\\Logs"],
+      "marcado_por_padrao": true,
+      "risco": "seguro",
+      "processos": ["InDesign.exe"]
+    },
+    {
+      "id": "adobe-media-cache",
+      "nome": "Adobe Media Cache e Peak Files",
+      "programa": "Adobe Media Cache",
+      "categoria": "Adobe",
+      "caminhos": [
+        "%APPDATA%\\Adobe\\Common\\Media Cache",
+        "%APPDATA%\\Adobe\\Common\\Media Cache Files",
+        "%APPDATA%\\Adobe\\Common\\Peak Files",
+        "%APPDATA%\\Adobe\\Common\\Analyzer Cache Files"
+      ],
+      "marcado_por_padrao": true,
+      "risco": "seguro",
+      "processos": ["Adobe Premiere Pro.exe", "AfterFX.exe", "Adobe Media Encoder.exe"],
+      "consequencia": "Premiere e After Effects reconstroem o cache ao reabrir cada projeto."
+    },
+    {
+      "id": "cameraraw-cache",
+      "nome": "Camera Raw – cache",
+      "programa": "Camera Raw",
+      "categoria": "Adobe",
+      "caminhos": ["%LOCALAPPDATA%\\Adobe\\CameraRaw\\Cache*"],
+      "marcado_por_padrao": true,
+      "risco": "seguro",
+      "processos": ["Photoshop.exe", "Adobe Bridge.exe"]
+    },
+    {
+      "id": "bridge-cache",
+      "nome": "Bridge – cache e logs",
+      "programa": "Bridge",
+      "categoria": "Adobe",
+      "caminhos": [
+        "%APPDATA%\\Adobe\\Bridge *\\Cache",
+        "%APPDATA%\\Adobe\\Bridge *\\CT Font Cache",
+        "%APPDATA%\\Adobe\\Bridge *\\logs",
+        "%LOCALAPPDATA%\\Adobe\\Bridge *\\Cache",
+        "%TEMP%\\Adobe\\Bridge"
+      ],
+      "marcado_por_padrao": true,
+      "risco": "seguro",
+      "processos": ["Adobe Bridge.exe"]
+    },
+    {
+      "id": "aftereffects-cache",
+      "nome": "After Effects – disk cache",
+      "programa": "After Effects",
+      "categoria": "Adobe",
+      "caminhos": [
+        "%LOCALAPPDATA%\\Temp\\Adobe\\After Effects *\\Disk Cache*",
+        "%APPDATA%\\Adobe\\After Effects\\*\\Cache*",
+        "%APPDATA%\\Adobe\\After Effects\\*\\logs"
+      ],
+      "marcado_por_padrao": true,
+      "risco": "seguro",
+      "processos": ["AfterFX.exe"]
+    },
+    {
+      "id": "premiere-cache",
+      "nome": "Premiere – logs",
+      "programa": "Premiere",
+      "categoria": "Adobe",
+      "caminhos": [
+        "%APPDATA%\\Adobe\\Premiere Pro\\Logs",
+        "%APPDATA%\\Adobe\\Premiere Pro\\*\\Logs"
+      ],
+      "marcado_por_padrao": true,
+      "risco": "seguro",
+      "processos": ["Adobe Premiere Pro.exe"]
+    },
+    {
+      "id": "photoshop-recentes",
+      "nome": "Photoshop – arquivos recentes",
+      "programa": "Photoshop",
+      "categoria": "Adobe",
+      "tipo": "recentes",
+      "formato": "photoshop",
+      "caminhos": ["%APPDATA%\\Adobe\\Adobe Photoshop *\\Adobe Photoshop * Settings"],
+      "padrao": "MachinePrefs.psp",
+      "marcado_por_padrao": false,
+      "risco": "atenção",
+      "processos": ["Photoshop.exe"],
+      "descricao": "Lista de arquivos recentes da tela inicial e do menu Abrir recente, com as miniaturas. Fica dentro do arquivo de preferências MachinePrefs.psp. Só é limpa com o Photoshop fechado.",
+      "consequencia": "A lista de recentes do programa fica vazia. Seus arquivos não são tocados e as outras preferências continuam iguais. Uma cópia do arquivo de preferências original vai para a Lixeira."
+    },
+    {
+      "id": "illustrator-recentes",
+      "nome": "Illustrator – arquivos recentes",
+      "programa": "Illustrator",
+      "categoria": "Adobe",
+      "tipo": "recentes",
+      "formato": "illustrator",
+      "caminhos": ["%APPDATA%\\Adobe\\Adobe Illustrator * Settings\\*\\x64"],
+      "padrao": "Adobe Illustrator Prefs;Prefs. do Adobe Illustrator",
+      "marcado_por_padrao": false,
+      "risco": "atenção",
+      "processos": ["Illustrator.exe"],
+      "descricao": "Lista de arquivos recentes do Illustrator. Fica dentro do arquivo de preferências. Só é limpa com o Illustrator fechado.",
+      "consequencia": "A lista de recentes do programa fica vazia. Seus arquivos não são tocados e as outras preferências continuam iguais. Uma cópia do arquivo de preferências original vai para a Lixeira."
+    },
+    {
+      "id": "premiere-recentes",
+      "nome": "Premiere – projetos e importações recentes",
+      "programa": "Premiere",
+      "categoria": "Adobe",
+      "tipo": "recentes",
+      "formato": "premiere",
+      "caminhos": ["%CRISPY_DOCUMENTOS%\\Adobe\\Premiere Pro\\*\\Profile-*"],
+      "padrao": "Adobe Premiere Pro Prefs",
+      "marcado_por_padrao": false,
+      "risco": "atenção",
+      "processos": ["Adobe Premiere Pro.exe"],
+      "descricao": "Lista de projetos recentes e de arquivos importados recentemente. Fica dentro do arquivo de preferências, na pasta Documentos. Só é limpa com o Premiere fechado.",
+      "consequencia": "A lista de recentes do programa fica vazia. Seus arquivos não são tocados e as outras preferências continuam iguais. Uma cópia do arquivo de preferências original vai para a Lixeira."
+    },
+    {
+      "id": "adobe-uxp-webview",
+      "nome": "Adobe – cache dos painéis (UXP)",
+      "programa": "Adobe (painéis UXP)",
+      "categoria": "Adobe",
+      "caminhos": [
+        "%APPDATA%\\Adobe\\UXP\\PluginsStorage\\*\\*\\Shared\\EBWebView\\*\\Cache",
+        "%APPDATA%\\Adobe\\UXP\\PluginsStorage\\*\\*\\Shared\\EBWebView\\*\\Code Cache",
+        "%APPDATA%\\Adobe\\UXP\\PluginsStorage\\*\\*\\Shared\\EBWebView\\*\\GPUCache",
+        "%APPDATA%\\Adobe\\UXP\\PluginsStorage\\*\\*\\WebView\\*\\EBWebView\\*\\Cache",
+        "%APPDATA%\\Adobe\\UXP\\PluginsStorage\\*\\*\\WebView\\*\\EBWebView\\*\\Code Cache",
+        "%APPDATA%\\Adobe\\UXP\\PluginsStorage\\*\\*\\WebView\\*\\EBWebView\\*\\GPUCache"
+      ],
+      "marcado_por_padrao": true,
+      "risco": "seguro",
+      "processos": ["Photoshop.exe", "Illustrator.exe", "InDesign.exe"]
+    },
+    {
+      "id": "adobe-uxp-versoes-antigas",
+      "nome": "Adobe – dados de plugins de versões anteriores",
+      "programa": "Adobe (painéis UXP)",
+      "categoria": "Adobe",
+      "caminhos": ["%APPDATA%\\Adobe\\UXP\\PluginsStorage\\*\\*"],
+      "manter_mais_recente": 1,
+      "excluir": ["com.adobe.cclibrariespanel", "Cache", "Code Cache", "GPUCache"],
+      "marcado_por_padrao": false,
+      "risco": "atenção",
+      "descricao": "Dados que os painéis e plugins guardaram em versões anteriores de cada programa. A versão mais nova de cada um é preservada.",
+      "consequencia": "Se você voltar a usar a versão antiga do programa, os plugins dela começam sem dados salvos."
+    },
+    {
+      "id": "adobe-growthsdk",
+      "nome": "Adobe – conteúdo de dicas e novidades (GrowthSDK)",
+      "programa": "Adobe (GrowthSDK)",
+      "categoria": "Adobe",
+      "caminhos": ["%USERPROFILE%\\AppData\\LocalLow\\Adobe\\GrowthSDK\\*\\*\\content"],
+      "marcado_por_padrao": false,
+      "risco": "atenção",
+      "descricao": "Conteúdo baixado para as telas de dicas e novidades dos programas Adobe.",
+      "consequencia": "Os programas baixam o conteúdo de novo quando precisarem."
+    },
+    {
+      "id": "adobe-temp",
+      "limpeza_periodica": true,
+      "nome": "Adobe – temporários (UXP, CEP e logs)",
+      "programa": "Adobe (temporários)",
+      "categoria": "Adobe",
+      "caminhos": ["%TEMP%\\Adobe", "%TEMP%\\CreativeCloud", "%TEMP%\\cep_cache"],
+      "excluir": ["Bridge"],
+      "idade_minima_horas": 24,
+      "marcado_por_padrao": true,
+      "risco": "seguro"
+    },
+    {
+      "id": "adobe-cc-libraries",
+      "nome": "Creative Cloud Libraries – cópia local",
+      "programa": "Creative Cloud Libraries",
+      "categoria": "Adobe",
+      "caminhos": [
+        "%APPDATA%\\Adobe\\Creative Cloud Libraries\\LIBS",
+        "%APPDATA%\\Adobe\\UXP\\PluginsStorage\\*\\*\\Internal\\com.adobe.cclibrariespanel"
+      ],
+      "risco": "informar",
+      "descricao": "Cópia local das suas bibliotecas da Creative Cloud e dos elementos abertos pelo painel Bibliotecas.",
+      "como_limpar": "Apague ou arquive bibliotecas que não usa mais no painel Bibliotecas ou no site da Creative Cloud. Apagar por fora pode perder o que ainda não sincronizou."
+    },
+    {
+      "id": "lightroom-dados",
+      "nome": "Lightroom – originais e edições locais",
+      "programa": "Lightroom",
+      "categoria": "Adobe",
+      "caminhos": ["%LOCALAPPDATA%\\Adobe\\Lightroom CC\\Data"],
+      "risco": "informar",
+      "descricao": "Cópias locais das fotos sincronizadas com a nuvem do Lightroom e edições em andamento.",
+      "como_limpar": "No Lightroom: Editar > Preferências > Armazenamento local > Limpar cache. O Lightroom só remove o que já está na nuvem."
+    },
+
+    {
+      "id": "chrome",
+      "nome": "Google Chrome – cache",
+      "programa": "Chrome",
+      "categoria": "Navegadores",
+      "caminhos": [
+        "%LOCALAPPDATA%\\Google\\Chrome\\User Data\\*\\Cache",
+        "%LOCALAPPDATA%\\Google\\Chrome\\User Data\\*\\Code Cache",
+        "%LOCALAPPDATA%\\Google\\Chrome\\User Data\\*\\GPUCache",
+        "%LOCALAPPDATA%\\Google\\Chrome\\User Data\\*\\DawnGraphiteCache",
+        "%LOCALAPPDATA%\\Google\\Chrome\\User Data\\*\\DawnWebGPUCache",
+        "%LOCALAPPDATA%\\Google\\Chrome\\User Data\\*\\Service Worker\\CacheStorage",
+        "%LOCALAPPDATA%\\Google\\Chrome\\User Data\\*\\Service Worker\\ScriptCache",
+        "%LOCALAPPDATA%\\Google\\Chrome\\User Data\\ShaderCache",
+        "%LOCALAPPDATA%\\Google\\Chrome\\User Data\\GrShaderCache",
+        "%LOCALAPPDATA%\\Google\\Chrome\\User Data\\GraphiteDawnCache"
+      ],
+      "marcado_por_padrao": true,
+      "risco": "seguro",
+      "processos": ["chrome.exe"],
+      "consequencia": "Sites carregam um pouco mais devagar na primeira visita. Senhas, histórico, favoritos, cookies e extensões não são tocados."
+    },
+    {
+      "id": "edge",
+      "nome": "Microsoft Edge – cache",
+      "programa": "Edge",
+      "categoria": "Navegadores",
+      "caminhos": [
+        "%LOCALAPPDATA%\\Microsoft\\Edge\\User Data\\*\\Cache",
+        "%LOCALAPPDATA%\\Microsoft\\Edge\\User Data\\*\\Code Cache",
+        "%LOCALAPPDATA%\\Microsoft\\Edge\\User Data\\*\\GPUCache",
+        "%LOCALAPPDATA%\\Microsoft\\Edge\\User Data\\*\\DawnGraphiteCache",
+        "%LOCALAPPDATA%\\Microsoft\\Edge\\User Data\\*\\DawnWebGPUCache",
+        "%LOCALAPPDATA%\\Microsoft\\Edge\\User Data\\*\\Service Worker\\CacheStorage",
+        "%LOCALAPPDATA%\\Microsoft\\Edge\\User Data\\*\\Service Worker\\ScriptCache",
+        "%LOCALAPPDATA%\\Microsoft\\Edge\\User Data\\ShaderCache",
+        "%LOCALAPPDATA%\\Microsoft\\Edge\\User Data\\GrShaderCache",
+        "%LOCALAPPDATA%\\Microsoft\\Edge\\User Data\\GraphiteDawnCache"
+      ],
+      "marcado_por_padrao": true,
+      "risco": "seguro",
+      "processos": ["msedge.exe"],
+      "consequencia": "Sites carregam um pouco mais devagar na primeira visita. Senhas, histórico, favoritos, cookies e extensões não são tocados."
+    },
+    {
+      "id": "firefox",
+      "nome": "Firefox – cache",
+      "programa": "Firefox",
+      "categoria": "Navegadores",
+      "caminhos": [
+        "%LOCALAPPDATA%\\Mozilla\\Firefox\\Profiles\\*\\cache2",
+        "%LOCALAPPDATA%\\Mozilla\\Firefox\\Profiles\\*\\startupCache",
+        "%LOCALAPPDATA%\\Mozilla\\Firefox\\Profiles\\*\\jumpListCache"
+      ],
+      "marcado_por_padrao": true,
+      "risco": "seguro",
+      "processos": ["firefox.exe"],
+      "consequencia": "Sites carregam um pouco mais devagar na primeira visita. Senhas, histórico, favoritos, cookies e extensões não são tocados."
+    },
+    {
+      "id": "brave",
+      "nome": "Brave – cache",
+      "programa": "Brave",
+      "categoria": "Navegadores",
+      "caminhos": [
+        "%LOCALAPPDATA%\\BraveSoftware\\Brave-Browser\\User Data\\*\\Cache",
+        "%LOCALAPPDATA%\\BraveSoftware\\Brave-Browser\\User Data\\*\\Code Cache",
+        "%LOCALAPPDATA%\\BraveSoftware\\Brave-Browser\\User Data\\*\\GPUCache",
+        "%LOCALAPPDATA%\\BraveSoftware\\Brave-Browser\\User Data\\*\\Service Worker\\CacheStorage",
+        "%LOCALAPPDATA%\\BraveSoftware\\Brave-Browser\\User Data\\*\\Service Worker\\ScriptCache"
+      ],
+      "marcado_por_padrao": true,
+      "risco": "seguro",
+      "processos": ["brave.exe"]
+    },
+    {
+      "id": "opera",
+      "nome": "Opera / Opera GX – cache",
+      "programa": "Opera",
+      "categoria": "Navegadores",
+      "caminhos": [
+        "%LOCALAPPDATA%\\Opera Software\\Opera*\\Cache",
+        "%LOCALAPPDATA%\\Opera Software\\Opera*\\System Cache",
+        "%LOCALAPPDATA%\\Opera Software\\Opera*\\*\\Cache",
+        "%APPDATA%\\Opera Software\\Opera*\\Code Cache",
+        "%APPDATA%\\Opera Software\\Opera*\\GPUCache",
+        "%APPDATA%\\Opera Software\\Opera*\\ShaderCache",
+        "%APPDATA%\\Opera Software\\Opera*\\GrShaderCache",
+        "%APPDATA%\\Opera Software\\Opera*\\DawnGraphiteCache",
+        "%APPDATA%\\Opera Software\\Opera*\\DawnWebGPUCache",
+        "%APPDATA%\\Opera Software\\Opera*\\Service Worker\\CacheStorage",
+        "%APPDATA%\\Opera Software\\Opera*\\Service Worker\\ScriptCache",
+        "%APPDATA%\\Opera Software\\Opera*\\*\\Code Cache",
+        "%APPDATA%\\Opera Software\\Opera*\\*\\GPUCache",
+        "%APPDATA%\\Opera Software\\Opera*\\*\\DawnGraphiteCache",
+        "%APPDATA%\\Opera Software\\Opera*\\*\\DawnWebGPUCache",
+        "%APPDATA%\\Opera Software\\Opera*\\*\\Service Worker\\CacheStorage",
+        "%APPDATA%\\Opera Software\\Opera*\\*\\Service Worker\\ScriptCache"
+      ],
+      "marcado_por_padrao": true,
+      "risco": "seguro",
+      "processos": ["opera.exe"],
+      "consequencia": "Sites carregam um pouco mais devagar na primeira visita. Senhas, histórico, favoritos, cookies e extensões não são tocados."
+    },
+
+    {
+      "id": "temp-usuario",
+      "nome": "Temporários do usuário (mais de 24 h)",
+      "programa": "Temporários do Windows",
+      "categoria": "Sistema",
+      "caminhos": ["%TEMP%"],
+      "excluir": ["Photoshop Temp*", "Adobe", "CreativeCloud", "cep_cache", "claude"],
+      "idade_minima_horas": 24,
+      "marcado_por_padrao": true,
+      "risco": "seguro",
+      "descricao": "Sobras de instaladores, atualizações e programas na pasta temporária do seu usuário.",
+      "consequencia": "Nenhuma. Arquivos de trabalho (.psd, .psb, .ai, .indd, .pdf) que estiverem ali são preservados."
+    },
+    {
+      "id": "miniaturas",
+      "nome": "Cache de miniaturas e ícones",
+      "programa": "Miniaturas do Windows",
+      "categoria": "Sistema",
+      "caminhos": ["%LOCALAPPDATA%\\Microsoft\\Windows\\Explorer"],
+      "padrao": "thumbcache_*.db;iconcache_*.db",
+      "recursivo": false,
+      "marcado_por_padrao": true,
+      "risco": "seguro",
+      "consequencia": "O Explorador refaz as miniaturas das pastas conforme você as abre."
+    },
+    {
+      "id": "shaders",
+      "nome": "Cache de shaders da placa de vídeo",
+      "programa": "Shaders (DirectX)",
+      "categoria": "Sistema",
+      "caminhos": [
+        "%LOCALAPPDATA%\\D3DSCache",
+        "%LOCALAPPDATA%\\NVIDIA\\DXCache",
+        "%LOCALAPPDATA%\\NVIDIA\\GLCache",
+        "%LOCALAPPDATA%\\AMD\\DxCache",
+        "%LOCALAPPDATA%\\AMD\\DxcCache",
+        "%LOCALAPPDATA%\\AMD\\GLCache",
+        "%LOCALAPPDATA%\\AMD\\VkCache"
+      ],
+      "marcado_por_padrao": true,
+      "risco": "seguro",
+      "consequencia": "Jogos e programas 3D recompilam os shaders na primeira abertura, o que pode causar engasgos iniciais."
+    },
+    {
+      "id": "inet-cache",
+      "nome": "Cache de internet do Windows (INetCache)",
+      "programa": "Windows (INetCache)",
+      "categoria": "Sistema",
+      "caminhos": ["%LOCALAPPDATA%\\Microsoft\\Windows\\INetCache"],
+      "marcado_por_padrao": true,
+      "risco": "seguro"
+    },
+    {
+      "id": "crash-dumps",
+      "nome": "Despejos de falha e relatórios de erro",
+      "programa": "Logs do Windows",
+      "categoria": "Sistema",
+      "caminhos": [
+        "%LOCALAPPDATA%\\CrashDumps",
+        "%LOCALAPPDATA%\\Microsoft\\Windows\\WER\\ReportArchive",
+        "%LOCALAPPDATA%\\Microsoft\\Windows\\WER\\ReportQueue"
+      ],
+      "marcado_por_padrao": true,
+      "risco": "seguro"
+    },
+    {
+      "id": "sobras-atualizadores",
+      "nome": "Instaladores baixados por atualizadores",
+      "programa": "Sobras de atualizações",
+      "categoria": "Sistema",
+      "caminhos": ["%LOCALAPPDATA%\\*-updater"],
+      "marcado_por_padrao": true,
+      "risco": "seguro",
+      "descricao": "Instaladores que apps baixaram para se atualizar e não apagaram depois.",
+      "consequencia": "Se uma atualização estiver pendente, o app baixa o instalador de novo."
+    },
+    {
+      "id": "windows-temp",
+      "nome": "Windows Temp (pede administrador)",
+      "programa": "Temporários do Windows",
+      "categoria": "Sistema",
+      "caminhos": ["%SystemRoot%\\Temp"],
+      "idade_minima_horas": 24,
+      "marcado_por_padrao": false,
+      "risco": "atenção",
+      "admin": true
+    },
+    {
+      "id": "windows-update",
+      "nome": "Downloads do Windows Update (pede administrador)",
+      "programa": "Windows Update",
+      "categoria": "Sistema",
+      "caminhos": ["%SystemRoot%\\SoftwareDistribution\\Download"],
+      "idade_minima_horas": 168,
+      "marcado_por_padrao": false,
+      "risco": "atenção",
+      "admin": true,
+      "descricao": "Pacotes de atualização já baixados pelo Windows Update, com mais de 7 dias.",
+      "consequencia": "Se alguma atualização ainda não foi instalada, o Windows baixa de novo."
+    },
+    {
+      "id": "minidumps",
+      "nome": "Despejos de tela azul (pede administrador)",
+      "programa": "Logs do Windows",
+      "categoria": "Sistema",
+      "caminhos": ["%SystemRoot%\\Minidump", "%SystemRoot%\\LiveKernelReports"],
+      "marcado_por_padrao": false,
+      "risco": "atenção",
+      "admin": true,
+      "consequencia": "Você perde os registros para diagnosticar travamentos antigos do Windows."
+    },
+    {
+      "id": "prefetch",
+      "nome": "Prefetch (pede administrador)",
+      "programa": "Prefetch",
+      "categoria": "Sistema",
+      "caminhos": ["%SystemRoot%\\Prefetch"],
+      "padrao": "*.pf",
+      "recursivo": false,
+      "marcado_por_padrao": false,
+      "risco": "atenção",
+      "admin": true,
+      "consequencia": "Libera pouco espaço e deixa a abertura dos programas mais lenta por alguns dias."
+    },
+    {
+      "id": "lixeira",
+      "nome": "Lixeira",
+      "programa": "Lixeira",
+      "categoria": "Sistema",
+      "tipo": "lixeira",
+      "marcado_por_padrao": false,
+      "risco": "atenção",
+      "consequencia": "A Lixeira é esvaziada de forma definitiva."
+    },
+    {
+      "id": "google-drive-cache",
+      "nome": "Google Drive – cache de arquivos",
+      "programa": "Google Drive",
+      "categoria": "Sistema",
+      "caminhos": ["%LOCALAPPDATA%\\Google\\DriveFS\\*\\content_cache"],
+      "risco": "informar",
+      "descricao": "Cópias locais dos arquivos do Google Drive que você abriu ou deixou disponíveis offline.",
+      "como_limpar": "No Google Drive: Configurações > Preferências > engrenagem > Limpar arquivos em cache. Apagar por fora pode perder alterações ainda não enviadas."
+    },
+    {
+      "id": "google-drive-logs",
+      "nome": "Google Drive – logs",
+      "programa": "Google Drive",
+      "categoria": "Sistema",
+      "caminhos": ["%LOCALAPPDATA%\\Google\\DriveFS\\Logs"],
+      "idade_minima_horas": 24,
+      "marcado_por_padrao": true,
+      "risco": "seguro"
+    },
+
+    {
+      "id": "steam",
+      "nome": "Steam – cache do navegador interno e logs",
+      "programa": "Steam",
+      "categoria": "Jogos",
+      "caminhos": [
+        "%LOCALAPPDATA%\\Steam\\htmlcache\\Default\\Cache",
+        "%LOCALAPPDATA%\\Steam\\htmlcache\\Default\\Code Cache",
+        "%LOCALAPPDATA%\\Steam\\htmlcache\\Default\\GPUCache",
+        "%LOCALAPPDATA%\\Steam\\htmlcache\\ShaderCache",
+        "%LOCALAPPDATA%\\Steam\\htmlcache\\GrShaderCache",
+        "%LOCALAPPDATA%\\Steam\\htmlcache\\GraphiteDawnCache"
+      ],
+      "marcado_por_padrao": true,
+      "risco": "seguro",
+      "processos": ["steam.exe"]
+    },
+    {
+      "id": "gog",
+      "nome": "GOG Galaxy – cache e logs",
+      "programa": "GOG Galaxy",
+      "categoria": "Jogos",
+      "caminhos": ["%ProgramData%\\GOG.com\\Galaxy\\webcache", "%ProgramData%\\GOG.com\\Galaxy\\logs"],
+      "marcado_por_padrao": true,
+      "risco": "seguro",
+      "processos": ["GalaxyClient.exe"]
+    },
+    {
+      "id": "ubisoft",
+      "nome": "Ubisoft Connect – patches já aplicados",
+      "programa": "Ubisoft Connect",
+      "categoria": "Jogos",
+      "caminhos": ["%ProgramData%\\Ubisoft\\Ubisoft Game Launcher\\patch"],
+      "marcado_por_padrao": false,
+      "risco": "atenção",
+      "processos": ["upc.exe", "UbisoftConnect.exe"],
+      "descricao": "Pacotes de atualização do próprio launcher, guardados depois de instalados.",
+      "consequencia": "O launcher pode baixar um patch de novo na próxima atualização."
+    },
+    {
+      "id": "lghub",
+      "nome": "Logitech G HUB – downloads em cache",
+      "programa": "Logitech G HUB",
+      "categoria": "Outros",
+      "caminhos": ["%ProgramData%\\LGHUB\\cache"],
+      "marcado_por_padrao": false,
+      "risco": "atenção",
+      "processos": ["lghub.exe"],
+      "consequencia": "O G HUB baixa de novo o que precisar para atualizar."
+    },
+    {
+      "id": "apps-versoes-antigas",
+      "nome": "Versões anteriores de apps (Discord, WeMod e similares)",
+      "programa": "Versões antigas de apps",
+      "categoria": "Outros",
+      "caminhos": [
+        "%LOCALAPPDATA%\\Discord\\app-*",
+        "%LOCALAPPDATA%\\WeMod\\app-*",
+        "%LOCALAPPDATA%\\slack\\app-*",
+        "%LOCALAPPDATA%\\GitHubDesktop\\app-*"
+      ],
+      "manter_mais_recente": 1,
+      "marcado_por_padrao": false,
+      "risco": "atenção",
+      "descricao": "Cópia da versão anterior que o atualizador desses apps guarda. A versão mais nova de cada app é preservada.",
+      "consequencia": "O app perde a versão de reserva para voltar atrás se uma atualização falhar."
+    },
+
+    {
+      "id": "npm-cache",
+      "nome": "npm – cache de pacotes",
+      "programa": "npm",
+      "categoria": "Desenvolvimento",
+      "caminhos": ["%LOCALAPPDATA%\\npm-cache\\_cacache", "%LOCALAPPDATA%\\npm-cache\\_logs", "%LOCALAPPDATA%\\npm-cache\\_npx"],
+      "marcado_por_padrao": false,
+      "risco": "seguro",
+      "consequencia": "O npm baixa os pacotes de novo na próxima instalação."
+    },
+    {
+      "id": "gradle-cache",
+      "nome": "Gradle – cache de builds",
+      "programa": "Gradle",
+      "categoria": "Desenvolvimento",
+      "caminhos": ["%USERPROFILE%\\.gradle\\caches", "%USERPROFILE%\\.gradle\\daemon"],
+      "marcado_por_padrao": false,
+      "risco": "seguro",
+      "processos": ["studio64.exe"],
+      "consequencia": "O próximo build baixa as dependências de novo e demora bem mais."
+    },
+    {
+      "id": "pip-yarn-cache",
+      "nome": "pip e Yarn – cache de pacotes",
+      "programa": "pip / Yarn",
+      "categoria": "Desenvolvimento",
+      "caminhos": ["%LOCALAPPDATA%\\pip\\cache", "%LOCALAPPDATA%\\Yarn\\Cache"],
+      "marcado_por_padrao": false,
+      "risco": "seguro"
+    },
+    {
+      "id": "vscode",
+      "nome": "VS Code – cache e logs",
+      "programa": "VS Code",
+      "categoria": "Desenvolvimento",
+      "caminhos": [
+        "%APPDATA%\\Code\\Cache",
+        "%APPDATA%\\Code\\Code Cache",
+        "%APPDATA%\\Code\\GPUCache",
+        "%APPDATA%\\Code\\CachedData",
+        "%APPDATA%\\Code\\CachedExtensionVSIXs",
+        "%APPDATA%\\Code\\logs"
+      ],
+      "marcado_por_padrao": true,
+      "risco": "seguro",
+      "processos": ["Code.exe"]
+    },
+
+    {
+      "id": "discord",
+      "nome": "Discord – cache",
+      "programa": "Discord",
+      "categoria": "Mensageiros",
+      "caminhos": ["%APPDATA%\\discord\\Cache", "%APPDATA%\\discord\\Code Cache", "%APPDATA%\\discord\\GPUCache"],
+      "marcado_por_padrao": true,
+      "risco": "seguro",
+      "processos": ["Discord.exe"]
+    },
+    {
+      "id": "slack",
+      "nome": "Slack – cache",
+      "programa": "Slack",
+      "categoria": "Mensageiros",
+      "caminhos": ["%APPDATA%\\Slack\\Cache", "%APPDATA%\\Slack\\Code Cache", "%APPDATA%\\Slack\\GPUCache"],
+      "marcado_por_padrao": true,
+      "risco": "seguro",
+      "processos": ["slack.exe"]
+    },
+    {
+      "id": "teams",
+      "nome": "Microsoft Teams – cache",
+      "programa": "Teams",
+      "categoria": "Mensageiros",
+      "caminhos": [
+        "%APPDATA%\\Microsoft\\Teams\\Cache",
+        "%APPDATA%\\Microsoft\\Teams\\Code Cache",
+        "%APPDATA%\\Microsoft\\Teams\\GPUCache",
+        "%LOCALAPPDATA%\\Packages\\MSTeams_8wekyb3d8bbwe\\LocalCache\\Microsoft\\MSTeams\\EBWebView\\*\\Cache",
+        "%LOCALAPPDATA%\\Packages\\MSTeams_8wekyb3d8bbwe\\LocalCache\\Microsoft\\MSTeams\\EBWebView\\*\\Code Cache",
+        "%LOCALAPPDATA%\\Packages\\MSTeams_8wekyb3d8bbwe\\LocalCache\\Microsoft\\MSTeams\\EBWebView\\*\\GPUCache"
+      ],
+      "marcado_por_padrao": true,
+      "risco": "seguro",
+      "processos": ["Teams.exe", "ms-teams.exe"]
+    },
+    {
+      "id": "telegram",
+      "nome": "Telegram – cache de mídia",
+      "programa": "Telegram",
+      "categoria": "Mensageiros",
+      "caminhos": [
+        "%APPDATA%\\Telegram Desktop\\tdata\\user_data\\cache",
+        "%APPDATA%\\Telegram Desktop\\tdata\\user_data\\media_cache"
+      ],
+      "marcado_por_padrao": false,
+      "risco": "seguro",
+      "processos": ["Telegram.exe"],
+      "consequencia": "Fotos e vídeos das conversas são baixados de novo quando você os abrir."
+    },
+
+    {
+      "id": "claude",
+      "nome": "Claude – cache",
+      "programa": "Claude",
+      "categoria": "Outros",
+      "caminhos": ["%APPDATA%\\Claude\\Cache", "%APPDATA%\\Claude\\Code Cache", "%APPDATA%\\Claude\\GPUCache"],
+      "marcado_por_padrao": true,
+      "risco": "seguro",
+      "processos": ["claude.exe"]
+    },
+    {
+      "id": "figma",
+      "nome": "Figma – cache",
+      "programa": "Figma",
+      "categoria": "Outros",
+      "caminhos": [
+        "%APPDATA%\\Figma\\Cache",
+        "%APPDATA%\\Figma\\Code Cache",
+        "%APPDATA%\\Figma\\GPUCache",
+        "%APPDATA%\\Figma\\*\\Cache",
+        "%APPDATA%\\Figma\\*\\Code Cache",
+        "%APPDATA%\\Figma\\*\\GPUCache"
+      ],
+      "marcado_por_padrao": true,
+      "risco": "seguro",
+      "processos": ["Figma.exe"]
+    }
+  ]
+}

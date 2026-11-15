@@ -27,27 +27,31 @@ static std::wstring CleanCount(size_t n) { // 4.210 / 4,210
 }
 static const wchar_t* CleanGroupName(int g) {
     switch (g) {
-    case clean::kGTemp: return T(L"Temporários do Windows", L"Windows temporary files", L"Temporales de Windows");
+    case clean::kGSystem: return T(L"Sistema", L"System", L"Sistema");
     case clean::kGBrowsers: return T(L"Navegadores", L"Browsers", L"Navegadores");
-    case clean::kGWindows: return T(L"Cache e relatórios do Windows", L"Windows cache and reports", L"Caché e informes de Windows");
-    case clean::kGDesign: return T(L"Programas de design", L"Design apps", L"Programas de diseño");
-    default: return T(L"Lixeira", L"Recycle Bin", L"Papelera");
+    case clean::kGAdobe: return L"Adobe";
+    case clean::kGMessengers: return T(L"Mensageiros", L"Messengers", L"Mensajería");
+    case clean::kGDev: return T(L"Desenvolvimento", L"Development", L"Desarrollo");
+    case clean::kGGames: return T(L"Jogos", L"Games", L"Juegos");
+    default: return T(L"Outros", L"Other", L"Otros");
     }
 }
 // Nomes da tabela (em português) nos outros idiomas.
 static std::wstring CleanName(const std::wstring& pt) {
     static const wchar_t* tr[][3] = {
-        {L"Pasta TEMP do usuário", L"User TEMP folder", L"Carpeta TEMP del usuario"},
-        {L"Cache da internet", L"Internet cache", L"Caché de internet"},
-        {L"Relatórios de erro", L"Error reports", L"Informes de errores"},
-        {L"Arquivados", L"Archived", L"Archivados"},
-        {L"Na fila", L"Queued", L"En cola"},
-        {L"Despejos de falha", L"Crash dumps", L"Volcados de bloqueo"},
-        {L"Cache de sombreadores", L"Shader cache", L"Caché de sombreadores"},
-        {L"Atualizações antigas de apps", L"Old app updates", L"Actualizaciones antiguas de apps"},
-        {L"Arquivos de rascunho", L"Scratch files", L"Archivos de memoria virtual"},
-        {L"Painéis da Adobe", L"Adobe panels", L"Paneles de Adobe"},
+        {L"Temporários do Windows", L"Windows temporary files", L"Temporales de Windows"},
+        {L"Miniaturas do Windows", L"Windows thumbnails", L"Miniaturas de Windows"},
+        {L"Logs do Windows", L"Windows logs", L"Registros de Windows"},
+        {L"Sobras de atualizações", L"Update leftovers", L"Restos de actualizaciones"},
+        {L"Versões antigas de apps", L"Old app versions", L"Versiones antiguas de apps"},
         {L"Lixeira", L"Recycle Bin", L"Papelera"},
+        {L"Shaders (DirectX)", L"Shaders (DirectX)", L"Sombreadores (DirectX)"},
+        {L"Temporários do usuário (mais de 24 h)", L"User temporary files (over 24 h)", L"Temporales del usuario (más de 24 h)"},
+        {L"Cache de miniaturas e ícones", L"Thumbnail and icon cache", L"Caché de miniaturas e iconos"},
+        {L"Cache de shaders da placa de vídeo", L"Graphics card shader cache", L"Caché de sombreadores de la tarjeta gráfica"},
+        {L"Despejos de falha e relatórios de erro", L"Crash dumps and error reports", L"Volcados de bloqueo e informes de errores"},
+        {L"Instaladores baixados por atualizadores", L"Installers downloaded by updaters", L"Instaladores descargados por actualizadores"},
+        {L"Cache", L"Cache", L"Caché"}, {L"Cache e logs", L"Cache and logs", L"Caché y registros"}, {L"Logs", L"Logs", L"Registros"},
     };
     int l = i18n::Current();
     if (l != i18n::kPt) for (auto& r : tr) if (pt == r[0]) return r[l];
@@ -55,14 +59,12 @@ static std::wstring CleanName(const std::wstring& pt) {
 }
 // "chrome.exe" -> "Google Chrome" (para o diálogo de programa aberto)
 static std::wstring CleanProgramName(const std::wstring& exe) {
+    std::wstring found; int owners = 0;
     for (int i = 0; i < clean::kTargetCount; ++i)
         for (auto& p : clean::Split(clean::kTargets[i].procs))
-            if (!_wcsicmp(p.c_str(), exe.c_str())) {
-                std::wstring n = clean::kTargets[i].item;
-                if (n.compare(0, 11, L"Adobe Media") == 0 || n.compare(0, 6, L"Painéi") == 0) break; // vários programas: usa o nome do .exe
-                return CleanName(n);
-            }
-    std::wstring n = exe;
+            if (!_wcsicmp(p.c_str(), exe.c_str()) && found != clean::kTargets[i].item) { found = clean::kTargets[i].item; ++owners; }
+    if (owners == 1) return CleanName(found);
+    std::wstring n = exe; // vários donos (Photoshop.exe usa Camera Raw, painéis…): o nome do programa
     if (n.size() > 4 && !_wcsicmp(n.c_str() + n.size() - 4, L".exe")) n.resize(n.size() - 4);
     if (!_wcsicmp(n.c_str(), L"AfterFX")) return L"After Effects";
     if (!n.empty()) n[0] = (wchar_t)towupper(n[0]);
@@ -109,6 +111,7 @@ struct CleanUi {
     ULONGLONG removed = 0, kept = 0, recycledBytes = 0;
     clean::Disk disk;
     float shown = 0;                         // número grande, animado
+    bool closeAfter = false;                 // fechou a janela durante a limpeza: fecha quando ela parar
     ULONGLONG shownTarget = 0;
 };
 static CleanUi g_cl;
@@ -124,12 +127,17 @@ static bool ClIncludeRecycle() { return ReadDword(L"CleanRecycle", 1) != 0; }
 
 // Grupo terminal: um programa só, com uma pasta só (ex.: Lixeira) — sem seta.
 static bool ClGroupLeafOnly(const clean::GroupRes& g) { return g.items.size() == 1 && g.items[0].leaves.size() == 1 && CleanName(g.items[0].name) == CleanGroupName(g.id); }
-static void ClCount(const clean::GroupRes& g, int i, int& on, int& all) { // i < 0: grupo inteiro
+static void ClCount(const clean::GroupRes& g, int i, int& on, int& all) { // i < 0: grupo inteiro; "só informa" não conta
     on = all = 0;
-    for (int k = 0; k < (int)g.items.size(); ++k) if (i < 0 || i == k) for (auto& l : g.items[k].leaves) { ++all; if (l.on) ++on; }
+    for (int k = 0; k < (int)g.items.size(); ++k) if (i < 0 || i == k) for (auto& l : g.items[k].leaves) if (clean::Actionable(l)) { ++all; if (l.on) ++on; }
 }
-static void ClSet(clean::GroupRes& g, int i, bool v) { for (int k = 0; k < (int)g.items.size(); ++k) if (i < 0 || i == k) for (auto& l : g.items[k].leaves) l.on = v; }
-static int ClGroupRisk(const clean::GroupRes& g) { int r = clean::kSafe; for (auto& it : g.items) r = max(r, it.risk); return r; }
+static void ClSet(clean::GroupRes& g, int i, bool v) { for (int k = 0; k < (int)g.items.size(); ++k) if (i < 0 || i == k) for (auto& l : g.items[k].leaves) l.on = v && clean::Actionable(l); }
+// Selo do grupo: Revisar se algo dele vai para a Lixeira; Só informa se nada pode ser limpo.
+static int ClGroupRisk(const clean::GroupRes& g) {
+    int r = -1;
+    for (auto& it : g.items) for (auto& l : it.leaves) { int k = clean::TargetOf(l).risk; if (k != clean::kInform) r = max(r, k); }
+    return r < 0 ? clean::kInform : r;
+}
 
 static void ClRefreshRunning() { g_cl.running = clean::RunningExes(); }
 static void ClRefreshDisk() { g_cl.disk = clean::SystemDisk(); }
@@ -262,6 +270,7 @@ static const char* kIcoTrash = "M3 6h18M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2
 static const char* kIcoRefresh = "M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15";
 static const char* kIcoGear = "M12 9a3 3 0 1 0 0 6 3 3 0 1 0 0-6zM19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z";
 static const char* kIcoMin = "M5 12h14";
+static const char* kIcoInfo = "M12 2a10 10 0 1 0 0 20 10 10 0 1 0 0-20zM12 16v-4M12 8h.01";
 static const char* kIcoX = "M6 6l12 12M18 6L6 18";
 
 // Cores derivadas do tema (protótipo: Classic, Claro, Escuro, Crispy, Windows).
@@ -492,7 +501,10 @@ static void PaintClean(HWND h) {
     } else if (g_cl.phase == kClResult) {
         swprintf(buf, 256, narrow ? T(L"ENCONTRADO · %ls", L"FOUND · %ls", L"ENCONTRADO · %ls") : T(L"ENCONTRADO · %ls EM %d GRUPOS", L"FOUND · %ls IN %d GROUPS", L"ENCONTRADO · %ls EN %d GRUPOS"), CleanSize(g_cl.res.total).c_str(), groupsWith);
         head = buf;
-    } else if (g_cl.phase == kClCleaning) head = g_cl.status.empty() ? T(L"LIMPANDO", L"CLEANING", L"LIMPIANDO") : std::wstring(T(L"LIMPANDO · ", L"CLEANING · ", L"LIMPIANDO · ")) + g_cl.status;
+    } else if (g_cl.phase == kClCleaning) {
+        std::wstring st; { std::lock_guard<std::mutex> lk(g_cl.mu); st = g_cl.status; } // escrito pela thread da limpeza
+        head = st.empty() ? T(L"LIMPANDO", L"CLEANING", L"LIMPIANDO") : std::wstring(T(L"LIMPANDO · ", L"CLEANING · ", L"LIMPIANDO · ")) + st;
+    }
     else { swprintf(buf, 256, T(L"RELATÓRIO · %ls ARQUIVOS SAÍRAM", L"REPORT · %ls FILES REMOVED", L"INFORME · %ls ARCHIVOS ELIMINADOS"), CleanCount([] { size_t n = 0; for (auto& o : g_cl.out) n += o.second.filesRemoved; return n; }()).c_str()); head = buf; }
     for (auto& ch : head) ch = (wchar_t)towupper(ch);
     { // letras espaçadas, alinhado à esquerda (TextSpaced centraliza no retângulo: ele tem a largura exata do texto)
@@ -507,7 +519,8 @@ static void PaintClean(HWND h) {
         p.Segmented(sr, l, 2, g_cl.map ? 1 : 0, hv, parts);
         hit(kClList, parts[0]); hit(kClMap, parts[1]);
     }
-    float top = ly + 40 * s, bottom = sz.height - 8 * s;
+    bool footer = g_cl.phase == kClResult && !g_cl.map && g_cl.res.total;
+    float top = ly + 40 * s, bottom = sz.height - (footer ? 54 : 8) * s;
     g_cl.listTop = top; g_cl.listBottom = bottom;
     D2D1_RECT_F view = D2D1::RectF(pad, top, sz.width - pad, bottom);
 
@@ -516,6 +529,8 @@ static void PaintClean(HWND h) {
         std::vector<std::pair<ULONGLONG, int>> items;
         g_cl.cells.clear();
         for (int g = 0; g < clean::kGroupCount; ++g) for (int i = 0; i < (int)g_cl.res.groups[g].items.size(); ++i) {
+            int on0, all0; ClCount(g_cl.res.groups[g], i, on0, all0);
+            if (!all0) continue; // só informa: fica na lista, fora do mapa
             items.push_back({max(g_cl.res.groups[g].items[i].bytes, 1ull), (int)g_cl.cells.size()}); g_cl.cells.push_back({g, i});
         }
         std::sort(items.begin(), items.end(), [](const std::pair<ULONGLONG, int>& a, const std::pair<ULONGLONG, int>& b) { return a.first > b.first; });
@@ -648,7 +663,8 @@ static void PaintClean(HWND h) {
             } else {
                 bool boxHot = hit(id0 + 1, D2D1::RectF(bx.left - 6 * s, bx.top - 6 * s, bx.right + 6 * s, bx.bottom + 6 * s));
                 if (boxHot) p.Fill(D2D1::RectF(bx.left - 5 * s, bx.top - 5 * s, bx.right + 5 * s, bx.bottom + 5 * s), 7 * s, c.hover);
-                ClCheckbox(p, c, bx, on == all && all ? 1 : on ? 2 : 0, s);
+                if (all) ClCheckbox(p, c, bx, on == all ? 1 : on ? 2 : 0, s);
+                else { p.Feather(kIcoInfo, bx, 16 * s, th.text2); if (row.depth) note = T(L"Só informa", L"Info only", L"Solo informa"); }
                 if (runningItem && row.depth == 1) { note = T(L"Aberto · feche para limpar tudo", L"Open · close it to clean everything", L"Abierto · ciérralo para limpiar todo"); noteColor = c.warn; noteIcon = kIcoAlert; }
                 if (row.depth == 2 && clean::TargetOf(gr.items[row.i].leaves[row.l]).risk == clean::kReview && !ClPermanent()) note = T(L"Vai para a Lixeira", L"Goes to the Recycle Bin", L"Va a la Papelera");
             }
@@ -658,8 +674,9 @@ static void PaintClean(HWND h) {
             right -= sizeW + 12 * s;
             // selo Seguro / Revisar (grupo, na análise)
             if (row.depth == 0 && (g_cl.phase == kClResult || (g_cl.phase == kClScan && gr.done && !gr.items.empty()))) {
-                bool rev = ClGroupRisk(gr) >= clean::kReview;
-                std::wstring bl = rev ? T(L"Revisar", L"Review", L"Revisar") : T(L"Seguro", L"Safe", L"Seguro");
+                int risk = ClGroupRisk(gr);
+                bool rev = risk == clean::kReview;
+                std::wstring bl = rev ? T(L"Revisar", L"Review", L"Revisar") : risk == clean::kInform ? T(L"Só informa", L"Info only", L"Solo informa") : T(L"Seguro", L"Safe", L"Seguro");
                 float bw = ClMeasure(p, bl, 12) + (rev ? 30 : 18) * s;
                 D2D1_RECT_F br = D2D1::RectF(right - bw, cy - 11 * s, right, cy + 11 * s);
                 p.Stroke(br, 11 * s, rev ? c.accent : c.line, 1 * s);
@@ -683,6 +700,23 @@ static void PaintClean(HWND h) {
         if (maxScroll > 0) { // barra de rolagem fina
             float vh = view.bottom - view.top, th2 = max(30 * s, vh * vh / total), ty = view.top + (vh - th2) * (g_cl.scroll / maxScroll);
             p.Fill(D2D1::RectF(view.right + 6 * s, ty, view.right + 10 * s, ty + th2), 2 * s, c.line);
+        }
+        if (footer) { // o que acontece ao limpar o item sob o mouse (consequência do targets.json)
+            std::wstring tip;
+            int hr = g_cl.hot >= kClRow0 && g_cl.hot < kClCell0 ? (g_cl.hot - kClRow0) / 4 : -1;
+            if (hr >= 0 && hr < (int)g_cl.rows.size() && g_cl.rows[hr].depth > 0) {
+                const CleanRow& rw = g_cl.rows[hr];
+                const auto& it = g_cl.res.groups[rw.g].items[rw.i];
+                const clean::Leaf& lf = it.leaves[rw.depth == 2 ? rw.l : 0];
+                const wchar_t* n = clean::TargetOf(lf).note;
+                if (n && *n && i18n::Current() == i18n::kPt) tip = n; // as consequências só existem em português
+                if (lf.protectedFiles) {
+                    wchar_t pb[160]; swprintf(pb, 160, T(L" %ls em arquivos de trabalho ficam.", L" %ls of work files stay.", L" %ls de archivos de trabajo se quedan."), CleanSize(lf.protectedBytes).c_str());
+                    tip += pb;
+                }
+            }
+            if (tip.empty()) tip = T(L"Passe o mouse num item para ver o que muda ao limpar.", L"Hover an item to see what changes when it's cleaned.", L"Pasa el ratón sobre un elemento para ver qué cambia al limpiarlo.");
+            p.Paragraph(tip, view.left + 4 * s, view.bottom + 12 * s, view.right - view.left - 8 * s, 12.5f, th.text2, true, 1.35f);
         }
     }
 
@@ -818,7 +852,7 @@ static void ClAction(int id) {
             return;
         }
         if (g_cl.phase != kClResult) return;
-        if (row.depth == 2) { auto& l = gr.items[row.i].leaves[row.l]; l.on = !l.on; }
+        if (row.depth == 2) { auto& l = gr.items[row.i].leaves[row.l]; l.on = !l.on && clean::Actionable(l); }
         else { int on, all; ClCount(gr, row.depth == 0 ? -1 : row.i, on, all); ClSet(gr, row.depth == 0 ? -1 : row.i, on < all); }
     }
 }
@@ -888,6 +922,7 @@ static LRESULT CALLBACK CleanProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         ClRefreshDisk();
         { ULONGLONG left = clean::Selected(g_cl.res); left = left > g_cl.removed ? left - g_cl.removed : 0; WriteDword(L"CleanLastFound", (DWORD)min(left >> 20, 0xFFFFFFFFull)); }
         WidgetsRenderAll();
+        if (g_cl.closeAfter) { DestroyWindow(h); return 0; }
         InvalidateRect(h, nullptr, FALSE); return 0;
     }
     case WM_TIMER: { // número animado e girando
@@ -902,7 +937,7 @@ static LRESULT CALLBACK CleanProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     case WM_SIZE: g_cl.surf.Resize(LOWORD(lp), HIWORD(lp)); InvalidateRect(h, nullptr, FALSE); return 0;
     case WM_ERASEBKGND: return 1;
     case WM_PAINT: { PAINTSTRUCT ps; BeginPaint(h, &ps); PaintClean(h); EndPaint(h, &ps); return 0; }
-    case WM_CLOSE: if (g_cl.phase == kClCleaning) { g_cl.stop = true; return 0; } DestroyWindow(h); return 0; // limpando: Parar primeiro
+    case WM_CLOSE: if (g_cl.phase == kClCleaning) { g_cl.stop = true; g_cl.closeAfter = true; return 0; } DestroyWindow(h); return 0; // limpando: para entre um arquivo e outro e fecha
     case WM_DESTROY: ClJoin(); g_cl.surf.Release(); g_cl.hits.clear(); g_cl.wnd = nullptr; return 0;
     }
     return DefWindowProcW(h, msg, wp, lp);
@@ -923,7 +958,7 @@ static void OpenCleanWindow() {
     UINT dx = 96, dy = 96; GetDpiForMonitor(mon, MDT_EFFECTIVE_DPI, &dx, &dy);
     float s = dx / 96.0f;
     int w = min((int)(960 * s), (int)(mi.rcWork.right - mi.rcWork.left - 40)), h = min((int)(680 * s), (int)(mi.rcWork.bottom - mi.rcWork.top - 40));
-    g_cl.hot = 0; g_cl.openG = {clean::kGBrowsers};
+    g_cl.hot = 0; g_cl.openG = {clean::kGBrowsers}; g_cl.closeAfter = false;
     g_cl.wnd = CreateWindowExW(WS_EX_APPWINDOW, L"VizuClean", T(L"Limpeza — Vizu", L"Cleanup — Vizu", L"Limpieza — Vizu"), WS_POPUP | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU | WS_THICKFRAME,
                                mi.rcWork.left + (mi.rcWork.right - mi.rcWork.left - w) / 2, mi.rcWork.top + (mi.rcWork.bottom - mi.rcWork.top - h) / 2, w, h,
                                nullptr, nullptr, g_inst, nullptr);

@@ -234,7 +234,11 @@ static void WidgetRender(int k) {
             int cause = g_perf.cause ? g_perf.cause : 1;
             std::wstring v = cause == 2 ? CleanSize(pu.mem) : cause == 3 ? CleanSize(pu.io) + L"/s" : std::to_wstring((int)(pu.cpu + 0.5)) + L"% CPU";
             float vr = xr;
-            if (i == 0 && alert && pu.window) { // só programas com janela: nunca processos do sistema
+            static const wchar_t* never[] = {L"explorer.exe", L"dwm.exe", L"csrss.exe", L"winlogon.exe", L"svchost.exe", L"lsass.exe", L"services.exe",
+                                             L"sihost.exe", L"ShellExperienceHost.exe", L"StartMenuExperienceHost.exe", L"SearchHost.exe", L"Taskmgr.exe", L"Vizu.exe", L"MsMpEng.exe"};
+            bool closable = pu.window;
+            for (auto n : never) if (!_wcsicmp(pu.exe.c_str(), n)) closable = false; // o Explorer tem janelas, mas fechar derrubaria a área de trabalho
+            if (i == 0 && alert && closable) { // só programas com janela, nunca processos do Windows
                 float bw = ClMeasure(p, T(L"Fechar", L"Close", L"Cerrar"), 12.5f) + 20 * s;
                 wd.rClose = D2D1::RectF(xr - bw, y + 5 * s, xr, y + 27 * s);
                 if (wd.hot == 2) p.Fill(wd.rClose, 7 * s, c.hover);

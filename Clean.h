@@ -18,13 +18,14 @@
 #include <tlhelp32.h>
 #include <algorithm>
 #include <atomic>
+#include <deque>
 #include <functional>
 #include <string>
 #include <vector>
 
 namespace clean {
 
-enum Group { kGTemp, kGBrowsers, kGWindows, kGDesign, kGRecycle, kGroupCount };
+enum Group { kGSystem, kGBrowsers, kGAdobe, kGMessengers, kGDev, kGGames, kGOther, kGroupCount }; // categorias do Crispy Clean
 enum Risk { kSafe, kReview, kInform };
 enum Kind { kFolder, kScratch /* "Photoshop Temp<n>" na raiz de cada disco */, kRecycleBin };
 
@@ -42,40 +43,14 @@ struct Target {
     bool recursive;
     int keepNewest;          // entre pastas irmãs de versão (app-1.0.9, app-1.0.10), poupa as N mais novas
     int kind;
+    bool on;                 // marcado por padrão
+    const wchar_t* note;     // consequência (ou como limpar, nos que só informam)
+    const wchar_t* id;
 };
 
-// Nada que exija administrador (Windows\Temp, SoftwareDistribution): o Vizu nunca pede elevação.
-static const Target kTargets[] = {
-    {kGTemp, L"Pasta TEMP do usuário", nullptr, L"%TEMP%", kSafe, -1, L"", L"*", L"", true, 0, kFolder},
-    {kGBrowsers, L"Google Chrome", L"Cache", L"%LOCALAPPDATA%\\Google\\Chrome\\User Data\\*\\Cache", kSafe, 0, L"chrome.exe", L"*", L"", true, 0, kFolder},
-    {kGBrowsers, L"Google Chrome", L"Code Cache", L"%LOCALAPPDATA%\\Google\\Chrome\\User Data\\*\\Code Cache", kSafe, 0, L"chrome.exe", L"*", L"", true, 0, kFolder},
-    {kGBrowsers, L"Google Chrome", L"GPUCache", L"%LOCALAPPDATA%\\Google\\Chrome\\User Data\\*\\GPUCache|%LOCALAPPDATA%\\Google\\Chrome\\User Data\\ShaderCache", kSafe, 0, L"chrome.exe", L"*", L"", true, 0, kFolder},
-    {kGBrowsers, L"Microsoft Edge", L"Cache", L"%LOCALAPPDATA%\\Microsoft\\Edge\\User Data\\*\\Cache", kSafe, 0, L"msedge.exe", L"*", L"", true, 0, kFolder},
-    {kGBrowsers, L"Microsoft Edge", L"Code Cache", L"%LOCALAPPDATA%\\Microsoft\\Edge\\User Data\\*\\Code Cache", kSafe, 0, L"msedge.exe", L"*", L"", true, 0, kFolder},
-    {kGBrowsers, L"Microsoft Edge", L"GPUCache", L"%LOCALAPPDATA%\\Microsoft\\Edge\\User Data\\*\\GPUCache|%LOCALAPPDATA%\\Microsoft\\Edge\\User Data\\ShaderCache", kSafe, 0, L"msedge.exe", L"*", L"", true, 0, kFolder},
-    {kGBrowsers, L"Brave", L"Cache", L"%LOCALAPPDATA%\\BraveSoftware\\Brave-Browser\\User Data\\*\\Cache", kSafe, 0, L"brave.exe", L"*", L"", true, 0, kFolder},
-    {kGBrowsers, L"Brave", L"Code Cache", L"%LOCALAPPDATA%\\BraveSoftware\\Brave-Browser\\User Data\\*\\Code Cache", kSafe, 0, L"brave.exe", L"*", L"", true, 0, kFolder},
-    {kGBrowsers, L"Opera", L"Cache", L"%LOCALAPPDATA%\\Opera Software\\Opera Stable\\Cache|%LOCALAPPDATA%\\Opera Software\\Opera GX Stable\\Cache", kSafe, 0, L"opera.exe", L"*", L"", true, 0, kFolder},
-    {kGBrowsers, L"Firefox", L"Cache", L"%LOCALAPPDATA%\\Mozilla\\Firefox\\Profiles\\*\\cache2", kSafe, 0, L"firefox.exe", L"*", L"", true, 0, kFolder},
-    {kGWindows, L"Cache da internet", nullptr, L"%LOCALAPPDATA%\\Microsoft\\Windows\\INetCache", kSafe, 24, L"", L"*", L"", true, 0, kFolder},
-    {kGWindows, L"Relatórios de erro", L"Arquivados", L"%LOCALAPPDATA%\\Microsoft\\Windows\\WER\\ReportArchive", kSafe, 0, L"", L"*", L"", true, 0, kFolder},
-    {kGWindows, L"Relatórios de erro", L"Na fila", L"%LOCALAPPDATA%\\Microsoft\\Windows\\WER\\ReportQueue", kSafe, 0, L"", L"*", L"", true, 0, kFolder},
-    {kGWindows, L"Despejos de falha", nullptr, L"%LOCALAPPDATA%\\CrashDumps", kSafe, 0, L"", L"*.dmp", L"", true, 0, kFolder},
-    {kGWindows, L"Cache de sombreadores", L"DirectX", L"%LOCALAPPDATA%\\D3DSCache", kSafe, 24, L"", L"*", L"", true, 0, kFolder},
-    {kGWindows, L"Cache de sombreadores", L"NVIDIA", L"%LOCALAPPDATA%\\NVIDIA\\DXCache|%LOCALAPPDATA%\\NVIDIA\\GLCache", kSafe, 24, L"", L"*", L"", true, 0, kFolder},
-    {kGWindows, L"Cache de sombreadores", L"AMD", L"%LOCALAPPDATA%\\AMD\\DxCache|%LOCALAPPDATA%\\AMD\\DxcCache|%LOCALAPPDATA%\\AMD\\VkCache", kSafe, 24, L"", L"*", L"", true, 0, kFolder},
-    {kGWindows, L"Atualizações antigas de apps", nullptr, L"%LOCALAPPDATA%\\*\\packages", kReview, 72, L"", L"*.nupkg", L"", false, 0, kFolder},
-    {kGDesign, L"Adobe Media Cache", L"Media Cache Files", L"%APPDATA%\\Adobe\\Common\\Media Cache Files", kReview, 0, L"Adobe Premiere Pro.exe|AfterFX.exe|Adobe Media Encoder.exe", L"*", L"", true, 0, kFolder},
-    {kGDesign, L"Adobe Media Cache", L"Media Cache", L"%APPDATA%\\Adobe\\Common\\Media Cache", kReview, 0, L"Adobe Premiere Pro.exe|AfterFX.exe|Adobe Media Encoder.exe", L"*", L"", true, 0, kFolder},
-    {kGDesign, L"Adobe Media Cache", L"Peak Files", L"%APPDATA%\\Adobe\\Common\\Peak Files", kReview, 0, L"Adobe Premiere Pro.exe|AfterFX.exe|Adobe Media Encoder.exe", L"*", L"", true, 0, kFolder},
-    {kGDesign, L"Adobe Camera Raw", nullptr, L"%LOCALAPPDATA%\\Adobe\\CameraRaw\\Cache", kReview, 0, L"Photoshop.exe|Lightroom.exe|Adobe Bridge.exe", L"*", L"", true, 0, kFolder},
-    {kGDesign, L"Adobe Photoshop", L"Arquivos de rascunho", L"", kSafe, 0, L"Photoshop.exe", L"Photoshop Temp*", L"", false, 0, kScratch},
-    {kGDesign, L"Painéis da Adobe", nullptr, L"%APPDATA%\\Adobe\\CEP\\Cache|%LOCALAPPDATA%\\Adobe\\CEP\\Cache", kSafe, 0, L"Photoshop.exe|Illustrator.exe|InDesign.exe|Adobe Premiere Pro.exe|AfterFX.exe", L"*", L"", true, 0, kFolder},
-    {kGRecycle, L"Lixeira", nullptr, L"", kReview, 0, L"", L"*", L"", false, 0, kRecycleBin},
-};
+#include "CleanTargets.h" // gerado de limpeza/targets.json
 static const int kTargetCount = (int)(sizeof(kTargets) / sizeof(kTargets[0]));
 
-inline bool GroupSafe(int g) { return g == kGTemp || g == kGBrowsers || g == kGWindows || g == kGDesign; }
 
 // ---------- utilidades ----------
 
@@ -89,12 +64,16 @@ inline std::wstring Expand(const std::wstring& s) {
     std::wstring r = n && n <= 2048 ? b : L"";
     if (r.find(L'%') != std::wstring::npos) return L""; // variável que não existe
     while (r.size() > 3 && (r.back() == L'\\' || r.back() == L'/')) r.pop_back();
+    if (r.find(L'~') != std::wstring::npos && r.find_first_of(L"*?") == std::wstring::npos) { // nome curto 8.3 -> nome longo
+        wchar_t lb[2048]; DWORD n2 = GetLongPathNameW(r.c_str(), lb, 2048);
+        if (n2 && n2 < 2048) r = lb;
+    }
     return r;
 }
 inline std::wstring LowerPath(std::wstring s) { for (auto& c : s) { if (c == L'/') c = L'\\'; c = (wchar_t)towlower(c); } return s; }
-inline std::vector<std::wstring> Split(const wchar_t* s) {
+inline std::vector<std::wstring> Split(const wchar_t* s, bool semicolon = true) { // ';' só separa padrões de nome, nunca caminhos
     std::vector<std::wstring> out; std::wstring cur;
-    for (const wchar_t* p = s ? s : L""; ; ++p) { if (!*p || *p == L'|' || *p == L';') { if (!cur.empty()) out.push_back(cur); cur.clear(); if (!*p) break; } else cur += *p; }
+    for (const wchar_t* p = s ? s : L""; ; ++p) { if (!*p || *p == L'|' || (semicolon && *p == L';')) { if (!cur.empty()) out.push_back(cur); cur.clear(); if (!*p) break; } else cur += *p; }
     return out;
 }
 // Curinga de nome de arquivo (* e ?), sem diferenciar maiúsculas.
@@ -114,9 +93,15 @@ inline bool Inside(const std::wstring& parent, const std::wstring& child) {
 }
 inline bool SameOrInside(const std::wstring& a, const std::wstring& b) { return LowerPath(a) == LowerPath(b) || Inside(a, b); }
 
+// Caminhos com mais de 248 caracteres (caches do Service Worker passam fácil) só funcionam com o prefixo \\?\\.
+inline std::wstring Lp(const std::wstring& p) {
+    if (p.size() < 240 || p.compare(0, 4, L"\\\\?\\") == 0 || p.size() < 3 || p[1] != L':') return p;
+    return L"\\\\?\\" + p;
+}
+
 // Caminho real (resolve links no meio do caminho). Vazio se não existir.
 inline std::wstring RealPath(const std::wstring& p) {
-    HANDLE h = CreateFileW(p.c_str(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
+    HANDLE h = CreateFileW(Lp(p).c_str(), 0, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, nullptr);
     if (h == INVALID_HANDLE_VALUE) return L"";
     wchar_t b[4096]; DWORD n = GetFinalPathNameByHandleW(h, b, 4096, 0);
     CloseHandle(h);
@@ -140,24 +125,26 @@ inline bool BlockedExt(const std::wstring& path) {
 // ---------- contexto de proteção ----------
 
 struct Context {
-    std::vector<std::wstring> allowed;   // raízes onde um alvo pode estar
+    std::vector<std::wstring> allowed;   // raízes onde um alvo pode estar (estritamente dentro)
     std::vector<std::wstring> personal;  // nada dentro delas
+    std::vector<std::wstring> ancestors; // um alvo nunca pode ser igual a uma destas nem conter uma delas
+    std::vector<std::wstring> system;    // Windows e Arquivos de Programas: proibidos (o Vizu não pede administrador)
     std::vector<std::wstring> own;       // pastas e arquivos do próprio Vizu
     std::wstring temp;                   // única raiz permitida que pode ser limpa por inteiro
 };
 
-inline Context& Ctx() {
-    static Context c;
-    static bool init = false;
-    if (!init) {
-        init = true;
-        for (auto v : {L"%LOCALAPPDATA%", L"%APPDATA%", L"%TEMP%"}) { std::wstring e = Expand(v); if (e.size() > 3) c.allowed.push_back(e); }
+inline Context MakeContext() {
+    Context c;
+    {
+        for (auto v : {L"%USERPROFILE%", L"%ProgramData%", L"%LOCALAPPDATA%", L"%APPDATA%", L"%TEMP%"}) { std::wstring e = Expand(v); if (e.size() > 3) c.allowed.push_back(e); }
+        for (auto v : {L"%USERPROFILE%", L"%APPDATA%", L"%LOCALAPPDATA%", L"%USERPROFILE%\\AppData\\LocalLow", L"%ProgramData%"}) { std::wstring e = Expand(v); if (e.size() > 3) c.ancestors.push_back(e); }
+        for (auto v : {L"%SystemRoot%", L"%ProgramFiles%", L"%ProgramFiles(x86)%"}) { std::wstring e = Expand(v); if (e.size() > 3) c.system.push_back(e); }
         c.temp = Expand(L"%TEMP%");
         std::wstring home = Expand(L"%USERPROFILE%");
         if (home.size() > 3) {
             for (auto n : {L"Documents", L"Desktop", L"Downloads", L"Pictures", L"Videos", L"Music"}) c.personal.push_back(home + L"\\" + n);
             WIN32_FIND_DATAW fd;
-            HANDLE h = FindFirstFileExW((home + L"\\OneDrive*").c_str(), FindExInfoBasic, &fd, FindExSearchLimitToDirectories, nullptr, 0);
+            HANDLE h = FindFirstFileExW(Lp(home + L"\\OneDrive*").c_str(), FindExInfoBasic, &fd, FindExSearchLimitToDirectories, nullptr, 0);
             if (h != INVALID_HANDLE_VALUE) { do c.personal.push_back(home + L"\\" + fd.cFileName); while (FindNextFileW(h, &fd)); FindClose(h); }
         }
         for (auto id : {&FOLDERID_Documents, &FOLDERID_Desktop, &FOLDERID_Downloads, &FOLDERID_Pictures, &FOLDERID_Videos, &FOLDERID_Music}) {
@@ -171,13 +158,14 @@ inline Context& Ctx() {
     }
     return c;
 }
+inline Context& Ctx() { static Context c = MakeContext(); return c; } // estática local: inicialização segura entre threads
 
 // Pode ser a raiz de um alvo? Pasta real, sem link no caminho, dentro de uma raiz permitida, fora das pessoais.
 inline bool SafeRoot(const std::wstring& path) {
     const Context& c = Ctx();
     if (path.size() < 4 || path[1] != L':' || path[2] != L'\\') return false;
     if (path.find(L"\\..") != std::wstring::npos || path.find(L"..\\") != std::wstring::npos) return false;
-    DWORD a = GetFileAttributesW(path.c_str());
+    DWORD a = GetFileAttributesW(Lp(path).c_str());
     if (a == INVALID_FILE_ATTRIBUTES || !(a & FILE_ATTRIBUTE_DIRECTORY) || (a & FILE_ATTRIBUTE_REPARSE_POINT)) return false;
     std::wstring real = RealPath(path);
     if (real.empty() || LowerPath(real) != LowerPath(path)) return false; // algum trecho do caminho é link
@@ -185,23 +173,35 @@ inline bool SafeRoot(const std::wstring& path) {
     for (auto& r : c.allowed) if (Inside(r, path)) inside = true;
     if (!inside) return false;
     for (auto& p : c.personal) if (SameOrInside(p, path) || Inside(path, p)) return false;
+    for (auto& a2 : c.ancestors) if (SameOrInside(path, a2)) return false;
+    for (auto& sy : c.system) if (SameOrInside(path, sy) || Inside(sy, path)) return false;
     for (auto& o : c.own) if (SameOrInside(o, path) || Inside(path, o)) return false;
     return true;
 }
 
 // Confere um arquivo ou pasta imediatamente antes de apagar (validarItem do Crispy Clean).
-inline bool SafeItem(const std::wstring& root, const std::wstring& path, bool isDir) {
+inline bool SafeItem(const std::wstring& root, const std::wstring& path, bool isDir, std::vector<std::wstring>* parentsOk = nullptr) {
     const Context& c = Ctx();
     if (!Inside(root, path) || path.find(L"\\..") != std::wstring::npos) return false;
     if (!isDir && BlockedExt(path)) return false;
     for (auto& p : c.personal) if (SameOrInside(p, path)) return false;
     for (auto& o : c.own) if (SameOrInside(o, path)) return false;
-    DWORD a = GetFileAttributesW(path.c_str());
+    DWORD a = GetFileAttributesW(Lp(path).c_str());
     if (a == INVALID_FILE_ATTRIBUTES || (a & FILE_ATTRIBUTE_REPARSE_POINT)) return false;
     if (((a & FILE_ATTRIBUTE_DIRECTORY) != 0) != isDir) return false;
     std::wstring parent = path.substr(0, path.find_last_of(L'\\'));
-    std::wstring real = RealPath(parent);
-    return !real.empty() && SameOrInside(root, real); // nenhum link no meio do caminho
+    if (parentsOk && !parentsOk->empty() && parentsOk->back() == parent) return true; // mesma pasta do arquivo anterior
+    // Nenhuma pasta entre a raiz (já conferida por SafeRoot) e o arquivo pode ser link: um link trocado depois da
+    // análise apontaria para fora do alvo. Olha pasta por pasta (funciona com caminhos longos, ao contrário do caminho real).
+    for (size_t i = root.size(); i < parent.size();) {
+        size_t j = parent.find(L'\\', i + 1);
+        if (j == std::wstring::npos) j = parent.size();
+        DWORD pa = GetFileAttributesW(Lp(parent.substr(0, j)).c_str());
+        if (pa == INVALID_FILE_ATTRIBUTES || !(pa & FILE_ATTRIBUTE_DIRECTORY) || (pa & FILE_ATTRIBUTE_REPARSE_POINT)) return false;
+        i = j;
+    }
+    if (parentsOk) parentsOk->push_back(parent);
+    return true;
 }
 
 // ---------- raízes ----------
@@ -221,7 +221,7 @@ inline std::vector<std::wstring> ExpandWildcards(const std::wstring& path) {
         if (seg.find_first_of(L"*?") == std::wstring::npos) { for (auto& b : cur) next.push_back(b + L"\\" + seg); }
         else for (auto& b : cur) {
             WIN32_FIND_DATAW fd;
-            HANDLE h = FindFirstFileExW((b + L"\\*").c_str(), FindExInfoBasic, &fd, FindExSearchLimitToDirectories, nullptr, 0);
+            HANDLE h = FindFirstFileExW(Lp(b + L"\\*").c_str(), FindExInfoBasic, &fd, FindExSearchLimitToDirectories, nullptr, 0);
             if (h == INVALID_HANDLE_VALUE) continue;
             do {
                 if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) || (fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)) continue;
@@ -234,7 +234,7 @@ inline std::vector<std::wstring> ExpandWildcards(const std::wstring& path) {
         if (cur.empty()) break;
     }
     std::vector<std::wstring> out;
-    for (auto& p : cur) { DWORD a = GetFileAttributesW(p.c_str()); if (a != INVALID_FILE_ATTRIBUTES && (a & FILE_ATTRIBUTE_DIRECTORY)) out.push_back(p); }
+    for (auto& p : cur) { DWORD a = GetFileAttributesW(Lp(p).c_str()); if (a != INVALID_FILE_ATTRIBUTES && (a & FILE_ATTRIBUTE_DIRECTORY)) out.push_back(p); }
     return out;
 }
 
@@ -256,7 +256,7 @@ inline std::wstring ParentOf(const std::wstring& p) { size_t k = p.find_last_of(
 
 inline std::vector<std::wstring> Roots(const Target& t) {
     std::vector<std::wstring> out;
-    for (auto& raw : Split(t.paths)) {
+    for (auto& raw : Split(t.paths, false)) {
         std::wstring exp = Expand(raw);
         if (exp.empty()) continue;
         std::vector<std::wstring> cand = ExpandWildcards(exp);
@@ -311,7 +311,7 @@ inline void Walk(const std::wstring& root, const Target& t, ULONGLONG cutoff, Co
         if (stop && *stop) return;
         std::wstring dir = stack.back(); stack.pop_back();
         WIN32_FIND_DATAW fd;
-        HANDLE h = FindFirstFileExW((dir + L"\\*").c_str(), FindExInfoBasic, &fd, FindExSearchNameMatch, nullptr, FIND_FIRST_EX_LARGE_FETCH);
+        HANDLE h = FindFirstFileExW(Lp(dir + L"\\*").c_str(), FindExInfoBasic, &fd, FindExSearchNameMatch, nullptr, FIND_FIRST_EX_LARGE_FETCH);
         if (h == INVALID_HANDLE_VALUE) { if (GetLastError() == ERROR_ACCESS_DENIED) ++c.noAccess; continue; }
         do {
             if (!wcscmp(fd.cFileName, L".") || !wcscmp(fd.cFileName, L"..")) continue;
@@ -337,7 +337,7 @@ inline void Walk(const std::wstring& root, const Target& t, ULONGLONG cutoff, Co
 // Arquivos de rascunho do Photoshop: só "Photoshop Temp<números>", direto na raiz do disco, sem subpastas.
 inline void Scratch(const std::wstring& disk, const std::function<void(const std::wstring&, ULONGLONG)>& onFile) {
     WIN32_FIND_DATAW fd;
-    HANDLE h = FindFirstFileExW((disk + L"Photoshop Temp*").c_str(), FindExInfoBasic, &fd, FindExSearchNameMatch, nullptr, 0);
+    HANDLE h = FindFirstFileExW(Lp(disk + L"Photoshop Temp*").c_str(), FindExInfoBasic, &fd, FindExSearchNameMatch, nullptr, 0);
     if (h == INVALID_HANDLE_VALUE) return;
     do {
         if (fd.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)) continue;
@@ -351,7 +351,7 @@ inline void Scratch(const std::wstring& disk, const std::function<void(const std
 }
 
 inline bool FileInUse(const std::wstring& p) {
-    HANDLE h = CreateFileW(p.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    HANDLE h = CreateFileW(Lp(p).c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (h != INVALID_HANDLE_VALUE) { CloseHandle(h); return false; }
     DWORD e = GetLastError();
     return e == ERROR_SHARING_VIOLATION || e == ERROR_LOCK_VIOLATION || e == ERROR_ACCESS_DENIED;
@@ -410,6 +410,7 @@ struct GroupRes { int id = 0; std::vector<Item> items; ULONGLONG bytes = 0; bool
 struct Result { GroupRes groups[kGroupCount]; ULONGLONG total = 0; };
 
 inline const Target& TargetOf(const Leaf& l) { return l.custom ? *l.custom : kTargets[l.target]; }
+inline bool Actionable(const Leaf& l) { return TargetOf(l).risk != kInform; }
 
 inline ULONGLONG Selected(const Result& r) {
     ULONGLONG b = 0;
@@ -433,15 +434,19 @@ inline void MeasureLeaf(Leaf& l, int ageDays, const std::atomic<bool>* stop) {
 }
 
 // Analisa todos os grupos. progress(grupo) ao terminar cada um (chamado da thread da análise).
+inline std::vector<const Target*> DetectApps();
 inline void Scan(Result& r, int ageDays, bool includeRecycle, const std::atomic<bool>& stop, const std::function<void(int)>& progress) {
     for (int g = 0; g < kGroupCount; ++g) { r.groups[g] = GroupRes(); r.groups[g].id = g; }
     r.total = 0;
+    std::vector<const Target*> all;
+    for (int i = 0; i < kTargetCount; ++i) all.push_back(&kTargets[i]);
+    for (auto* t : DetectApps()) all.push_back(t);
     for (int g = 0; g < kGroupCount && !stop; ++g) {
         GroupRes& gr = r.groups[g];
-        for (int i = 0; i < kTargetCount && !stop; ++i) {
-            const Target& t = kTargets[i];
+        for (size_t i = 0; i < all.size() && !stop; ++i) {
+            const Target& t = *all[i];
             if (t.group != g) continue;
-            Leaf l; l.target = i; l.name = t.leaf ? t.leaf : t.item;
+            Leaf l; l.custom = &t; l.target = i < (size_t)kTargetCount ? (int)i : -1; l.name = t.leaf ? t.leaf : t.item;
             if (t.kind == kRecycleBin) {
                 if (!includeRecycle) continue;
                 SHQUERYRBINFO q = {sizeof(q)};
@@ -449,7 +454,7 @@ inline void Scan(Result& r, int ageDays, bool includeRecycle, const std::atomic<
                 l.bytes = (ULONGLONG)q.i64Size; l.files = (size_t)q.i64NumItems;
             } else MeasureLeaf(l, ageDays, &stop);
             if (!l.bytes) continue;
-            l.on = t.risk == kSafe && GroupSafe(g);
+            l.on = t.on && t.risk != kInform;
             Item* it = nullptr;
             for (auto& x : gr.items) if (x.name == t.item) it = &x;
             if (!it) { gr.items.push_back(Item()); it = &gr.items.back(); it->name = t.item; it->procs = Split(t.procs); it->risk = t.risk; }
@@ -462,6 +467,104 @@ inline void Scan(Result& r, int ageDays, bool includeRecycle, const std::atomic<
         gr.done = true;
         if (progress) progress(g);
     }
+}
+
+// ---------- detecção automática (detect.js do Crispy Clean) ----------
+// Um "perfil" é uma pasta com pelo menos duas pastas-marcador (Cache, Code Cache, GPUCache). Só entram as pastas da
+// lista kDetectFolders (e kDetectParentFolders, ao lado do perfil); SafeRoot continua valendo para cada uma.
+struct DetectedTarget { Target t; std::wstring item, paths; };
+inline std::deque<DetectedTarget>& Detected() { static std::deque<DetectedTarget> d; return d; } // endereços estáveis entre análises
+
+inline std::vector<std::wstring> SubDirs(const std::wstring& dir) {
+    std::vector<std::wstring> out; WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileExW(Lp(dir + L"\\*").c_str(), FindExInfoBasic, &fd, FindExSearchLimitToDirectories, nullptr, 0);
+    if (h == INVALID_HANDLE_VALUE) return out;
+    do if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && !(fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) && wcscmp(fd.cFileName, L".") && wcscmp(fd.cFileName, L".."))
+        out.push_back(fd.cFileName);
+    while (FindNextFileW(h, &fd));
+    FindClose(h);
+    return out;
+}
+inline bool RealDir(const std::wstring& p) { DWORD a = GetFileAttributesW(Lp(p).c_str()); return a != INVALID_FILE_ATTRIBUTES && (a & FILE_ATTRIBUTE_DIRECTORY) && !(a & FILE_ATTRIBUTE_REPARSE_POINT); }
+
+inline const wchar_t* DetectLookup(const wchar_t* const (*map)[2], size_t n, const std::wstring& key) {
+    for (size_t i = 0; i < n; ++i) if (!_wcsicmp(map[i][0], key.c_str())) return map[i][1];
+    return nullptr;
+}
+
+inline std::vector<const Target*> DetectApps() {
+    std::vector<const Target*> out;
+    if (!kDetectOn) return out;
+    std::vector<std::wstring> covered; // raízes que a tabela já cobre
+    for (int i = 0; i < kTargetCount; ++i) for (auto& r : Roots(kTargets[i])) covered.push_back(r);
+    auto isCovered = [&](const std::wstring& r) { for (auto& c : covered) if (SameOrInside(c, r) || SameOrInside(r, c)) return true; return false; };
+    struct App { std::wstring name; std::vector<std::wstring> roots; bool browser = false; };
+    std::vector<App> apps;
+    static const wchar_t* skip[] = {L"temp", L"node_modules", L".git", L"packages", L"programs", L"microsoft"};
+    for (auto base0 : kDetectBases) {
+        std::wstring exp = Expand(base0);
+        if (exp.empty()) continue;
+        for (auto& base : ExpandWildcards(exp)) {
+            std::vector<std::pair<std::wstring, int>> stack = {{base, 0}};
+            while (!stack.empty()) {
+                auto cur = stack.back(); stack.pop_back();
+                std::vector<std::wstring> kids = SubDirs(cur.first);
+                int marks = 0;
+                for (auto m : kDetectMarkers) for (auto& k : kids) if (!_wcsicmp(k.c_str(), m)) { ++marks; break; }
+                bool profile = cur.first != base && marks >= 2;
+                if (profile) {
+                    std::vector<std::wstring> roots;
+                    for (auto f : kDetectFolders) { std::wstring p = cur.first + L"\\" + f; if (RealDir(p) && !isCovered(p)) roots.push_back(p); }
+                    for (auto f : kDetectParentFolders) { std::wstring p = ParentOf(cur.first) + L"\\" + f; if (RealDir(p) && !isCovered(p)) roots.push_back(p); }
+                    if (!roots.empty()) {
+                        std::wstring name, lp = cur.first + L"\\";
+                        size_t pk = LowerPath(lp).find(L"\\packages\\");
+                        if (pk != std::wstring::npos) { // "5319275A.WhatsAppDesktop_cv1g1gvanyjgm" -> "WhatsAppDesktop"
+                            std::wstring pkg = lp.substr(pk + 10); pkg = pkg.substr(0, pkg.find(L'\\'));
+                            size_t us = pkg.find_last_of(L'_'); if (us != std::wstring::npos) pkg.resize(us);
+                            size_t dot = pkg.find_last_of(L'.'); name = dot == std::wstring::npos ? pkg : pkg.substr(dot + 1);
+                        } else {
+                            std::wstring rel = cur.first.substr(base.size() + 1);
+                            name = rel.substr(0, rel.find(L'\\'));
+                        }
+                        App* a = nullptr;
+                        for (auto& x : apps) if (!_wcsicmp(x.name.c_str(), name.c_str())) a = &x;
+                        if (!a) { apps.push_back(App()); a = &apps.back(); a->name = name; }
+                        for (auto& r : roots) { bool dup = false; for (auto& q : a->roots) if (LowerPath(q) == LowerPath(r)) dup = true; if (!dup) a->roots.push_back(r); }
+                        if (LowerPath(lp).find(L"\\user data\\") != std::wstring::npos) a->browser = true;
+                    }
+                }
+                if (cur.second >= kDetectDepth) continue;
+                for (auto& k : kids) {
+                    bool sk = false;
+                    for (auto x : skip) if (!_wcsicmp(k.c_str(), x)) sk = true;
+                    if (profile) for (auto f : kDetectFolders) { std::wstring first = f; first = first.substr(0, first.find(L'\\')); if (!_wcsicmp(k.c_str(), first.c_str())) sk = true; }
+                    if (!sk) stack.push_back({cur.first + L"\\" + k, cur.second + 1});
+                }
+            }
+        }
+    }
+    std::sort(apps.begin(), apps.end(), [](const App& a, const App& b) { return _wcsicmp(a.name.c_str(), b.name.c_str()) < 0; });
+    for (auto& a : apps) {
+        std::wstring paths; for (auto& r : a.roots) paths += (paths.empty() ? L"" : L"|") + r;
+        DetectedTarget* d = nullptr;
+        for (auto& x : Detected()) if (x.paths == paths) d = &x; // a mesma de uma análise anterior: reaproveita
+        if (!d) {
+            Detected().push_back(DetectedTarget()); d = &Detected().back();
+            const wchar_t* shown = DetectLookup(kDetectNames, sizeof(kDetectNames) / sizeof(kDetectNames[0]), a.name);
+            const wchar_t* cat = DetectLookup(kDetectGroups, sizeof(kDetectGroups) / sizeof(kDetectGroups[0]), a.name);
+            std::wstring cs = cat ? cat : a.browser ? L"Navegadores" : L"Outros";
+            int g = cs == L"Navegadores" ? kGBrowsers : cs == L"Jogos" ? kGGames : cs == L"Mensageiros" ? kGMessengers : cs == L"Desenvolvimento" ? kGDev
+                  : cs == L"Adobe" ? kGAdobe : cs == L"Sistema" ? kGSystem : kGOther;
+            d->item = shown ? shown : a.name; d->paths = paths;
+            for (int i = 0; i < kTargetCount; ++i) if (!_wcsicmp(kTargets[i].item, d->item.c_str())) { g = kTargets[i].group; break; } // "Discord" detectado fica junto do Discord da tabela
+            d->t = {g, nullptr, nullptr, nullptr, kSafe, 0, L"", L"*", L"", true, 0, kFolder, true,
+                    L"Cache encontrado automaticamente. O app recria esses arquivos sozinho; a primeira abertura depois da limpeza pode ser um pouco mais lenta.", L"auto"};
+            d->t.item = d->item.c_str(); d->t.paths = d->paths.c_str();
+        }
+        out.push_back(&d->t);
+    }
+    return out;
 }
 
 // ---------- limpeza ----------
@@ -487,13 +590,13 @@ inline Outcome CleanLeaf(const Leaf& l, int ageDays, bool permanent, const std::
     ULONGLONG cutoff = Cutoff(t, ageDays, Now());
     std::vector<std::pair<std::wstring, ULONGLONG>> toRecycle;
     auto run = [&](const std::wstring& root, bool scratch) {
-        Counters c; std::vector<std::pair<std::wstring, ULONGLONG>> dirs;
+        Counters c; std::vector<std::pair<std::wstring, ULONGLONG>> dirs; std::vector<std::wstring> parentsOk;
         auto onFile = [&](const std::wstring& p, ULONGLONG size) {
             if (stop) return;
-            bool ok = scratch ? (p.size() > 3 && p.find(L'\\', 3) == std::wstring::npos && !FileInUse(p)) : SafeItem(root, p, false);
+            bool ok = scratch ? (p.size() > 3 && p.find(L'\\', 3) == std::wstring::npos && !FileInUse(p)) : SafeItem(root, p, false, &parentsOk);
             if (!ok) { o.kept += size; ++o.filesKept; return; }
             if (recycle) { toRecycle.push_back({p, size}); return; }
-            if (DeleteFileW(p.c_str()) || GetLastError() == ERROR_FILE_NOT_FOUND) { o.removed += size; ++o.filesRemoved; if (tick) tick(size); }
+            if (DeleteFileW(Lp(p).c_str()) || GetLastError() == ERROR_FILE_NOT_FOUND) { o.removed += size; ++o.filesRemoved; if (tick) tick(size); }
             else { o.kept += size; ++o.filesKept; }
         };
         if (scratch) Scratch(root, onFile); else Walk(root, t, cutoff, c, onFile, &dirs, &stop);
@@ -501,7 +604,7 @@ inline Outcome CleanLeaf(const Leaf& l, int ageDays, bool permanent, const std::
             std::sort(dirs.begin(), dirs.end(), [](const std::pair<std::wstring, ULONGLONG>& a, const std::pair<std::wstring, ULONGLONG>& b) { return a.first.size() > b.first.size(); });
             for (auto& d : dirs) {
                 if (cutoff && d.second > cutoff) continue; // criada há pouco: pode ser de um programa rodando
-                if (SafeItem(root, d.first, true)) RemoveDirectoryW(d.first.c_str());
+                if (SafeItem(root, d.first, true)) RemoveDirectoryW(Lp(d.first).c_str());
             }
         }
     };
@@ -520,7 +623,7 @@ inline Outcome CleanLeaf(const Leaf& l, int ageDays, bool permanent, const std::
         }
     }
     for (auto& f : toRecycle) {
-        if (GetFileAttributesW(f.first.c_str()) == INVALID_FILE_ATTRIBUTES) { o.removed += f.second; ++o.filesRemoved; if (tick) tick(f.second); }
+        if (GetFileAttributesW(Lp(f.first).c_str()) == INVALID_FILE_ATTRIBUTES) { o.removed += f.second; ++o.filesRemoved; if (tick) tick(f.second); }
         else { o.kept += f.second; ++o.filesKept; }
     }
     return o;
