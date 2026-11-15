@@ -220,7 +220,7 @@
     "Limpeza-A.dc.html": {
       "h": 860,
       "radius": 28,
-      "title": "5 · Limpeza · A · Coluna à esquerda",
+      "title": "5 · Limpeza · A · Coluna à esquerda (descartada)",
       "w": 2120,
       "x": -3040,
       "y": 12460
@@ -228,15 +228,95 @@
     "Limpeza-B.dc.html": {
       "h": 860,
       "radius": 28,
-      "title": "5 · Limpeza · B · Faixa no topo",
+      "title": "5 · Limpeza · B · Faixa no topo (escolhida)",
       "w": 2120,
       "x": -3040,
       "y": 13620
     },
+    "Limpeza-B1.dc.html": {
+      "h": 860,
+      "radius": 28,
+      "title": "5 · Limpeza · B1 · Analisando",
+      "w": 2120,
+      "x": -3040,
+      "y": 15940
+    },
+    "Limpeza-B10.dc.html": {
+      "h": 860,
+      "radius": 28,
+      "title": "5 · Limpeza · B10 · Temas e largura mínima",
+      "w": 2300,
+      "x": -3040,
+      "y": 26520
+    },
+    "Limpeza-B2.dc.html": {
+      "h": 860,
+      "radius": 28,
+      "title": "5 · Limpeza · B2 · Resultado",
+      "w": 2120,
+      "x": -3040,
+      "y": 17100
+    },
+    "Limpeza-B3.dc.html": {
+      "h": 860,
+      "radius": 28,
+      "title": "5 · Limpeza · B3 · Mapa",
+      "w": 2120,
+      "x": -3040,
+      "y": 18260
+    },
+    "Limpeza-B4.dc.html": {
+      "h": 860,
+      "radius": 28,
+      "title": "5 · Limpeza · B4 · Confirmar",
+      "w": 2120,
+      "x": -3040,
+      "y": 19420
+    },
+    "Limpeza-B5.dc.html": {
+      "h": 860,
+      "radius": 28,
+      "title": "5 · Limpeza · B5 · Fechar programas",
+      "w": 2120,
+      "x": -3040,
+      "y": 20580
+    },
+    "Limpeza-B6.dc.html": {
+      "h": 860,
+      "radius": 28,
+      "title": "5 · Limpeza · B6 · Limpando",
+      "w": 2120,
+      "x": -3040,
+      "y": 21740
+    },
+    "Limpeza-B7.dc.html": {
+      "h": 860,
+      "radius": 28,
+      "title": "5 · Limpeza · B7 · Relatório",
+      "w": 2120,
+      "x": -3040,
+      "y": 22900
+    },
+    "Limpeza-B8.dc.html": {
+      "h": 1000,
+      "radius": 28,
+      "title": "5 · Limpeza · B8 · Configurações",
+      "w": 2120,
+      "x": -3040,
+      "y": 24060
+    },
+    "Limpeza-B9.dc.html": {
+      "h": 860,
+      "radius": 28,
+      "title": "5 · Limpeza · B9 · Widget de disco",
+      "w": 2120,
+      "x": -3040,
+      "y": 25360
+    },
     "Limpeza-C.dc.html": {
       "h": 860,
       "radius": 28,
-      "title": "5 · Limpeza · C · Cabeçalho que encolhe",
+      "title": "5 · Limpeza · C · Cabeçalho que encolhe (descartada)",
       "w": 2120,
       "x": -3040,
       "y": 14780

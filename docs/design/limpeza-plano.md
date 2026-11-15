@@ -42,15 +42,24 @@ Depende do código do CrispyClean (`main/` e `targets.json`), que ainda não est
 
 ## Protótipo
 
-`prototipo/Limpeza-A.dc.html`, `Limpeza-B.dc.html` e `Limpeza-C.dc.html`: três composições do resumo, nos temas Vizu
-Classic e Claro. Janela de 960 × 640.
+Composição escolhida: **B · faixa no topo**. A faixa traz o número, a barra do disco e a ação principal; a lista usa
+toda a largura. Na largura mínima (560 px) a faixa quebra em duas linhas e o botão continua visível.
 
-- **A · Coluna à esquerda:** resumo e botão fixos numa coluna de 280 px.
-- **B · Faixa no topo:** resumo, barra do disco e botão numa faixa; a lista usa toda a largura.
-- **C · Cabeçalho que encolhe:** número grande ao abrir; ao rolar, o cabeçalho vira a barra de título com o botão.
+| Prancha | Tela |
+|---|---|
+| `Limpeza-B1` | Analisando: o número sobe e os grupos entram na lista conforme terminam |
+| `Limpeza-B2` | Resultado: Seguro vem marcado, Revisar fica de fora, programa aberto é avisado na linha |
+| `Limpeza-B3` | Mapa: área proporcional ao tamanho, cor de destaque = marcado |
+| `Limpeza-B4` | Confirmar: diálogo do Vizu com o que vai sair |
+| `Limpeza-B5` | Fechar programas: pular o programa ou fechar e limpar |
+| `Limpeza-B6` | Limpando: a faixa vira progresso, com Parar |
+| `Limpeza-B7` | Relatório: quanto saiu, o que ficou e por quê, com Desfazer por 24 h |
+| `Limpeza-B8` | Seção Limpeza nas Configurações |
+| `Limpeza-B9` | Widget de disco nos 5 temas: normal, pouco espaço e aberto |
+| `Limpeza-B10` | Resultado nos 5 temas e na largura mínima |
 
-Próximo passo: escolher uma composição e então desenhar as demais telas (análise, mapa, confirmação, fechar
-programas, relatório, widget e a seção nas Configurações) nos 5 temas.
+No tema Escuro o destaque é cinza-claro (sem laranja) e no Padrão Windows é a cor de destaque do sistema, como no
+resto do Vizu.
 
 ## Versão
 

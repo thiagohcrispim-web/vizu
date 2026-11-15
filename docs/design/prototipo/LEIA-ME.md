@@ -12,6 +12,11 @@ Arquivos de referência das telas aprovadas e dos temas. Não são carregados pe
 
 O `canvas.json` é o índice exportado pela ferramenta de design e lista mais telas do que há aqui. Não estão nesta pasta: as variações de tema (`L-`, `D-`, `W-`, `C-`) de Ring, Preview, Toast, Clock, Ocr e Agenda; `V-Agenda`, `V-Clock`, `V-Ocr`, `V-Toast`, `V-Extras` e `Main`. `V-Settings` era idêntico a `Settings-copia`, e `Settings-Lite` a `Settings-Lite-copia`; ficou só uma cópia de cada.
 
-## Limpeza (9.9, em proposta)
+## Limpeza (9.9)
 
-- `Limpeza-A`, `Limpeza-B`, `Limpeza-C`: três composições do resumo da janela Limpeza (antigo CrispyClean), nos temas Vizu Classic e Claro. Plano em `../limpeza-plano.md`.
+Janela Limpeza (antigo CrispyClean). Plano em `../limpeza-plano.md`.
+
+- `Limpeza-A`, `Limpeza-B`, `Limpeza-C`: três composições do resumo. **Escolhida: B (faixa no topo).** A e C ficam como registro.
+- `Limpeza-B1` a `B8`: Analisando, Resultado, Mapa, Confirmar, Fechar programas, Limpando, Relatório e a seção nas Configurações, em Vizu Classic e Claro.
+- `Limpeza-B9`: widget de disco nos 5 temas (normal, pouco espaço, aberto).
+- `Limpeza-B10`: resultado nos 5 temas e a janela na largura mínima (560 px).
