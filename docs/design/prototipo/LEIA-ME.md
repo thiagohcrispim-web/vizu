@@ -11,3 +11,7 @@ Arquivos de referência das telas aprovadas e dos temas. Não são carregados pe
   - `Ring`, `Toast`, `Preview`, `Clock`, `Ocr`, `Agenda`, `Extras`, `Picker`: telas de uso e ferramentas.
 
 O `canvas.json` é o índice exportado pela ferramenta de design e lista mais telas do que há aqui. Não estão nesta pasta: as variações de tema (`L-`, `D-`, `W-`, `C-`) de Ring, Preview, Toast, Clock, Ocr e Agenda; `V-Agenda`, `V-Clock`, `V-Ocr`, `V-Toast`, `V-Extras` e `Main`. `V-Settings` era idêntico a `Settings-copia`, e `Settings-Lite` a `Settings-Lite-copia`; ficou só uma cópia de cada.
+
+## Limpeza (9.9, em proposta)
+
+- `Limpeza-A`, `Limpeza-B`, `Limpeza-C`: três composições do resumo da janela Limpeza (antigo CrispyClean), nos temas Vizu Classic e Claro. Plano em `../limpeza-plano.md`.

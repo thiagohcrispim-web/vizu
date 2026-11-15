@@ -1,5 +1,4 @@
 {
-  "v": 3,
   "attachments": {},
   "boards": {
     "Agenda.dc.html": {
@@ -217,6 +216,30 @@
       "w": 760,
       "x": 5000,
       "y": 9060
+    },
+    "Limpeza-A.dc.html": {
+      "h": 860,
+      "radius": 28,
+      "title": "5 · Limpeza · A · Coluna à esquerda",
+      "w": 2120,
+      "x": -3040,
+      "y": 12460
+    },
+    "Limpeza-B.dc.html": {
+      "h": 860,
+      "radius": 28,
+      "title": "5 · Limpeza · B · Faixa no topo",
+      "w": 2120,
+      "x": -3040,
+      "y": 13620
+    },
+    "Limpeza-C.dc.html": {
+      "h": 860,
+      "radius": 28,
+      "title": "5 · Limpeza · C · Cabeçalho que encolhe",
+      "w": 2120,
+      "x": -3040,
+      "y": 14780
     },
     "Main.dc.html": {
       "h": 640,
@@ -547,5 +570,6 @@
     "Settings-copia.dc.html"
   ],
   "pages": [],
-  "title": "Vizu — protótipo por jornada (9.8.4)"
+  "title": "Vizu — protótipo por jornada (9.8.4)",
+  "v": 3
 }
