@@ -1,5 +1,5 @@
 // Feather.h - ícones no estilo Feather (https://feathericons.com, licença MIT), como caminhos SVG 24x24.
-// Gerado; a caveira foi desenhada no mesmo estilo (o Feather não tem uma).
+// Gerado; a caveira foi desenhada no mesmo estilo (o Feather não tem uma). kFilled: ícones cheios próprios do Vizu.
 #pragma once
 namespace feather {
 struct Icon { const char* name; const char* d; };
@@ -74,5 +74,15 @@ static const Glyph kGlyphs[] = {
     {(wchar_t)0xE76C, "chevron-right"},
 };
 inline const char* Find(const char* name) { for (auto& i : kIcons) if (!strcmp(i.name, name)) return i.d; return nullptr; }
+// Ícones cheios do Vizu (desenho próprio, 24x24, preenchidos; os furos usam a regra par-ímpar).
+// Usados nos botões do relógio, onde o traço fino ficava difícil de ler em tamanho pequeno.
+static const Icon kFilled[] = {
+    {"skull", "M12 2.5C6.9 2.5 3 6.3 3 11.2c0 2.9 1.4 5.2 3.5 6.6V20a1.5 1.5 0 0 0 1.5 1.5h8a1.5 1.5 0 0 0 1.5-1.5v-2.2c2.1-1.4 3.5-3.7 3.5-6.6C21 6.3 17.1 2.5 12 2.5zM8.5 9.3a2.2 2.2 0 1 0 0 4.4 2.2 2.2 0 1 0 0-4.4zM15.5 9.3a2.2 2.2 0 1 0 0 4.4 2.2 2.2 0 1 0 0-4.4zM12 14.2l-1.3 2.3h2.6zM10.4 18.6h1v2.9h-1zM12.6 18.6h1v2.9h-1z"},
+    {"timer", "M9.5 1.5h5v2.4h-5zM18.4 4.6l1.7 1.7-1.6 1.6-1.7-1.7zM12 5a8.5 8.5 0 1 0 0 17 8.5 8.5 0 1 0 0-17zM10.8 8.5h2.4v5.7l-1.2 1.2-1.2-1.2z"},
+    {"chat-ai", "M12 2.8C6.5 2.8 2.3 6.5 2.3 11c0 2.3 1.1 4.4 2.9 5.9L4.4 21.5l4.7-2.6c.9.2 1.9.3 2.9.3 5.5 0 9.7-3.7 9.7-8.2S17.5 2.8 12 2.8zM12 6.3l1.2 3.4 3.4 1.3-3.4 1.2L12 15.7l-1.2-3.5-3.4-1.2 3.4-1.3z"},
+    {"broom", "M20.1 2.2l1.7 1.7-6.6 6.6-1.7-1.7zM10.3 7.6l6.1 6.1-1.9 1.9-6.1-6.1zM7.4 10.6l6 6c-.8 2.6-2.6 4.7-5 5.9l-1.6-1.7 1.5-2.2-2.4 1.5-1.8-1.9 1.9-2.4-2.6 1.3-1.4-1.6c1.3-2.4 3.2-4.1 5.4-4.9z"},
+    {"scan-text", "M2.5 2.5h7v2.6H5.1v4.4H2.5zM14.5 2.5h7v7h-2.6V5.1h-4.4zM2.5 14.5h2.6v4.4h4.4v2.6h-7zM18.9 14.5h2.6v7h-7v-2.6h4.4zM7.5 7.5h9v2.6h-3.2v6.9h-2.6v-6.9H7.5z"},
+};
+inline const char* FindFilled(const char* name) { for (auto& i : kFilled) if (!strcmp(i.name, name)) return i.d; return nullptr; }
 inline const char* ForGlyph(wchar_t g) { for (auto& x : kGlyphs) if (x.g == g) return Find(x.name); return nullptr; }
 } // namespace feather

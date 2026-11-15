@@ -426,6 +426,17 @@ public:
         f->Release();
     }
     void FeatherIcon(const char* name, const D2D1_RECT_F& r, float box, D2D1_COLOR_F c) { Feather(feather::Find(name), r, box, c); }
+    // Ícone cheio (feather::kFilled), centralizado no retângulo.
+    void FilledIcon(const char* name, const D2D1_RECT_F& r, float box, D2D1_COLOR_F c) {
+        const char* d = feather::FindFilled(name);
+        if (!d) return;
+        ID2D1Factory* f = nullptr; rt->GetFactory(&f);
+        ID2D1PathGeometry* g = SvgPath(f, d, box / 24, (r.left + r.right) / 2 - box / 2, (r.top + r.bottom) / 2 - box / 2, true);
+        ID2D1SolidColorBrush* b = nullptr;
+        if (g && SUCCEEDED(rt->CreateSolidColorBrush(c, &b))) { rt->FillGeometry(g, b); b->Release(); }
+        if (g) g->Release();
+        f->Release();
+    }
     void Icon(const wchar_t* glyph, const D2D1_RECT_F& r, float size, D2D1_COLOR_F c) {
         if (glyph && glyph[0] && !glyph[1]) // glifo conhecido: desenha o equivalente Feather
             if (const char* d = feather::ForGlyph(glyph[0])) { Feather(d, r, size * 1.3f * s, c); return; }

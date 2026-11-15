@@ -15,8 +15,10 @@ struct Widget {
     HWND wnd = nullptr;
     bool open = false, pressed = false, dragging = false;
     POINT down{};
-    int hot = 0;                      // 1 botão principal, 2 "Fechar" do maior culpado
-    D2D1_RECT_F rBtn{}, rClose{};
+    int hot = 0;                      // 1 botão principal, 2 "Fechar" do maior culpado, 3 Otimizar, 4 Aplicar, 5 Voltar, 10+ itens
+    int mode = 0;                     // desempenho: 0 medidas, 1 lista do Otimizar
+    D2D1_RECT_F rBtn{}, rClose{}, rOpt{}, rApply{}, rBack{};
+    std::vector<D2D1_RECT_F> rItems;
     LONG ax = 0, ay = 0;              // posição do cartão fechado (canto de cima, à esquerda)
     UINT w = 0, h = 0;
     ULONGLONG leaveAt = 0;
@@ -110,7 +112,68 @@ static void PerfSample() {
     if (cause) { g_perf.slow = true; g_perf.cause = cause; g_perf.calm = 0; }
     else if (g_perf.slow && g_perf.cpu < 70 && g_perf.mem < 85 && g_perf.disk < 70 && ++g_perf.calm >= 5) { g_perf.slow = false; g_perf.cause = 0; }
     static int every = 0;
+    if (g_wd[kWPerf].mode == 1) return; // lista do Otimizar aberta: não muda sob o mouse
     if (g_perf.slow || g_wd[kWPerf].open || ++every % 5 == 0) PerfProcesses(); // ninguém olhando: só a cada 5 s
+}
+
+// ---------- Otimizar ----------
+// Só o que comprovadamente ajuda e pode ser desfeito: fechar o que pesa (como um clique no X, nunca à força),
+// liberar espaço quando o disco está quase cheio e reiniciar quando o PC está ligado há muitos dias.
+// Nada de "limpar memória", mexer no registro ou em serviços do Windows: isso não acelera e pode atrapalhar.
+enum { kOptClose, kOptSpace, kOptRestart };
+struct OptItem { int kind; std::wstring title, sub, exe; bool on; };
+static std::vector<OptItem> g_opt;
+
+static const wchar_t* const kNeverClose[] = {L"explorer.exe", L"dwm.exe", L"csrss.exe", L"winlogon.exe", L"svchost.exe", L"lsass.exe", L"services.exe",
+                                             L"sihost.exe", L"ShellExperienceHost.exe", L"StartMenuExperienceHost.exe", L"SearchHost.exe", L"Taskmgr.exe", L"Vizu.exe", L"MsMpEng.exe"};
+static bool PerfClosable(const ProcUse& p) { if (!p.window) return false; for (auto n : kNeverClose) if (!_wcsicmp(p.exe.c_str(), n)) return false; return true; }
+static bool DiskLow(const clean::Disk& d);
+
+static void OptBuild() {
+    g_opt.clear();
+    wchar_t b[200];
+    for (size_t i = 0; i < g_perf.top.size(); ++i) { // programas com janela que pesam de verdade
+        const ProcUse& p = g_perf.top[i];
+        if (!PerfClosable(p) || (p.cpu < 10 && p.mem < (600ull << 20))) continue;
+        swprintf(b, 200, T(L"Fechar %ls", L"Close %ls", L"Cerrar %ls"), CleanProgramName(p.exe).c_str());
+        wchar_t sb[160]; swprintf(sb, 160, T(L"%.0f%% da CPU · %ls de memória · salve antes", L"%.0f%% CPU · %ls of memory · save first", L"%.0f%% de CPU · %ls de memoria · guarda antes"), p.cpu, CleanSize(p.mem).c_str());
+        g_opt.push_back({kOptClose, b, sb, p.exe, g_perf.slow && g_opt.empty()}); // só o maior culpado vem marcado, e só se estiver lento
+    }
+    clean::Disk d = clean::SystemDisk();
+    if (DiskLow(d)) {
+        swprintf(b, 200, T(L"Liberar espaço no disco %lc:", L"Free up space on %lc:", L"Liberar espacio en %lc:"), d.letter);
+        wchar_t sb[160]; swprintf(sb, 160, T(L"Só %ls livres: disco cheio deixa o Windows lento", L"Only %ls free: a full disk slows Windows down", L"Solo %ls libres: un disco lleno hace lento Windows"), CleanSize(d.free).c_str());
+        g_opt.push_back({kOptSpace, b, sb, L"", true});
+    }
+    ULONGLONG days = GetTickCount64() / (24ull * 3600 * 1000); // "Desligar" com inicialização rápida não zera isso; "Reiniciar" zera
+    if (days >= 7) {
+        wchar_t sb[160]; swprintf(sb, 160, T(L"Ligado há %llu dias · fecha tudo, salve antes", L"On for %llu days · closes everything, save first", L"Encendido hace %llu días · cierra todo, guarda antes"), days);
+        g_opt.push_back({kOptRestart, T(L"Reiniciar o PC", L"Restart the PC", L"Reiniciar el PC"), sb, L"", false});
+    }
+}
+
+static void OptApply(HWND owner) {
+    int closing = 0; bool space = false, restart = false;
+    for (auto& o : g_opt) {
+        if (!o.on) continue;
+        if (o.kind == kOptClose) { std::wstring exe = o.exe; std::thread([exe]() { clean::CloseProgram(exe); }).detach(); ++closing; } // como um clique no X
+        else if (o.kind == kOptSpace) space = true;
+        else restart = true;
+    }
+    if (closing) {
+        wchar_t b[120]; swprintf(b, 120, T(L"Pedindo para fechar %d programa(s). Quem tiver algo sem salvar vai perguntar.", L"Asking %d app(s) to close. Apps with unsaved work will ask first.", L"Pidiendo cerrar %d programa(s). Los que tengan algo sin guardar preguntarán."), closing);
+        ShowToast(T(L"Otimizar", L"Optimize", L"Optimizar"), b, 4000, 1);
+    }
+    if (space) OpenCleanWindow();
+    if (restart && MessageBoxW(owner, T(L"Reiniciar o PC agora? Salve o que estiver aberto antes.", L"Restart the PC now? Save your open work first.", L"¿Reiniciar el PC ahora? Guarda lo que tengas abierto antes."),
+                               L"Vizu", MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2 | MB_TOPMOST) == IDYES) {
+        HANDLE tok; // reinício normal: os programas podem pedir para salvar (sem EWX_FORCE)
+        if (OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &tok)) {
+            TOKEN_PRIVILEGES tp = {1}; LookupPrivilegeValueW(nullptr, SE_SHUTDOWN_NAME, &tp.Privileges[0].Luid); tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+            AdjustTokenPrivileges(tok, FALSE, &tp, 0, nullptr, nullptr); CloseHandle(tok);
+        }
+        ExitWindowsEx(EWX_REBOOT, SHTDN_REASON_MAJOR_OTHER | SHTDN_REASON_FLAG_PLANNED);
+    }
 }
 
 // ---------- desenho ----------
@@ -144,6 +207,7 @@ static void WidgetRender(int k) {
     float W = (wd.open ? (k == kWPerf ? 280 : 260) : 220) * s, H;
     if (!wd.open) H = (k == kWDisk ? 56 + (disks.size() - 1) * 30 : 60) * s; // "Todos": uma linha por disco
     else if (k == kWDisk) H = (16 + disks.size() * 44 + 12 + 22 + 10 + 36 + 16) * s;
+    else if (wd.mode == 1) H = (16 + 48 + (g_opt.empty() ? 40 : g_opt.size() * 54) + 14 + 36 + 16) * s;
     else H = (16 + 48 + 4 * 40 + 22 + g_perf.top.size() * 32 + 14 + 36 + 16) * s;
     UINT Wt = (UINT)(W + 2 * M), Ht = (UINT)(H + 2 * M);
     fmt::Canvas cv(Wt, Ht);
@@ -163,7 +227,8 @@ static void WidgetRender(int k) {
         if (wv > 0) { p.rt->PushAxisAlignedClip(D2D1::RectF(r.left, r.top, r.left + max(wv, hh), r.bottom), D2D1_ANTIALIAS_MODE_ALIASED); p.Fill(r, hh / 2, col); p.rt->PopAxisAlignedClip(); }
     };
     float x = card.left + 14 * s, xr = card.right - 14 * s, y = card.top;
-    wd.rBtn = wd.rClose = D2D1::RectF(0, 0, 0, 0);
+    wd.rBtn = wd.rClose = wd.rOpt = wd.rApply = wd.rBack = D2D1::RectF(0, 0, 0, 0);
+    wd.rItems.clear();
     const char* icoDisk = "M22 12H2M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11zM6 16h.01M10 16h.01";
     const char* icoAct = "M22 12h-4l-3 9L9 3l-3 9H2";
     wchar_t b[160];
@@ -199,6 +264,34 @@ static void WidgetRender(int k) {
         y += 32 * s;
         wd.rBtn = D2D1::RectF(x, y, xr, y + 36 * s);
         ClButton(p, c, wd.rBtn, T(L"Abrir a Limpeza", L"Open Cleanup", L"Abrir Limpieza"), true, wd.hot == 1, s);
+    } else if (k == kWPerf && wd.open && wd.mode == 1) {
+        y += 16 * s;
+        ClText(p, T(L"Otimizar", L"Optimize", L"Optimizar"), D2D1::RectF(x, y, xr, y + 20 * s), 16, th.text, DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_LEADING, L"Space Grotesk");
+        ClText(p, T(L"Marque o que fazer agora.", L"Choose what to do now.", L"Marca qué hacer ahora."), D2D1::RectF(x, y + 24 * s, xr, y + 42 * s), 12.5f, th.text2);
+        y += 48 * s;
+        if (g_opt.empty()) {
+            ClText(p, T(L"Nada a melhorar agora.", L"Nothing to improve right now.", L"Nada que mejorar ahora."), D2D1::RectF(x, y, xr, y + 30 * s), 13, th.text);
+            y += 40 * s;
+        }
+        for (size_t i = 0; i < g_opt.size(); ++i) {
+            D2D1_RECT_F r = D2D1::RectF(x - 6 * s, y, xr + 6 * s, y + 50 * s);
+            wd.rItems.push_back(r);
+            if (wd.hot == 10 + (int)i) p.Fill(r, 8 * s, c.hover);
+            ClCheckbox(p, c, D2D1::RectF(x, y + 9 * s, x + 18 * s, y + 27 * s), g_opt[i].on ? 1 : 0, s);
+            ClText(p, g_opt[i].title, D2D1::RectF(x + 28 * s, y + 6 * s, xr, y + 26 * s), 13.5f, th.text, DWRITE_FONT_WEIGHT_MEDIUM);
+            ClText(p, g_opt[i].sub, D2D1::RectF(x + 28 * s, y + 26 * s, xr, y + 44 * s), 12, th.text2);
+            y += 54 * s;
+        }
+        y += 14 * s;
+        float half = g_opt.empty() ? xr - x : (xr - x - 8 * s) / 2; // nada a fazer: só Voltar
+        wd.rBack = D2D1::RectF(x, y, x + half, y + 36 * s);
+        ClButton(p, c, wd.rBack, T(L"Voltar", L"Back", L"Volver"), false, wd.hot == 5, s);
+        bool any = false; for (auto& o : g_opt) any |= o.on;
+        if (!g_opt.empty()) {
+        wd.rApply = D2D1::RectF(x + half + 8 * s, y, xr, y + 36 * s);
+        ClButton(p, c, wd.rApply, T(L"Aplicar", L"Apply", L"Aplicar"), true, wd.hot == 4 && any, s, any);
+        if (!any) wd.rApply = D2D1::RectF(0, 0, 0, 0);
+        }
     } else if (!wd.open) {
         p.Feather(icoAct, D2D1::RectF(x, card.top, x + 16 * s, card.bottom), 16 * s, alert ? hi : th.text2);
         float tx = x + 28 * s;
@@ -239,10 +332,7 @@ static void WidgetRender(int k) {
             int cause = g_perf.cause ? g_perf.cause : 1;
             std::wstring v = cause == 2 ? CleanSize(pu.mem) : cause == 3 ? CleanSize(pu.io) + L"/s" : std::to_wstring((int)(pu.cpu + 0.5)) + L"% CPU";
             float vr = xr;
-            static const wchar_t* never[] = {L"explorer.exe", L"dwm.exe", L"csrss.exe", L"winlogon.exe", L"svchost.exe", L"lsass.exe", L"services.exe",
-                                             L"sihost.exe", L"ShellExperienceHost.exe", L"StartMenuExperienceHost.exe", L"SearchHost.exe", L"Taskmgr.exe", L"Vizu.exe", L"MsMpEng.exe"};
-            bool closable = pu.window;
-            for (auto n : never) if (!_wcsicmp(pu.exe.c_str(), n)) closable = false; // o Explorer tem janelas, mas fechar derrubaria a área de trabalho
+            bool closable = PerfClosable(pu); // o Explorer tem janelas, mas fechar derrubaria a área de trabalho
             if (i == 0 && alert && closable) { // só programas com janela, nunca processos do Windows
                 float bw = ClMeasure(p, T(L"Fechar", L"Close", L"Cerrar"), 12.5f) + 20 * s;
                 wd.rClose = D2D1::RectF(xr - bw, y + 5 * s, xr, y + 27 * s);
@@ -257,8 +347,11 @@ static void WidgetRender(int k) {
             y += 32 * s;
         }
         y += 14 * s;
-        wd.rBtn = D2D1::RectF(x, y, xr, y + 36 * s);
-        ClButton(p, c, wd.rBtn, T(L"Abrir a Limpeza", L"Open Cleanup", L"Abrir Limpieza"), true, wd.hot == 1, s);
+        float half = (xr - x - 8 * s) / 2;
+        wd.rBtn = D2D1::RectF(x, y, x + half, y + 36 * s);
+        wd.rOpt = D2D1::RectF(x + half + 8 * s, y, xr, y + 36 * s);
+        ClButton(p, c, wd.rBtn, T(L"Limpeza", L"Cleanup", L"Limpieza"), false, wd.hot == 1, s);
+        ClButton(p, c, wd.rOpt, T(L"Otimizar", L"Optimize", L"Optimizar"), true, wd.hot == 3, s);
     }
     // botões em coordenadas da janela (a margem da sombra conta)
     HBITMAP bmp = nullptr;
@@ -293,7 +386,7 @@ static LRESULT CALLBACK WidgetProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     case WM_TIMER:
         if (wp == 1) { // 1 s
             if (k == kWPerf) PerfSample();
-            if (wd.open && wd.leaveAt && GetTickCount64() > wd.leaveAt) { wd.open = false; wd.leaveAt = 0; wd.hot = 0; }
+            if (wd.open && wd.leaveAt && GetTickCount64() > wd.leaveAt) { wd.open = false; wd.leaveAt = 0; wd.hot = 0; wd.mode = 0; }
             static int tick = 0;
             if (k == kWPerf || wd.open || ++tick % 30 == 0) WidgetRender(k); // disco: muda devagar
         }
@@ -306,7 +399,8 @@ static LRESULT CALLBACK WidgetProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             wd.pressed = wd.dragging = false;
             return 0;
         }
-        int hot = ui::Hit(wd.rBtn, pt) ? 1 : ui::Hit(wd.rClose, pt) ? 2 : 0;
+        int hot = ui::Hit(wd.rBtn, pt) ? 1 : ui::Hit(wd.rClose, pt) ? 2 : ui::Hit(wd.rOpt, pt) ? 3 : ui::Hit(wd.rApply, pt) ? 4 : ui::Hit(wd.rBack, pt) ? 5 : 0;
+        for (size_t i = 0; i < wd.rItems.size(); ++i) if (ui::Hit(wd.rItems[i], pt)) hot = 10 + (int)i;
         bool changed = hot != wd.hot || !wd.open;
         wd.hot = hot; wd.leaveAt = 0;
         if (!wd.open) { wd.open = true; if (k == kWPerf) PerfProcesses(); SetWindowPos(h, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE); } // aberto fica por cima do outro widget
@@ -314,13 +408,17 @@ static LRESULT CALLBACK WidgetProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         TRACKMOUSEEVENT te = {sizeof(te), TME_LEAVE, h, 0}; TrackMouseEvent(&te);
         return 0;
     }
-    case WM_MOUSELEAVE: wd.leaveAt = GetTickCount64() + 400; wd.hot = 0; return 0; // fecha com um respiro
+    case WM_MOUSELEAVE: wd.leaveAt = GetTickCount64() + (wd.mode ? 2500 : 400); wd.hot = 0; return 0; // fecha com um respiro (mais longo no Otimizar)
     case WM_SETCURSOR: SetCursor(LoadCursor(nullptr, wd.hot ? IDC_HAND : IDC_ARROW)); return TRUE;
     case WM_LBUTTONDOWN: wd.pressed = true; wd.down = {GET_X_LPARAM(lp), GET_Y_LPARAM(lp)}; SetCapture(h); return 0;
     case WM_LBUTTONUP: {
         bool was = wd.pressed; wd.pressed = false; ReleaseCapture();
         if (!was) return 0;
         POINT pt = {GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
+        for (size_t i = 0; i < wd.rItems.size() && i < g_opt.size(); ++i) if (ui::Hit(wd.rItems[i], pt)) { g_opt[i].on = !g_opt[i].on; WidgetRender(k); return 0; }
+        if (ui::Hit(wd.rOpt, pt)) { OptBuild(); wd.mode = 1; WidgetRender(k); return 0; }
+        if (ui::Hit(wd.rBack, pt)) { wd.mode = 0; WidgetRender(k); return 0; }
+        if (ui::Hit(wd.rApply, pt)) { wd.mode = 0; wd.open = false; WidgetRender(k); OptApply(h); return 0; }
         if (ui::Hit(wd.rClose, pt) && !g_perf.top.empty()) {
             std::wstring exe = g_perf.top[0].exe;
             std::thread([exe]() { clean::CloseProgram(exe); }).detach(); // pede para fechar; nunca força

@@ -486,13 +486,13 @@ static void ClockRender() {
         for (int i = 3; i >= 1; --i) { float g = i * 1.8f * s; p.Stroke(D2D1::RectF(r.left - g, r.top - g, r.right + g, r.bottom + g), chip / 2 + g, ui::Rgba(0xFF3B5C, 0.09f * (4 - i)), 1.4f * s); }
         p.Fill(r, chip / 2, ui::Rgba(0xFF3B5C, g_clock.hot == kClkChip0 ? 0.26f : 0.16f));
         p.Stroke(r, chip / 2, ui::Rgba(0xFF3B5C), 1 * s);
-        p.FeatherIcon("skull", D2D1::RectF(r.left + 8 * s, r.top, r.left + 30 * s, r.bottom), 19 * s, ui::Rgba(0xFF3B5C));
+        p.FilledIcon("skull", D2D1::RectF(r.left + 8 * s, r.top, r.left + 30 * s, r.bottom), 19 * s, ui::Rgba(0xFF3B5C));
         int sec = (int)((GetTickCount64() - g_clock.theftStart) / 1000);
         wchar_t tb[16]; if (sec >= 3600) swprintf(tb, 16, L"%d:%02d:%02d", sec / 3600, sec / 60 % 60, sec % 60); else swprintf(tb, 16, L"%02d:%02d", sec / 60, sec % 60);
         p.Text(tb, D2D1::RectF(r.left + 30 * s, r.top, r.right - 10 * s, r.bottom), 13, ui::Rgba(0xFF7A8F), DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
     } else {
         p.Fill(g_clock.rChip[0], chip / 2, g_clock.hot == kClkChip0 ? hotBg : chipBg);
-        p.FeatherIcon("skull", g_clock.rChip[0], 18 * s, th.icon);
+        p.FilledIcon("skull", g_clock.rChip[0], 20 * s, th.icon);
     }
     if (g_clock.pomoOn) g_clock.rChip[1] = chipRect(chip);
     g_clock.rChip[2] = chipRect(chip);
@@ -503,19 +503,19 @@ static void ClockRender() {
         p.Fill(g_clock.rChip[2], chip / 2, g_clock.hot == kClkChip2 ? hotBg : chipBg);
         p.FeatherIcon("square", g_clock.rChip[2], 16 * s, th.icon);
     } else {
-        if (g_clock.pomoOn) { p.Fill(g_clock.rChip[1], chip / 2, g_clock.hot == kClkChip1 ? hotBg : chipBg); p.FeatherIcon("timer", g_clock.rChip[1], 18 * s, th.icon); }
+        if (g_clock.pomoOn) { p.Fill(g_clock.rChip[1], chip / 2, g_clock.hot == kClkChip1 ? hotBg : chipBg); p.FilledIcon("timer", g_clock.rChip[1], 20 * s, th.icon); }
         p.Fill(g_clock.rChip[2], chip / 2, g_clock.hot == kClkChip2 ? hotBg : chipBg);
-        p.FeatherIcon("message-circle", g_clock.rChip[2], 18 * s, th.icon);
+        p.FilledIcon("chat-ai", g_clock.rChip[2], 20 * s, th.icon);
     }
     if (g_clock.clean) { // Limpeza (vem antes do OCR)
         g_clock.rChip[4] = chipRect(chip);
         p.Fill(g_clock.rChip[4], chip / 2, g_clock.hot == kClkChip4 ? hotBg : chipBg);
-        p.FeatherIcon("broom", g_clock.rChip[4], 18 * s, th.icon);
+        p.FilledIcon("broom", g_clock.rChip[4], 20 * s, th.icon);
     }
     if (g_clock.ocr) { // ler texto da tela (OCR)
         g_clock.rChip[3] = chipRect(chip);
         p.Fill(g_clock.rChip[3], chip / 2, g_clock.hot == kClkChip3 ? hotBg : chipBg);
-        p.FeatherIcon("scan-text", g_clock.rChip[3], 18 * s, th.icon);
+        p.FilledIcon("scan-text", g_clock.rChip[3], 19 * s, th.icon);
     }
 
     HBITMAP bmp = nullptr;
