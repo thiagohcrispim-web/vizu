@@ -41,7 +41,7 @@ using std::min; using std::max;
 using conv::SafeRelease; using conv::Lower;
 
 enum {
-    WM_LOADED = WM_APP + 1, WM_CONV_PROGRESS, WM_CONV_DONE, WM_OPEN_SETTINGS, WM_UPDATE_FOUND, WM_UPDATE_NONE, WM_UPDATE_READY,
+    WM_LOADED = WM_APP + 1, WM_CONV_PROGRESS, WM_CONV_DONE, WM_OPEN_SETTINGS, WM_UPDATE_FOUND, WM_UPDATE_NONE, WM_UPDATE_READY, WM_OPEN_CLEAN,
 };
 
 // ---------- configurações (HKCU\Software\DesignThumbs) ----------
@@ -698,7 +698,7 @@ static UINT g_toastDone, g_toastTotal;
 static std::vector<std::wstring> g_toastOutputs;
 static void ShowAltPopup();
 static void HideAltPopup();
-enum { WM_TRAY = WM_APP + 40, kTrayId = 1, kMenuSettings = 1, kMenuRestart, kMenuQuit, kMenuUpdates };
+enum { WM_TRAY = WM_APP + 40, kTrayId = 1, kMenuSettings = 1, kMenuRestart, kMenuQuit, kMenuUpdates, kMenuClean };
 static UINT g_taskbarCreated;
 static void UpdateTrayIcon();
 static void RemoveTrayIcon();
@@ -810,6 +810,9 @@ static void CALLBACK FocusEvent(HWINEVENTHOOK, DWORD event, HWND hwnd, LONG, LON
 }
 
 static void OpenSettings();
+static void OpenCleanWindow();
+static void CleanOnTheme();
+static void CloseCleanBeforeQuit();
 
 static void StartOcr();
 static const int kHotOcr = 77; // Ctrl+Alt+T: ler texto da tela
@@ -1196,6 +1199,7 @@ static void ApplyTheme() {
     SafeRelease(g_checker);
     for (HWND w : {g_wnd, g_toastWnd, g_settingsWnd}) if (w) InvalidateRect(w, nullptr, FALSE);
     ClockRender();
+    CleanOnTheme();
 }
 
 // ---------- janela do preview ----------
@@ -1243,6 +1247,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
     }
     case WM_OPEN_SETTINGS: OpenSettings(); return 0;
+    case WM_OPEN_CLEAN: OpenCleanWindow(); return 0;
     case WM_TRAY:
         if (LOWORD(lp) == WM_LBUTTONUP || LOWORD(lp) == WM_RBUTTONUP || LOWORD(lp) == WM_CONTEXTMENU || LOWORD(lp) == NIN_SELECT || LOWORD(lp) == NIN_KEYSELECT) ShowTrayMenu();
         return 0;
@@ -1375,7 +1380,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         EndPaint(h, &ps);
         return 0;
     }
-    case WM_DESTROY: RemoveTrayIcon(); PostQuitMessage(0); return 0;
+    case WM_DESTROY: CloseCleanBeforeQuit(); RemoveTrayIcon(); PostQuitMessage(0); return 0;
     }
     if (msg == g_taskbarCreated && g_taskbarCreated) { UpdateTrayIcon(); return 0; } // Explorer reiniciou: recoloca o ícone
     return DefWindowProcW(h, msg, wp, lp);
@@ -2461,10 +2466,22 @@ static bool AutostartEnabled();
 #include "OcrUi.inc.h"
 #include "Agenda.inc.h"
 #include "Hearts.inc.h"
+#include "CleanUi.inc.h"
+#include "Widgets.inc.h"
+
+// Encerrando o Vizu: a limpeza em andamento para entre um arquivo e outro.
+static void CloseCleanBeforeQuit() { if (g_cl.wnd) { g_cl.stop = true; DestroyWindow(g_cl.wnd); } }
+
+// Tema trocado: a Limpeza refaz o vidro e os widgets redesenham.
+static void CleanOnTheme() {
+    if (g_cl.wnd) { ui::EnableGlass(g_cl.wnd, g_theme.dark); InvalidateRect(g_cl.wnd, nullptr, FALSE); }
+    WidgetsRenderAll();
+}
 
 enum { kTogSpace = 1, kTogAlt, kDelayMinus, kDelayPlus, kDpi72, kDpi300, kPdfSmall, kPdfRaw, kQualMinus, kQualPlus, kTogAuto, kBtnFolder, kBtnQuit, kBtnClose,
        kTogPicker, kBtnFolders, kLangPt, kLangEn, kLangEs, kTogUpdate, kBtnUpdate, kTheme0, kTheme1, kTheme2, kTheme3, kWebpMinus, kWebpPlus, kTogTray, kTogTempDel, kNeon0, kNeon1, kNeon2, kNeon3, kNeon4, kNeon5, kNeonRgb,
-       kClockOn, kClockFont, kPomoT0, kPomoT1, kPomoT2, kPomoC0, kPomoC1, kPomoC2, kPomoC3, kTheftHist, kUiFont, kOcrOn, kOcrKeep, kOcrJoin, kOcrLang, kClk100, kClk90, kClk70, kClockDock, kSte, kTheme4, kTheftOn, kFocoOn, kAgendaOn, kVecText, kVecCurves, kSysToggle };
+       kClockOn, kClockFont, kPomoT0, kPomoT1, kPomoT2, kPomoC0, kPomoC1, kPomoC2, kPomoC3, kTheftHist, kUiFont, kOcrOn, kOcrKeep, kOcrJoin, kOcrLang, kClk100, kClk90, kClk70, kClockDock, kSte, kTheme4, kTheftOn, kFocoOn, kAgendaOn, kVecText, kVecCurves, kSysToggle,
+       kClOpen, kAge1, kAge7, kAge30, kTogCleanBin, kTogDiskW, kTogDiskWarn, kDiskLimMinus, kDiskLimPlus, kDiskAll0, kDiskAll1, kTogPerfW };
 static const UINT kNeonPresets[6] = {0xFF6633, 0xFF2D95, 0x00E5FF, 0xB6FF3B, 0xA855F7, 0xFFD400};
 
 
@@ -2573,6 +2590,14 @@ static void SettingsAction(int id) {
         return;
     }
     case kTogTempDel: g_cfg.tempPermanent = !g_cfg.tempPermanent; break;
+    case kClOpen: OpenCleanWindow(); return;
+    case kAge1: case kAge7: case kAge30: WriteDword(L"CleanAgeDays", id == kAge1 ? 1 : id == kAge7 ? 7 : 30); return;
+    case kTogCleanBin: WriteDword(L"CleanRecycle", !ReadDword(L"CleanRecycle", 1)); return;
+    case kTogDiskW: WriteDword(L"DiskWidget", !WidgetOn(kWDisk)); WidgetEnable(kWDisk, WidgetOn(kWDisk)); return;
+    case kTogPerfW: WriteDword(L"PerfWidget", !WidgetOn(kWPerf)); WidgetEnable(kWPerf, WidgetOn(kWPerf)); return;
+    case kTogDiskWarn: WriteDword(L"DiskWarn", !ReadDword(L"DiskWarn", 1)); WidgetsRenderAll(); return;
+    case kDiskLimMinus: case kDiskLimPlus: { int v = (int)ReadDword(L"DiskLimit", 10) + (id == kDiskLimPlus ? 5 : -5); WriteDword(L"DiskLimit", (DWORD)max(5, min(30, v))); WidgetsRenderAll(); return; }
+    case kDiskAll0: case kDiskAll1: WriteDword(L"DiskAll", id == kDiskAll1); WidgetsRenderAll(); return;
     case kTheftOn: if (g_clock.theft) ToggleTheft(); g_clock.theftOn = !g_clock.theftOn; WriteDword(L"ClockTheft", g_clock.theftOn); ClockRender(); break;
     case kFocoOn: if (g_clock.phase) PomoStop(); g_clock.pomoOn = !g_clock.pomoOn; WriteDword(L"ClockPomo", g_clock.pomoOn); ClockRender(); break;
     case kAgendaOn: g_clock.agendaOn = !g_clock.agendaOn; WriteDword(L"ClockAgenda", g_clock.agendaOn); ClockRender(); break;
@@ -2734,6 +2759,23 @@ static void PaintSettings(HWND h) {
     rows.push_back({RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Ativar Agenda", L"Enable Agenda", L"Activar Agenda"), T(L"Mostra seus próximos compromissos", L"Shows your upcoming appointments", L"Muestra tus próximos compromisos")); rtoggle(kAgendaOn, r, g_clock.agendaOn); }});
     drawCard(rows);
 
+    // LIMPEZA (antigo Crispy Clean): protótipo Limpeza-B8
+    section(T(L"Limpeza", L"Cleanup", L"Limpieza"));
+    rows.clear();
+    rows.push_back({RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Abrir a Limpeza", L"Open Cleanup", L"Abrir Limpieza"), T(L"Também no botão direito do fundo da pasta e na bandeja", L"Also from a folder's background right-click and the tray", L"También con clic derecho en el fondo de la carpeta y en la bandeja")); rpill(r, kClOpen, T(L"Abrir", L"Open", L"Abrir"), 90 * s); }});
+    rows.push_back({RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Excluir direto", L"Delete directly", L"Eliminar directamente"), T(L"Revisar também sai de vez, sem passar pela Lixeira", L"Review items also skip the Recycle Bin", L"Revisar también se elimina sin pasar por la Papelera")); rtoggle(kTogTempDel, r, g_cfg.tempPermanent); }});
+    rows.push_back({RH, 0, [&](D2D1_RECT_F r) { DWORD a = ReadDword(L"CleanAgeDays", 1); rlabel(r, T(L"Idade dos temporários", L"Temp file age", L"Antigüedad de temporales"), T(L"Só sai o que não foi mexido há mais tempo que isso", L"Only files untouched for longer than this go", L"Solo sale lo que no se tocó en más tiempo que esto"));
+        rseg(r, 230 * s, {T(L"1 dia", L"1 day", L"1 día"), T(L"7 dias", L"7 days", L"7 días"), T(L"30 dias", L"30 days", L"30 días")}, a == 7 ? 1 : a == 30 ? 2 : 0, kAge1); }});
+    rows.push_back({RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Lixeira", L"Recycle Bin", L"Papelera"), T(L"Incluir a Lixeira na análise", L"Include the Recycle Bin in the scan", L"Incluir la Papelera en el análisis")); rtoggle(kTogCleanBin, r, ReadDword(L"CleanRecycle", 1) != 0); }});
+    rows.push_back({RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Widget de disco", L"Disk widget", L"Widget de disco"), T(L"Espaço livre sempre visível na área de trabalho", L"Free space always visible on the desktop", L"Espacio libre siempre visible en el escritorio")); rtoggle(kTogDiskW, r, WidgetOn(kWDisk)); }});
+    if (WidgetOn(kWDisk)) {
+        rows.push_back({SH, 1, [&](D2D1_RECT_F r) { rlabel(r, T(L"Avisar com pouco espaço", L"Warn when space is low", L"Avisar con poco espacio"), T(L"Contorno de destaque quando o disco passa do limite", L"Highlighted outline when the disk crosses the limit", L"Contorno destacado cuando el disco pasa el límite")); rtoggle(kTogDiskWarn, r, ReadDword(L"DiskWarn", 1) != 0); }});
+        rows.push_back({SH, 1, [&](D2D1_RECT_F r) { rlabel(r, T(L"Limite", L"Limit", L"Límite"), T(L"Espaço livre mínimo no disco", L"Minimum free space on the disk", L"Espacio libre mínimo en el disco")); rstep(r, kDiskLimMinus, kDiskLimPlus, std::to_wstring(ReadDword(L"DiskLimit", 10)) + L"%"); }});
+        rows.push_back({SH, 1, [&](D2D1_RECT_F r) { rlabel(r, T(L"Discos", L"Disks", L"Discos"), T(L"Quais aparecem no widget", L"Which ones the widget shows", L"Cuáles aparecen en el widget")); rseg(r, 250 * s, {T(L"Só o do Windows", L"Windows only", L"Solo el de Windows"), T(L"Todos", L"All", L"Todos")}, ReadDword(L"DiskAll", 0) ? 1 : 0, kDiskAll0); }});
+    }
+    rows.push_back({RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Widget de desempenho", L"Performance widget", L"Widget de rendimiento"), T(L"Mostra se o PC está lento e o que está pesando", L"Shows whether your PC is slow and what's heavy", L"Muestra si el PC está lento y qué pesa")); rtoggle(kTogPerfW, r, WidgetOn(kWPerf)); }});
+    drawCard(rows);
+
     section(T(L"Outros", L"Other", L"Otros"));
     rows.clear();
     rows.push_back({RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"OCR", L"OCR", L"OCR"), T(L"Lê o texto de qualquer área da tela · Ctrl+Alt+T", L"Reads text from any area of the screen · Ctrl+Alt+T", L"Lee el texto de cualquier área de la pantalla · Ctrl+Alt+T")); rtoggle(kOcrOn, r, g_clock.ocr); }});
@@ -2750,7 +2792,6 @@ static void PaintSettings(HWND h) {
         for (auto& n : FolderList()) names += (names.empty() ? L"" : L", ") + n;
         names += T(L" · cada uma com _Morto", L" · each with _Morto", L" · cada una con _Morto");
         rlabel(r, T(L"Pastas padrão Vizu", L"Vizu folder set", L"Carpetas estándar Vizu"), names.c_str()); rpill(r, kBtnFolders, T(L"Editar", L"Edit", L"Editar"), 90 * s); }});
-    rows.push_back({RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Limpeza", L"Cleanup", L"Limpieza"), T(L"Excluir temporários direto, sem passar pela Lixeira", L"Delete temp files directly, skipping the Recycle Bin", L"Eliminar temporales directamente, sin pasar por la Papelera")); rtoggle(kTogTempDel, r, g_cfg.tempPermanent); }});
     drawCard(rows);
     } // !g_lite
 
@@ -3055,6 +3096,7 @@ static void ShowTrayMenu() {
     std::wstring title = std::wstring(L"Vizu ") + upd::kVersion;
     AppendMenuW(m, MF_STRING | MF_GRAYED, 0, title.c_str());
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
+    if (!g_lite) AppendMenuW(m, MF_STRING, kMenuClean, T(L"Limpeza", L"Cleanup", L"Limpieza"));
     AppendMenuW(m, MF_STRING, kMenuSettings, T(L"Configurações", L"Settings", L"Configuración"));
     AppendMenuW(m, MF_STRING, kMenuUpdates, T(L"Atualizações", L"Updates", L"Actualizaciones"));
     AppendMenuW(m, MF_STRING, kMenuRestart, T(L"Reiniciar", L"Restart", L"Reiniciar"));
@@ -3064,6 +3106,7 @@ static void ShowTrayMenu() {
     int cmd = TrackPopupMenu(m, TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_BOTTOMALIGN, pt.x, pt.y, 0, g_wnd, nullptr);
     DestroyMenu(m);
     if (cmd == kMenuSettings) OpenSettings();
+    else if (cmd == kMenuClean) OpenCleanWindow();
     else if (cmd == kMenuUpdates) CheckForUpdates(true);
     else if (cmd == kMenuRestart) RestartSelf();
     else if (cmd == kMenuQuit) PostMessage(g_wnd, WM_CLOSE, 0, 0);
@@ -3132,13 +3175,13 @@ static void SetNewMenu(bool on) {
         set(kNewProgId, nullptr, T(L"Pastas Padrão Vizu", L"Vizu folder set", L"Carpetas estándar Vizu"));
         set(std::wstring(kNewProgId) + L"\\DefaultIcon", nullptr, L"%SystemRoot%\\System32\\imageres.dll,3");
     }
-    // Botão direito no fundo de uma pasta / na área de trabalho: "Limpar arquivos temporários"
+    // Botão direito no fundo de uma pasta / na área de trabalho: abre a Limpeza
     for (const wchar_t* bg : {L"Software\\Classes\\Directory\\Background\\shell\\DesignThumbs.LimparTemp", L"Software\\Classes\\DesktopBackground\\shell\\DesignThumbs.LimparTemp"}) {
         RegDeleteTreeW(HKEY_CURRENT_USER, bg);
         if (!on) continue;
         wchar_t exe[MAX_PATH];
         GetModuleFileNameW(nullptr, exe, MAX_PATH);
-        std::wstring k = bg, verb = T(L"Limpar arquivos temporários", L"Clean temporary files", L"Limpiar archivos temporales"),
+        std::wstring k = bg, verb = T(L"Limpeza do Vizu", L"Vizu Cleanup", L"Limpieza de Vizu"),
                      icon = L"%SystemRoot%\\System32\\imageres.dll,-54", cmd = L"\"" + std::wstring(exe) + L"\" /cleantemp";
         RegSetKeyValueW(HKEY_CURRENT_USER, k.c_str(), L"MUIVerb", REG_SZ, verb.c_str(), (DWORD)((verb.size() + 1) * 2));
         RegSetKeyValueW(HKEY_CURRENT_USER, k.c_str(), L"Icon", REG_EXPAND_SZ, icon.c_str(), (DWORD)((icon.size() + 1) * 2));
@@ -3176,129 +3219,6 @@ static void CreateFolderSet(const std::wstring& newItemPath) {
         CoTaskMemFree(folder);
     }
     for (auto p : items) CoTaskMemFree(p);
-}
-
-// ---------- Limpar arquivos temporários ----------
-// Pega o que está na pasta TEMP do usuário e não foi mexido há mais de 24 h; o que estiver em uso fica.
-static void TempScan(const std::wstring& dir, ULONGLONG* bytes, size_t* files, ULONGLONG* newest = nullptr) {
-    WIN32_FIND_DATAW fd;
-    HANDLE h = FindFirstFileExW((dir + L"\\*").c_str(), FindExInfoBasic, &fd, FindExSearchNameMatch, nullptr, FIND_FIRST_EX_LARGE_FETCH);
-    if (h == INVALID_HANDLE_VALUE) return;
-    do {
-        if (!wcscmp(fd.cFileName, L".") || !wcscmp(fd.cFileName, L"..")) continue;
-        if (fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) continue;
-        ULONGLONG w = (ULONGLONG)fd.ftLastWriteTime.dwHighDateTime << 32 | fd.ftLastWriteTime.dwLowDateTime;
-        if (newest && w > *newest) *newest = w;
-        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) TempScan(dir + L"\\" + fd.cFileName, bytes, files, newest);
-        else { *bytes += (ULONGLONG)fd.nFileSizeHigh << 32 | fd.nFileSizeLow; ++*files; }
-    } while (FindNextFileW(h, &fd));
-    FindClose(h);
-}
-
-static void DeleteTree(const std::wstring& path, bool dir) { // exclusão definitiva; ignora o que estiver em uso
-    if (dir) {
-        WIN32_FIND_DATAW fd;
-        HANDLE h = FindFirstFileExW((path + L"\\*").c_str(), FindExInfoBasic, &fd, FindExSearchNameMatch, nullptr, 0);
-        if (h != INVALID_HANDLE_VALUE) {
-            do {
-                if (!wcscmp(fd.cFileName, L".") || !wcscmp(fd.cFileName, L"..")) continue;
-                std::wstring c = path + L"\\" + fd.cFileName;
-                if (fd.dwFileAttributes & FILE_ATTRIBUTE_READONLY) SetFileAttributesW(c.c_str(), fd.dwFileAttributes & ~FILE_ATTRIBUTE_READONLY);
-                if (fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) RemoveDirectoryW(c.c_str()) || DeleteFileW(c.c_str());
-                else DeleteTree(c, (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0);
-            } while (FindNextFileW(h, &fd));
-            FindClose(h);
-        }
-        RemoveDirectoryW(path.c_str());
-    } else DeleteFileW(path.c_str());
-}
-
-static std::wstring SizeText(ULONGLONG b) {
-    wchar_t t[64];
-    if (b >= 1ull << 30) swprintf(t, 64, L"%.1f GB", b / 1073741824.0);
-    else if (b >= 1ull << 20) swprintf(t, 64, L"%.0f MB", b / 1048576.0);
-    else swprintf(t, 64, L"%.0f KB", b / 1024.0);
-    return t;
-}
-
-static ULONGLONG TempUsage(const std::wstring& tmp) { ULONGLONG b = 0; size_t n = 0; TempScan(tmp, &b, &n); return b; }
-
-static void CleanTemp() {
-    wchar_t buf[MAX_PATH + 1];
-    DWORD n = GetTempPathW(MAX_PATH + 1, buf);
-    if (!n) return;
-    std::wstring tmp(buf, n);
-    while (!tmp.empty() && tmp.back() == L'\\') tmp.pop_back();
-    if (tmp.size() < 4) return; // segurança: nunca a raiz de um disco
-    FILETIME nowFt; GetSystemTimeAsFileTime(&nowFt);
-    ULONGLONG now = (ULONGLONG)nowFt.dwHighDateTime << 32 | nowFt.dwLowDateTime, day = 24ull * 3600 * 10000000;
-    struct Item { std::wstring path; bool dir; };
-    std::vector<Item> items;
-    ULONGLONG bytes = 0; size_t files = 0;
-    WIN32_FIND_DATAW fd;
-    HANDLE h = FindFirstFileExW((tmp + L"\\*").c_str(), FindExInfoBasic, &fd, FindExSearchNameMatch, nullptr, 0);
-    if (h != INVALID_HANDLE_VALUE) {
-        do {
-            if (!wcscmp(fd.cFileName, L".") || !wcscmp(fd.cFileName, L"..")) continue;
-            ULONGLONG w = (ULONGLONG)fd.ftLastWriteTime.dwHighDateTime << 32 | fd.ftLastWriteTime.dwLowDateTime;
-            if (w + day > now) continue; // recente: pode estar em uso por algum programa
-            std::wstring p = tmp + L"\\" + fd.cFileName;
-            bool dir = (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
-            if (dir && !(fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)) {
-                // a data da pasta não muda quando um arquivo lá dentro é alterado: confere o mais novo de dentro
-                ULONGLONG b2 = 0, newest = 0; size_t f2 = 0;
-                TempScan(p, &b2, &f2, &newest);
-                if (newest + day > now) continue; // pasta ainda em uso por algum programa
-                bytes += b2; files += f2;
-            } else if (!dir) { bytes += (ULONGLONG)fd.nFileSizeHigh << 32 | fd.nFileSizeLow; ++files; }
-            items.push_back({p, dir});
-        } while (FindNextFileW(h, &fd));
-        FindClose(h);
-    }
-    const wchar_t* title = T(L"Limpar arquivos temporários", L"Clean temporary files", L"Limpiar archivos temporales");
-    if (items.empty()) {
-        MessageBoxW(nullptr, T(L"Não há arquivos temporários antigos para limpar.", L"There are no old temporary files to clean.", L"No hay archivos temporales antiguos para limpiar."), title, MB_OK | MB_ICONINFORMATION);
-        return;
-    }
-    bool perm = g_cfg.tempPermanent;
-    wchar_t msg[512];
-    swprintf(msg, 512, T(L"Encontrados %zu arquivos inúteis (%ls) na pasta TEMP, sem uso há mais de 1 dia.\n\n%ls",
-                         L"Found %zu useless files (%ls) in the TEMP folder, unused for more than 1 day.\n\n%ls",
-                         L"Se encontraron %zu archivos inútiles (%ls) en la carpeta TEMP, sin uso hace más de 1 día.\n\n%ls"),
-             files, SizeText(bytes).c_str(),
-             perm ? T(L"Excluir definitivamente (sem Lixeira)?", L"Delete permanently (no Recycle Bin)?", L"¿Eliminar definitivamente (sin Papelera)?")
-                  : T(L"Mover para a Lixeira?", L"Move to the Recycle Bin?", L"¿Mover a la Papelera?"));
-    if (MessageBoxW(nullptr, msg, title, MB_OKCANCEL | (perm ? MB_ICONWARNING : MB_ICONQUESTION)) != IDOK) return;
-    ULONGLONG before = TempUsage(tmp);
-    HCURSOR old = SetCursor(LoadCursor(nullptr, IDC_WAIT));
-    if (perm) for (auto& it : items) DeleteTree(it.path, it.dir);
-    else {
-        IFileOperation* op = nullptr;
-        if (SUCCEEDED(CoCreateInstance(CLSID_FileOperation, nullptr, CLSCTX_ALL, IID_PPV_ARGS(&op)))) {
-            op->SetOperationFlags(FOF_NOCONFIRMATION | FOF_NOERRORUI | FOF_SILENT | FOFX_RECYCLEONDELETE | FOFX_ADDUNDORECORD);
-            for (auto& it : items) {
-                IShellItem* si = nullptr;
-                if (SUCCEEDED(SHCreateItemFromParsingName(it.path.c_str(), nullptr, IID_PPV_ARGS(&si)))) { op->DeleteItem(si, nullptr); si->Release(); }
-            }
-            op->PerformOperations(); // o que estiver em uso é pulado
-            op->Release();
-        }
-    }
-    SetCursor(old);
-    ULONGLONG after = TempUsage(tmp), freed = before > after ? before - after : 0;
-    if (perm) {
-        swprintf(msg, 512, T(L"Pronto: %ls liberados.", L"Done: %ls freed.", L"Listo: %ls liberados."), SizeText(freed).c_str());
-        MessageBoxW(nullptr, msg, title, MB_OK | MB_ICONINFORMATION);
-        return;
-    }
-    SHQUERYRBINFO rb = {sizeof(rb)};
-    SHQueryRecycleBinW(nullptr, &rb);
-    swprintf(msg, 512, T(L"%ls foram para a Lixeira (o que estava em uso ficou).\n\nA Lixeira tem %ls no total. Esvaziar a Lixeira agora?",
-                         L"%ls went to the Recycle Bin (files in use were kept).\n\nThe Recycle Bin holds %ls in total. Empty the Recycle Bin now?",
-                         L"%ls fueron a la Papelera (lo que estaba en uso se quedó).\n\nLa Papelera tiene %ls en total. ¿Vaciar la Papelera ahora?"),
-             SizeText(freed).c_str(), SizeText((ULONGLONG)rb.i64Size).c_str());
-    if (MessageBoxW(nullptr, msg, title, MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2) == IDYES)
-        SHEmptyRecycleBinW(nullptr, nullptr, SHERB_NOCONFIRMATION);
 }
 
 // Diagnóstico: "Vizu.exe /diag arquivo" mostra, passo a passo, como o arquivo é lido.
@@ -3631,13 +3551,8 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmd, int) {
         CoUninitialize();
         return 0;
     }
-    if (args.find(L"/cleantemp") != std::wstring::npos) {
-        CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-        LoadConfig();
-        CleanTemp();
-        CoUninitialize();
-        return 0;
-    }
+    bool openClean = args.find(L"/cleantemp") != std::wstring::npos || args.find(L"/clean") != std::wstring::npos;
+    if (openClean) if (HWND w = FindRunning()) { AllowSetForegroundWindow(ASFW_ANY); PostMessage(w, WM_OPEN_CLEAN, 0, 0); return 0; }
     size_t nf = args.find(L"/newfolders");
     if (nf != std::wstring::npos) {
         std::wstring f = args.substr(nf + 11);
@@ -3704,6 +3619,8 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmd, int) {
     g_fgHook = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, nullptr, FocusEvent, 0, 0, WINEVENT_OUTOFCONTEXT);
     UpdateHotkeys();
     if (args.find(L"/settings") != std::wstring::npos) OpenSettings();
+    WidgetsStart();
+    if (openClean) OpenCleanWindow();
     SetTimer(g_wnd, kUpdateTimer, 60 * 1000, nullptr); // primeira verificação um minuto depois de iniciar
     // "/ring a b c" abre o menu circular para esses arquivos; "/resize", "/pages" e "/crop" abrem as ferramentas
     for (const wchar_t* cmdName : {L"/ring ", L"/resize ", L"/pages ", L"/crop "}) {

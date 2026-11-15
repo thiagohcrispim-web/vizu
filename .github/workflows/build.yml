@@ -31,6 +31,12 @@ jobs:
           x86_64-w64-mingw32-g++ -O2 -DUNICODE -D_UNICODE -static -municode -Ithird_party/mingw-w64-headers -o build/format-tests.exe tests/format_tests.cpp -lshlwapi -lole32 -loleaut32 -luuid -lgdi32 -ld2d1 -ldwrite -lwindowscodecs -lruntimeobject -lshcore -lwinhttp -lurlmon -lbcrypt -lxmllite
           WINEDEBUG=-all timeout 120 wine build/format-tests.exe # timeout: um laço travado falha em vez de prender o job
 
+      # Limpeza: só sai o que pode sair; nada fora do perfil, nenhum destino de link, nada em uso.
+      - name: Testar a Limpeza
+        run: |
+          x86_64-w64-mingw32-g++ -O2 -DUNICODE -D_UNICODE -static -municode -Ithird_party/mingw-w64-headers -o build/clean-tests.exe tests/clean_tests.cpp -lshell32 -lole32 -luuid
+          WINEDEBUG=-all timeout 120 wine build/clean-tests.exe
+
       - name: Publicar artefato
         id: upload
         uses: actions/upload-artifact@v4

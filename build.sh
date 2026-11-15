@@ -17,7 +17,7 @@ if [ ! -f build/webp/libwebp.a ]; then
   x86_64-w64-mingw32-ar rcs build/webp/libwebp.a build/webp/*.o
 fi
 $RC -c 65001 Vizu.rc -O coff -o Vizu.res.o # embute a DLL no EXE
-$CXX $FLAGS -municode -mwindows -D_WIN32_WINNT=0x0A00 -Wl,-Map=build/Vizu.map -o Vizu.exe Vizu.cpp Vizu.res.o build/webp/libwebp.a -lshlwapi -lole32 -loleaut32 -luuid -lgdi32 -ldwmapi -lshell32 -ld2d1 -ldwrite -lwindowscodecs -lruntimeobject -lshcore -lwinhttp -lurlmon -lcomctl32 -lcomdlg32 -lxmllite -lbcrypt -lmscms
+$CXX $FLAGS -municode -mwindows -D_WIN32_WINNT=0x0A00 -Wl,-Map=build/Vizu.map -o Vizu.exe Vizu.cpp Vizu.res.o build/webp/libwebp.a -lshlwapi -lole32 -loleaut32 -luuid -lgdi32 -ldwmapi -lshell32 -ld2d1 -ldwrite -lwindowscodecs -lruntimeobject -lshcore -lwinhttp -lurlmon -lcomctl32 -lcomdlg32 -lxmllite -lbcrypt -lmscms -lpdh
 # O próprio Vizu é o instalador. Ele leva a versão no nome: dist/Vizu_Setup_9.8.11_x64.exe
 VERSION=$(sed -n 's/.*VALUE "FileVersion", "\([0-9.]*\)".*/\1/p' Vizu.rc)
 mkdir -p dist

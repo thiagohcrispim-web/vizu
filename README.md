@@ -78,7 +78,10 @@ Um relógio discreto na área de trabalho, ou dentro da barra de tarefas, com:
 <img src="docs/extras.png" alt="Limpeza de temporários, Pastas Padrão Vizu e mais" width="100%">
 
 - **Pastas Padrão Vizu**: botão direito › Novo cria `Edit`, `Links` e `Preview` (cada uma com `_Morto`) de uma vez.
-- **Limpar arquivos temporários** pelo botão direito, com a opção de esvaziar a Lixeira em seguida.
+- **Limpeza** (botão direito no fundo da pasta, ou pela bandeja): acha temporários, caches de navegadores, do Windows e da
+  Adobe, mostra tudo em lista ou mapa e limpa com um clique. Arquivos de trabalho (PSD, AI, INDD, PDF…) e o que estiver
+  em uso nunca saem; os itens para revisar vão para a Lixeira. Widgets opcionais mostram o espaço em disco e se o PC
+  está lento, e o que está pesando.
 - Ícone na área de notificação para abrir as Configurações, reiniciar ou encerrar.
 
 ## Do seu jeito
