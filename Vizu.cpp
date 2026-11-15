@@ -2468,6 +2468,7 @@ static bool AutostartEnabled();
 #include "Hearts.inc.h"
 #include "CleanUi.inc.h"
 #include "Widgets.inc.h"
+#include "Game.inc.h"   // segredo do Agradecimento especial
 
 // Encerrando o Vizu: a limpeza em andamento para entre um arquivo e outro.
 static void CloseCleanBeforeQuit() { if (g_cl.wnd) { g_cl.stop = true; DestroyWindow(g_cl.wnd); } }
@@ -2481,7 +2482,7 @@ static void CleanOnTheme() {
 enum { kTogSpace = 1, kTogAlt, kDelayMinus, kDelayPlus, kDpi72, kDpi300, kPdfSmall, kPdfRaw, kQualMinus, kQualPlus, kTogAuto, kBtnFolder, kBtnQuit, kBtnClose,
        kTogPicker, kBtnFolders, kLangPt, kLangEn, kLangEs, kTogUpdate, kBtnUpdate, kTheme0, kTheme1, kTheme2, kTheme3, kWebpMinus, kWebpPlus, kTogTray, kTogTempDel, kNeon0, kNeon1, kNeon2, kNeon3, kNeon4, kNeon5, kNeonRgb,
        kClockOn, kClockFont, kPomoT0, kPomoT1, kPomoT2, kPomoC0, kPomoC1, kPomoC2, kPomoC3, kTheftHist, kUiFont, kOcrOn, kOcrKeep, kOcrJoin, kOcrLang, kClk100, kClk90, kClk70, kClockDock, kSte, kTheme4, kTheftOn, kFocoOn, kAgendaOn, kVecText, kVecCurves, kSysToggle,
-       kClOpen, kAge1, kAge7, kAge30, kTogCleanBin, kTogDiskW, kTogDiskWarn, kDiskLimMinus, kDiskLimPlus, kDiskAll0, kDiskAll1, kTogPerfW, kTogClockClean };
+       kClOpen, kAge1, kAge7, kAge30, kTogCleanBin, kTogDiskW, kTogDiskWarn, kDiskLimMinus, kDiskLimPlus, kDiskAll0, kDiskAll1, kTogPerfW, kTogClockClean, kPrimao };
 static const UINT kNeonPresets[6] = {0xFF6633, 0xFF2D95, 0x00E5FF, 0xB6FF3B, 0xA855F7, 0xFFD400};
 
 
@@ -2578,6 +2579,7 @@ static void SettingsAction(int id) {
     case kClk100: case kClk90: case kClk70: { static const int pc[3] = {100, 90, 70}; g_clock.scalePct = pc[id - kClk100]; WriteDword(L"ClockScale", g_clock.scalePct); ClockRender(); break; }
     case kClockDock: ClockDock(!g_clock.docked); break;
     case kSte: StartHearts(g_settingsWnd); return;
+    case kPrimao: StartGame(); return; // segredo: sem destaque nenhum
     case kOcrOn:
         g_clock.ocr = !g_clock.ocr; WriteDword(L"OcrOn", g_clock.ocr);
         if (g_clock.ocr) RegisterHotKey(g_wnd, kHotOcr, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, 'T'); else UnregisterHotKey(g_wnd, kHotOcr);
@@ -2878,19 +2880,22 @@ static void PaintSettings(HWND h) {
     {
         const std::wstring rest = L" por você ser o amor da minha vida!", line2 = L"Gustavo (Primão), Eliza e Thais",
                            line3 = L"Obrigado por me incentivarem e a darem ideias para melhorar nosso dia-a-dia!";
-        float tx = x + 16 * s, ty = y + 14 * s, tw = w - 32 * s, lh = 20 * s;
-        float h3 = p.Paragraph(line3, tx, 0, tw, 12.5f, th.text2, false);
-        D2D1_RECT_F box = D2D1::RectF(x, y, x + w, y + 14 * s + lh * 2 + 6 * s + h3 + 14 * s);
-        p.Glass(box, 16 * s);
-        float sw = p.Measure(L"Ste", 13.5f, DWRITE_FONT_WEIGHT_BOLD);
+        // sem cartão, letra menor e mais discreta que o resto das Configurações
+        float tx = x + 4 * s, ty = y + 2 * s, tw = w - 8 * s, lh = 18 * s, fs = 12;
+        D2D1_COLOR_F soft = th.text2, softer = th.text2; softer.a *= 0.75f;
+        float sw = p.Measure(L"Ste", fs, DWRITE_FONT_WEIGHT_BOLD);
         D2D1_RECT_F ste = D2D1::RectF(tx, ty, tx + sw, ty + lh);
         bool hs = hit(kSte, D2D1::RectF(ste.left - 4 * s, ste.top - 2 * s, ste.right + 4 * s, ste.bottom + 2 * s));
-        p.Text(L"Ste", ste, 13.5f, ui::Rgba(hs ? 0xF0386B : 0xE0115F), DWRITE_FONT_WEIGHT_BOLD);
+        p.Text(L"Ste", ste, fs, ui::Rgba(hs ? 0xF0386B : 0xD0205F, 0.9f), DWRITE_FONT_WEIGHT_BOLD);
         if (hs) p.Fill(D2D1::RectF(ste.left, ste.bottom - 2 * s, ste.right, ste.bottom - 0.8f * s), 0, ui::Rgba(0xF0386B, 0.8f));
-        p.Text(rest, D2D1::RectF(ste.right, ty, x + w - 16 * s, ty + lh), 13.5f, th.text);
-        p.Text(line2, D2D1::RectF(tx, ty + lh, x + w - 16 * s, ty + 2 * lh), 13.5f, th.text);
-        p.Paragraph(line3, tx, ty + 2 * lh + 6 * s, tw, 12.5f, th.text2);
-        y = box.bottom + 22 * s;
+        p.Text(rest, D2D1::RectF(ste.right, ty, x + w - 4 * s, ty + lh), fs, soft);
+        p.Text(line2, D2D1::RectF(tx, ty + lh, x + w - 4 * s, ty + 2 * lh), fs, soft);
+        { // "Primão" abre o joguinho; nada indica isso (sem cor, sem sublinhado, sem cursor de mão)
+            float px0 = tx + p.Measure(L"Gustavo (", fs), pw = p.Measure(L"Primão", fs);
+            hit(kPrimao, D2D1::RectF(px0, ty + lh, px0 + pw, ty + 2 * lh));
+        }
+        float h3 = p.Paragraph(line3, tx, ty + 2 * lh + 4 * s, tw, 11, softer);
+        y = ty + 2 * lh + 4 * s + h3 + 26 * s;
     }
 
     section(T(L"SOBRE", L"ABOUT", L"ACERCA DE"));
@@ -2934,7 +2939,7 @@ static LRESULT CALLBACK SettingsProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         TrackMouseEvent(&tme);
         return 0;
     }
-    case WM_SETCURSOR: if (LOWORD(lp) == HTCLIENT) { SetCursor(LoadCursor(nullptr, g_setHot ? IDC_HAND : IDC_ARROW)); return TRUE; } break;
+    case WM_SETCURSOR: if (LOWORD(lp) == HTCLIENT) { SetCursor(LoadCursor(nullptr, g_setHot && g_setHot != kPrimao ? IDC_HAND : IDC_ARROW)); return TRUE; } break; // o segredo não muda o cursor
     case WM_MOUSELEAVE: if (g_setHot) { g_setHot = 0; InvalidateRect(h, nullptr, FALSE); } return 0;
     case WM_LBUTTONUP: {
         POINT pt = {GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};

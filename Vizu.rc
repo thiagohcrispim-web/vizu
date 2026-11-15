@@ -8,6 +8,10 @@
 43 RCDATA "fonts/Inter-700.otf"
 44 RCDATA "fonts/SpaceGrotesk-500.ttf"
 45 RCDATA "fonts/SpaceGrotesk-700.ttf"
+310 RCDATA "jogo/tobias.png"
+311 RCDATA "jogo/joaquim.png"
+312 RCDATA "jogo/tobias-costas.png"
+313 RCDATA "jogo/joaquim-costas.png"
 VS_VERSION_INFO VERSIONINFO
 FILEVERSION 9,9,1,0
 PRODUCTVERSION 9,9,1,0

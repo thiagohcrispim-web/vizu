@@ -17,6 +17,7 @@ struct Widget {
     POINT down{};
     int hot = 0;                      // 1 botão principal, 2 "Fechar" do maior culpado, 3 Otimizar, 4 Aplicar, 5 Voltar, 10+ itens
     int mode = 0;                     // desempenho: 0 medidas, 1 lista do Otimizar
+    bool docked = false;              // desempenho: anexado à barra de tarefas (como o relógio)
     D2D1_RECT_F rBtn{}, rClose{}, rOpt{}, rApply{}, rBack{};
     std::vector<D2D1_RECT_F> rItems;
     LONG ax = 0, ay = 0;              // posição do cartão fechado (canto de cima, à esquerda)
@@ -191,9 +192,54 @@ static std::wstring PerfCulprit() {
 
 static bool DiskLow(const clean::Disk& d) { return d.total && ReadDword(L"DiskWarn", 1) && d.free * 100 < d.total * min(50ul, max(1ul, (unsigned long)ReadDword(L"DiskLimit", 10))); }
 
+static void WidgetPresent(Widget& wd, HBITMAP bmp, LONG px, LONG py, UINT Wt, UINT Ht) {
+    wd.w = Wt; wd.h = Ht;
+    HDC screen = GetDC(nullptr), mem = CreateCompatibleDC(screen);
+    HGDIOBJ old = SelectObject(mem, bmp);
+    POINT pos = {px, py}, zero = {0, 0};
+    SIZE size = {(LONG)Wt, (LONG)Ht};
+    BLENDFUNCTION bf = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+    UpdateLayeredWindow(wd.wnd, screen, &pos, &size, mem, &zero, 0, &bf, ULW_ALPHA);
+    SelectObject(mem, old); DeleteDC(mem); ReleaseDC(nullptr, screen); DeleteObject(bmp);
+}
+
+// Desempenho anexado à barra de tarefas: cabe na altura dela e segue a cor dela, como o relógio anexado.
+static void WidgetRenderDocked(Widget& wd, const RECT& tb) {
+    float s = (tb.bottom - tb.top) / 48.0f;
+    bool dk = TaskbarDark();
+    D2D1_COLOR_F text = dk ? ui::Rgba(0xFFFFFF, 0.95f) : ui::Rgba(0x1D1D1F), text2 = dk ? ui::Rgba(0xFFFFFF, 0.62f) : ui::Rgba(0x000000, 0.58f);
+    D2D1_COLOR_F hi = g_cfg.themeMode == ui::kThemeDark ? text : ui::Rgba(g_theme.classic ? 0xFF6633 : 0xFF6633);
+    if (g_cfg.themeMode == ui::kThemeWindows) hi = g_theme.accent;
+    std::wstring line1 = g_perf.slow ? T(L"Lento", L"Slow", L"Lento") : T(L"Tudo leve", L"All smooth", L"Todo fluido"), line2 = g_perf.slow ? PerfCulprit() : L"";
+    wchar_t b[120];
+    if (line2.empty()) { swprintf(b, 120, T(L"CPU %.0f%% · Mem. %.0f%%", L"CPU %.0f%% · Mem %.0f%%", L"CPU %.0f%% · Mem. %.0f%%"), g_perf.cpu, g_perf.mem); line2 = b; }
+    UINT Wt = (UINT)(176 * s), Ht = (UINT)((tb.bottom - tb.top) * 0.86f);
+    fmt::Canvas cv(Wt, Ht);
+    if (!cv.rt) return;
+    ID2D1RenderTarget* rt = cv.rt;
+    rt->Clear(D2D1::ColorF(0, 0));
+    rt->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
+    ui::Painter p(rt, g_dw, g_theme, s);
+    D2D1_RECT_F card = D2D1::RectF(0, 0, (float)Wt, (float)Ht);
+    p.Fill(card, 8 * s, wd.hot || wd.open ? ui::Rgba(dk ? 0xFFFFFF : 0x000000, 0.08f) : ui::Rgba(0x000000, 0.006f)); // quase invisível: a barra aparece por trás e o clique funciona
+    float cy = Ht / 2.0f, x = 10 * s;
+    p.Feather("M22 12h-4l-3 9L9 3l-3 9H2", D2D1::RectF(x, cy - 9 * s, x + 18 * s, cy + 9 * s), 17 * s, g_perf.slow ? hi : text2);
+    x += 26 * s;
+    p.Fill(D2D1::RectF(x, cy - 10 * s, x + 7 * s, cy - 3 * s), 3.5f * s, g_perf.slow ? hi : text2);
+    ClText(p, line1, D2D1::RectF(x + 12 * s, cy - 16 * s, (float)Wt - 6 * s, cy + 1 * s), 12.5f, text, DWRITE_FONT_WEIGHT_SEMI_BOLD);
+    ClText(p, line2, D2D1::RectF(x, cy + 1 * s, (float)Wt - 6 * s, cy + 17 * s), 11.5f, text2);
+    HBITMAP bmp = nullptr;
+    if (FAILED(cv.Finish(&bmp)) || !bmp) return;
+    LONG px = max(tb.left + 4, min(tb.right - (LONG)Wt - 4, wd.ax)), py = tb.top + ((tb.bottom - tb.top) - (LONG)Ht) / 2;
+    WidgetPresent(wd, bmp, px, py, Wt, Ht);
+}
+
 static void WidgetRender(int k) {
     Widget& wd = g_wd[k];
     if (!wd.wnd) return;
+    RECT tb{};
+    bool docked = k == kWPerf && wd.docked && TaskbarRect(&tb);
+    if (docked && !wd.open) { WidgetRenderDocked(wd, tb); return; }
     const ui::Theme& th = g_theme;
     ClColors c = ClPalette(th);
     float s = GetDpiForWindow(wd.wnd) / 96.0f;
@@ -360,16 +406,28 @@ static void WidgetRender(int k) {
     LONG px = wd.ax - (LONG)M, py = wd.ay - (LONG)M;
     POINT apt = {wd.ax, wd.ay};
     MONITORINFO mi = {sizeof(mi)}; GetMonitorInfoW(MonitorFromPoint(apt, MONITOR_DEFAULTTONEAREST), &mi);
-    if (py + (LONG)Ht > mi.rcWork.bottom) py = max((LONG)mi.rcWork.top, mi.rcWork.bottom - (LONG)Ht);
+    if (docked) { // anexado: abre logo acima da barra (ou abaixo, se a barra estiver em cima)
+        POINT tp = {tb.left, tb.top}; GetMonitorInfoW(MonitorFromPoint(tp, MONITOR_DEFAULTTONEAREST), &mi);
+        px = wd.ax - (LONG)M;
+        py = tb.top > mi.rcMonitor.top ? tb.top - (LONG)Ht + (LONG)M : tb.bottom - (LONG)M;
+    } else if (py + (LONG)Ht > mi.rcWork.bottom) py = max((LONG)mi.rcWork.top, mi.rcWork.bottom - (LONG)Ht);
     if (px + (LONG)Wt > mi.rcWork.right) px = max((LONG)mi.rcWork.left, mi.rcWork.right - (LONG)Wt);
-    wd.w = Wt; wd.h = Ht;
-    HDC screen = GetDC(nullptr), mem = CreateCompatibleDC(screen);
-    HGDIOBJ old = SelectObject(mem, bmp);
-    POINT pos = {px, py}, zero = {0, 0};
-    SIZE size = {(LONG)Wt, (LONG)Ht};
-    BLENDFUNCTION bf = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
-    UpdateLayeredWindow(wd.wnd, screen, &pos, &size, mem, &zero, 0, &bf, ULW_ALPHA);
-    SelectObject(mem, old); DeleteDC(mem); ReleaseDC(nullptr, screen); DeleteObject(bmp);
+    WidgetPresent(wd, bmp, px, py, Wt, Ht);
+}
+
+// Botão direito: anexar/desanexar (desempenho) e ocultar.
+static void WidgetDock(int k, bool on);
+static void WidgetMenu(int k, POINT pt) {
+    HMENU m = CreatePopupMenu();
+    enum { kDock = 1, kHide };
+    if (k == kWPerf) AppendMenuW(m, MF_STRING, kDock, g_wd[k].docked ? T(L"Desanexar da barra de tarefas", L"Detach from the taskbar", L"Desanclar de la barra de tareas")
+                                                                    : T(L"Anexar à barra de tarefas", L"Attach to the taskbar", L"Anclar a la barra de tareas"));
+    AppendMenuW(m, MF_STRING, kHide, T(L"Ocultar widget", L"Hide widget", L"Ocultar widget"));
+    SetForegroundWindow(g_wd[k].wnd);
+    int cmd = TrackPopupMenu(m, TPM_RETURNCMD | TPM_RIGHTBUTTON, pt.x, pt.y, 0, g_wd[k].wnd, nullptr);
+    DestroyMenu(m);
+    if (cmd == kDock) WidgetDock(k, !g_wd[k].docked);
+    else if (cmd == kHide) { WriteDword(k == kWDisk ? L"DiskWidget" : L"PerfWidget", 0); PostMessageW(g_wd[k].wnd, WM_APP + 70, k, 0); } // fecha fora do laço do menu
 }
 
 static void WidgetsRenderAll() { for (int k = 0; k < kWCount; ++k) WidgetRender(k); }
@@ -378,6 +436,7 @@ static void WidgetsRenderAll() { for (int k = 0; k < kWCount; ++k) WidgetRender(
 
 static int WidgetKind(HWND h) { for (int k = 0; k < kWCount; ++k) if (g_wd[k].wnd == h) return k; return -1; }
 
+static void WidgetEnable(int k, bool on);
 static LRESULT CALLBACK WidgetProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     int k = WidgetKind(h);
     if (k < 0) return DefWindowProcW(h, msg, wp, lp);
@@ -386,6 +445,7 @@ static LRESULT CALLBACK WidgetProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     case WM_TIMER:
         if (wp == 1) { // 1 s
             if (k == kWPerf) PerfSample();
+            if (wd.docked && !wd.open) SetWindowPos(h, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
             if (wd.open && wd.leaveAt && GetTickCount64() > wd.leaveAt) { wd.open = false; wd.leaveAt = 0; wd.hot = 0; wd.mode = 0; }
             static int tick = 0;
             if (k == kWPerf || wd.open || ++tick % 30 == 0) WidgetRender(k); // disco: muda devagar
@@ -425,8 +485,20 @@ static LRESULT CALLBACK WidgetProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         } else if (ui::Hit(wd.rBtn, pt) || (k == kWDisk && !wd.open)) OpenCleanWindow();
         return 0;
     }
+    case WM_MOVING: {
+        RECT tb;
+        if (!(wd.docked && TaskbarRect(&tb))) break;
+        RECT* r = (RECT*)lp; LONG ww = r->right - r->left, hh = r->bottom - r->top;
+        r->top = tb.top + ((tb.bottom - tb.top) - hh) / 2; r->bottom = r->top + hh;
+        if (r->left < tb.left + 4) { r->left = tb.left + 4; r->right = r->left + ww; }
+        if (r->right > tb.right - 4) { r->right = tb.right - 4; r->left = r->right - ww; }
+        return TRUE;
+    }
+    case WM_RBUTTONUP: { POINT pt; GetCursorPos(&pt); wd.open = false; wd.mode = 0; WidgetRender(k); WidgetMenu(k, pt); return 0; }
+    case WM_APP + 70: WidgetEnable((int)wp, false); return 0;
     case WM_EXITSIZEMOVE: {
         RECT r; GetWindowRect(h, &r);
+        if (wd.docked) { wd.ax = r.left; WriteDword(L"PerfDockX", (DWORD)r.left); return 0; }
         float M = 14 * GetDpiForWindow(h) / 96.0f;
         wd.ax = r.left + (LONG)M; wd.ay = r.top + (LONG)M;
         WriteDword(k == kWDisk ? L"DiskWidgetX" : L"PerfWidgetX", (DWORD)wd.ax); WriteDword(k == kWDisk ? L"DiskWidgetY" : L"PerfWidgetY", (DWORD)wd.ay);
@@ -457,10 +529,24 @@ static void WidgetEnable(int k, bool on) {
         pt.x = mi.rcWork.right - (LONG)(240 * s); pt.y = mi.rcWork.top + (LONG)((k == kWDisk ? 20 : below) * s);
     }
     wd.ax = pt.x; wd.ay = pt.y;
+    RECT tb;
+    if (k == kWPerf && ReadDword(L"PerfDocked", 0) && TaskbarRect(&tb)) {
+        wd.docked = true;
+        DWORD dx = ReadDword(L"PerfDockX", 0x80000000);
+        wd.ax = dx == 0x80000000 ? tb.right - (LONG)(360 * GetDpiForSystem() / 96) : (LONG)dx; // perto da bandeja, sem cobrir o relógio do Windows
+    }
     if (k == kWPerf) PerfSample();
     WidgetRender(k);
     ShowWindow(wd.wnd, SW_SHOWNOACTIVATE);
     SetTimer(wd.wnd, 1, 1000, nullptr);
+}
+
+static void WidgetDock(int k, bool on) {
+    Widget& wd = g_wd[k];
+    RECT tb;
+    if (on && !TaskbarRect(&tb)) { MessageBoxW(wd.wnd, T(L"A barra de tarefas precisa estar na horizontal (embaixo ou em cima).", L"The taskbar must be horizontal (bottom or top).", L"La barra de tareas debe estar en horizontal."), L"Vizu", MB_OK | MB_ICONINFORMATION); return; }
+    WriteDword(L"PerfDocked", on);
+    WidgetEnable(k, false); WidgetEnable(k, true); // recria na posição certa
 }
 
 static void WidgetsStart() { for (int k = 0; k < kWCount; ++k) WidgetEnable(k, WidgetOn(k)); }
