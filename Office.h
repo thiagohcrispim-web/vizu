@@ -182,15 +182,30 @@ inline bool ToPdf(const std::wstring& src, const std::wstring& pdf, std::wstring
     bool odf = Ext(src).rfind(L".od", 0) == 0;
     if (OfficeInstalled(app)) {
         std::set<DWORD> before = Processes(ExeName(app));
-        struct Task { App app; std::wstring src, pdf; HRESULT hr = E_FAIL; } task{app, src, pdf};
-        HANDLE h = CreateThread(nullptr, 0, [](void* p) -> DWORD { auto t = (Task*)p; t->hr = OfficeExport(t->app, t->src, t->pdf); return 0; }, &task, 0, nullptr);
-        if (h && WaitForSingleObject(h, 180000) == WAIT_TIMEOUT) {
-            // o Office travou (diálogo escondido?): encerra só a instância que o Vizu abriu; a chamada então retorna
+        // A tarefa fica no heap: se o Office não responder nem depois de encerrado, a thread é abandonada sem
+        // escrever em memória já liberada (a última referência apaga a tarefa).
+        struct Task { App app; std::wstring src, pdf; HRESULT hr = E_FAIL; LONG refs = 2; };
+        Task* task = new Task{app, src, pdf};
+        auto release = [](Task* t) { if (InterlockedDecrement(&t->refs) == 0) delete t; };
+        HANDLE h = CreateThread(nullptr, 0, [](void* p) -> DWORD {
+            auto t = (Task*)p;
+            t->hr = OfficeExport(t->app, t->src, t->pdf);
+            if (InterlockedDecrement(&t->refs) == 0) delete t;
+            return 0;
+        }, task, 0, nullptr);
+        if (!h) { delete task; task = nullptr; }
+        bool finished = h && WaitForSingleObject(h, 180000) == WAIT_OBJECT_0;
+        if (h && !finished) {
+            // travou (diálogo escondido?): encerra só a instância que o Vizu abriu; a de quem já usava o Office fica
             for (DWORD id : Processes(ExeName(app)))
                 if (!before.count(id)) { HANDLE p = OpenProcess(PROCESS_TERMINATE, FALSE, id); if (p) { TerminateProcess(p, 1); CloseHandle(p); } }
+            finished = WaitForSingleObject(h, 30000) == WAIT_OBJECT_0;
         }
-        if (h) { WaitForSingleObject(h, INFINITE); CloseHandle(h); }
-        if (h && SUCCEEDED(task.hr) && GetFileAttributesW(pdf.c_str()) != INVALID_FILE_ATTRIBUTES) return true;
+        HRESULT hr = finished ? task->hr : HRESULT_FROM_WIN32(ERROR_TIMEOUT);
+        if (h) CloseHandle(h);
+        if (task) release(task);
+        if (SUCCEEDED(hr) && GetFileAttributesW(pdf.c_str()) != INVALID_FILE_ATTRIBUTES) return true;
+        if (!finished) { error = L"o Office não respondeu (feche janelas abertas do Office e tente de novo)"; return false; }
         DeleteFileW(pdf.c_str());
         if (!odf) error = L"o Office não conseguiu abrir o documento (com senha ou danificado?)";
     }
