@@ -12,6 +12,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: sudo apt-get update && sudo apt-get install -y g++-mingw-w64-x86-64-posix
+      # Fontes do leitor de CorelDRAW (com SHA-256 conferido no build.sh) e a biblioteca já compilada.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            build/cdr-src/*.tar.*
+            build/cdr/libvizucdr.a
+            build/pdfium
+          key: cdr-pdfium-${{ hashFiles('build.sh', 'cdr/**') }}
       - run: ./build.sh
       - uses: actions/upload-artifact@v4
         with:

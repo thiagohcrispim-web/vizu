@@ -9,6 +9,7 @@
 #include "VectorConvert.h"
 #include "PdfPptx.h"
 #include "Office.h"
+#include "CdrVector.h"
 
 namespace jobs {
 using std::min; using std::max;
@@ -70,6 +71,19 @@ inline ops::Format SameFormat(const std::wstring& f) {
 inline std::vector<HBITMAP> Frames(const std::wstring& f, const Job& j, ops::Format outFmt, fmt::Info* info) {
     std::vector<HBITMAP> out;
     conv::FileInfo(f, info);
+    if (cdrv::IsCdr(f)) { // CorelDRAW: os vetores desenhados na resolução pedida (não a miniatura guardada no arquivo)
+        cdrv::Drawing d; std::wstring err;
+        if (cdrv::Read(f, d, err)) {
+            info->pageWmm = d.pages[0].w / 72 * 25.4; info->pageHmm = d.pages[0].h / 72 * 25.4;
+            std::vector<HBITMAP> pages = cdrv::Raster(d, pdfedit::ParseRange(j.pages, (int)d.pages.size()), std::max(150u, j.dpi), err);
+            bool opaque = !ops::HasAlpha(outFmt);
+            for (HBITMAP b : pages) {
+                if (j.edit.Any() || opaque) { HBITMAP e = ops::Apply(b, j.edit, opaque); DeleteObject(b); b = e; }
+                if (b) out.push_back(b);
+            }
+            if (!out.empty()) return out;
+        }
+    }
     UINT cx = conv::TargetSize(*info, j.dpi);
     int pages = 1;
     HBITMAP first = nullptr; bool alpha;
@@ -116,6 +130,18 @@ inline Result Run(const std::vector<std::wstring>& files, const Job& j, const st
                 r.errors.push_back(BaseOf(files[i]) + L": edições de pixels e intervalos de páginas não são aplicáveis à conversão vetorial.");
             } else {
                 std::wstring out = UniquePath(DirOf(files[i]), Named(BaseOf(files[i]), j.suffix), ops::Ext(j.format));
+                cdrv::Drawing d; std::wstring err;
+                if (j.format == ops::kSvg && cdrv::IsCdr(files[i])) { // SVG direto da libcdr, sem o Inkscape
+                    if (!cdrv::Read(files[i], d, err)) { ++r.failed; r.errors.push_back(BaseOf(files[i]) + L": " + err); done(i); continue; }
+                    for (size_t p = 0; p < d.pages.size(); ++p) {
+                        std::wstring o = d.pages.size() == 1 ? out : UniquePath(DirOf(files[i]), Named(BaseOf(files[i]), j.suffix) + L" - p" + std::to_wstring(p + 1), L".svg");
+                        std::string svg = cdrv::Svg(d.pages[p]);
+                        if (ops::WriteFileBytes(o, svg.data(), svg.size())) r.outputs.push_back(o);
+                        else { ++r.failed; r.errors.push_back(BaseOf(files[i]) + L": não foi possível gravar o SVG"); }
+                    }
+                    done(i);
+                    continue;
+                }
                 vec::Result v = vec::Convert(files[i], out, j.format == ops::kEps, j.textToPaths);
                 if (v.ok) r.outputs.push_back(out);
                 else { ++r.failed; r.errors.push_back(BaseOf(files[i]) + L": " + v.error); }
@@ -127,6 +153,34 @@ inline Result Run(const std::vector<std::wstring>& files, const Job& j, const st
 
     // ---- PDF de saída ----
     if (j.action == kToFormat && j.format == ops::kPdf) {
+        bool allCdr = !j.edit.Any();
+        for (auto& f : files) allCdr &= cdrv::IsCdr(f);
+        if (allCdr) { // CorelDRAW: PDF vetorial (um por arquivo; vários são juntados em um só)
+            std::vector<std::wstring> made; std::vector<pdfedit::File> pf(files.size()); std::vector<pdfedit::Part> parts;
+            std::wstring base = BaseOf(files[0]) + (files.size() > 1 ? L" (+" + std::to_wstring(files.size() - 1) + L")" : L"");
+            std::wstring out = UniquePath(DirOf(files[0]), Named(base, j.suffix), L".pdf");
+            bool ok = true;
+            for (size_t i = 0; i < files.size() && ok; ++i) {
+                cdrv::Drawing d; std::wstring err;
+                if (!cdrv::Read(files[i], d, err)) { r.errors.push_back(BaseOf(files[i]) + L": " + err); ok = false; break; }
+                std::vector<int> keep = pdfedit::ParseRange(j.pages, (int)d.pages.size());
+                cdrv::Drawing sel; for (int p : keep) if (p >= 0 && p < (int)d.pages.size()) sel.pages.push_back(d.pages[p]);
+                if (sel.pages.empty()) sel = d;
+                std::string pdf = cdrv::Pdf(sel);
+                std::wstring target = files.size() == 1 ? out : UniquePath(DirOf(files[0]), L"~vizu-" + std::to_wstring(GetCurrentProcessId()) + L"-" + std::to_wstring(i), L".pdf");
+                if (!ops::WriteFileBytes(target, pdf.data(), pdf.size())) { ok = false; break; }
+                made.push_back(target);
+                done(i);
+            }
+            if (ok && files.size() > 1) {
+                for (size_t i = 0; i < made.size() && ok; ++i) { ok = pf[i].Load(made[i]); if (ok) parts.push_back({&pf[i], pdfedit::ParseRange(L"", (int)pf[i].Pages().size())}); }
+                ok = ok && pdfedit::Assemble(parts, out);
+                for (auto& m : made) DeleteFileW(m.c_str());
+            }
+            if (ok) r.outputs.push_back(out);
+            else { for (auto& m : made) if (files.size() > 1 || m != out) DeleteFileW(m.c_str()); r.failed = (int)files.size(); }
+            return r;
+        }
         bool allPdf = !j.edit.Any();
         for (auto& f : files) allPdf &= IsPdfFile(f);
         std::wstring base = BaseOf(files[0]);

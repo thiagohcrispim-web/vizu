@@ -1546,7 +1546,7 @@ static UINT SelectionKinds(const std::vector<std::wstring>& files) {
         else if (e == L".psd" || e == L".psb") k |= kSelPsd | kSelImage;
         else if (fmt::IsPaletteExt(e)) k |= kSelPalette;
         else if (fmt::IsFontExt(e)) k |= kSelFont;
-        else if (fmt::Handles(e) || fmt::InList(e, images, ARRAYSIZE(images))) k |= kSelImage;
+        else if (fmt::Handles(e) || fmt::InList(e, images, ARRAYSIZE(images)) || cdrv::IsCdr(f)) k |= kSelImage;
     }
     return k;
 }
@@ -1575,10 +1575,11 @@ static void BuildSides() {
         Side s{T(L"Converter", L"Convert", L"Convertir"), {}};
         if (k & (kSelImage | kSelPalette | kSelFont)) {
             static const ops::Format order[] = {ops::kPng, ops::kJpg, ops::kPdf, ops::kWebp, ops::kTiff, ops::kSvg, ops::kEps};
-            bool allVector = !files.empty() && vec::Available();
-            for (const auto& file : files) allVector &= vec::IsInput(file);
+            bool allVector = !files.empty() && vec::Available(), allCdr = !files.empty();
+            for (const auto& file : files) { allVector &= vec::IsInput(file); allCdr &= cdrv::IsCdr(file); }
             for (ops::Format f : order) {
-                if ((f == ops::kSvg || f == ops::kEps) && !allVector) continue;
+                if (f == ops::kEps && !allVector) continue;            // EPS: motor Inkscape (Vizu Ultra)
+                if (f == ops::kSvg && !allVector && !allCdr) continue; // SVG: CorelDRAW já sai sem o Inkscape
                 jobs::Job j = BaseJob(); j.format = f;
                 std::wstring name = ops::Name(f);
                 const wchar_t* icon = f == ops::kPdf ? L"\uE8A5" : L"\uE91B";

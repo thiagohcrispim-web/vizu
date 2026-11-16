@@ -19,7 +19,7 @@ de imagens, traduzir, cronometrar o foco e organizar o seu dia.
 |---|---|
 | **Vizu Lite** | Prévia com Espaço e miniaturas no Explorer |
 | **Vizu** | Tudo do Lite + menu circular (converter, ferramentas, PDF, extras), OCR, relógio e agenda |
-| **Vizu Ultra** | Tudo do Vizu + CDR/SVG para **SVG e EPS vetorial** (baixa o motor Inkscape, ~100 MB, uma única vez) |
+| **Vizu Ultra** | Tudo do Vizu + CDR/SVG para **EPS vetorial** (baixa o motor Inkscape, ~100 MB, uma única vez) |
 
 ## Veja tudo, sem abrir nada
 
@@ -44,6 +44,7 @@ e clique para copiar.
 Selecione arquivos e segure **Alt**: um menu circular aparece em volta do mouse, só com o que faz sentido para eles.
 
 - **Converter** para PNG, JPG, PDF, WEBP, TIFF, SVG ou EPS, ou **compactar em ZIP**.
+- **CorelDRAW** (CDR e CMX) para **PDF vetorial**, **SVG** e PNG/JPG/WEBP/TIFF em alta resolução, sem instalar nada: o desenho é lido de verdade (libcdr), não a miniatura guardada no arquivo. Os textos viram curvas com as fontes do Windows, para a aparência ficar igual em qualquer computador. Preenchimentos com textura e efeitos (sombras, lentes) ainda não são reproduzidos.
 - **PDF** para documentos do Word, Excel e PowerPoint (DOC, DOCX, XLS, XLSX, PPT, PPTX, RTF e OpenDocument): usa o Microsoft Office, se estiver instalado, ou o LibreOffice (gratuito). O documento original não é alterado; arquivos com senha não são convertidos.
 - **PPT** (aparece só quando a seleção é de PDFs): converte o PDF em apresentação do PowerPoint com o **texto editável** — fonte, tamanho, cor, negrito e itálico; formas, tabelas e fotos ficam no fundo, sem texto duplicado. Texto girado ou contornado continua como imagem. Em PDF escaneado, cada linha só vira texto quando o fundo em volta é liso (camada de texto do PDF ou OCR do Windows).
 - **Ferramentas**: redimensionar, recortar com proporções prontas, girar, espelhar, tons de cinza, tirar metadados.
@@ -126,7 +127,7 @@ https://docs.github.com/site-policy/privacy-policies/github-general-privacy-stat
 | InDesign | indd, indt | miniaturas XMP, uma por página |
 | EPS | eps, epsf, epsi | preview TIFF/WMF, XMP ou EPSI |
 | SVG | svg, svgz | Direct2D |
-| Pacotes | cdr, afdesign, afphoto, afpub, xd, sketch, kra, ora, procreate | preview guardado no pacote |
+| Pacotes | cdr, afdesign, afphoto, afpub, xd, sketch, kra, ora, procreate | preview guardado no pacote (na conversão, CDR e CMX são desenhados a partir dos vetores) |
 | Paletas | ase, aco | miniatura com as amostras; no preview, nome e HEX de cada cor |
 | Fontes | ttf, otf, ttc | painel Alt+P e preview com folha de amostra (miniaturas ficam com o Windows) |
 | RAW de câmera | cr2, cr3, crw, nef, nrw, arw, srf, sr2, dng, raf, orf, rw2, rwl, pef, srw, 3fr, erf, kdc, mrw, mef, iiq | JPEG de preview embutido, com rotação |

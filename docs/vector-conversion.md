@@ -1,5 +1,7 @@
 # Conversão vetorial CDR/SVG → SVG/EPS
 
+> Desde a 9.11, **CDR e CMX para PDF, SVG e imagens não usam mais o Inkscape**: o Vizu lê o desenho com a libcdr embutida (veja `CdrVector.h`). O Inkscape (Vizu Ultra) continua sendo usado para **EPS** e para SVG → SVG/EPS.
+
 ## Problema corrigido
 
 O fluxo anterior `jobs::Run → Frames → RenderFile → ops::SaveSvg/SaveEps` renderizava o documento antes de exportar. `SaveSvg` criava um `<image>` com PNG em base64; `SaveEps` escrevia um JPEG com o operador PostScript `image`. Nenhum deles preservava os objetos originais.
