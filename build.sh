@@ -16,6 +16,18 @@ if [ ! -f build/webp/libwebp.a ]; then
   done
   x86_64-w64-mingw32-ar rcs build/webp/libwebp.a build/webp/*.o
 fi
+# Motor de PDF para PDF -> PPT: pdfium.dll (BSD-3/Apache-2.0) do wheel oficial pypdfium2 para Windows x64,
+# baixado com SHA-256 fixo e embutido compactado no EXE (extraído só no primeiro uso).
+PDFIUM_WHEEL=pypdfium2-5.15.2-py3-none-win_amd64.whl
+PDFIUM_URL=https://files.pythonhosted.org/packages/fe/7f/8aa446529fa14523e5c18f89e823afc95526689f76a75efe68a82a10d850/$PDFIUM_WHEEL
+PDFIUM_SHA256=74d1bace34fb01c660d0b64344d5a4b7d276942b7c6623c88ab59ea21c5acfbd
+if [ ! -f build/pdfium.dll.gz ]; then
+  mkdir -p build/pdfium
+  [ -f "build/pdfium/$PDFIUM_WHEEL" ] || curl -fsSL --retry 4 -o "build/pdfium/$PDFIUM_WHEEL" "$PDFIUM_URL"
+  echo "$PDFIUM_SHA256  build/pdfium/$PDFIUM_WHEEL" | sha256sum -c -
+  unzip -oq "build/pdfium/$PDFIUM_WHEEL" pypdfium2_raw/pdfium.dll -d build/pdfium
+  gzip -9n -c build/pdfium/pypdfium2_raw/pdfium.dll > build/pdfium.dll.gz
+fi
 $RC -c 65001 Vizu.rc -O coff -o Vizu.res.o # embute a DLL no EXE
 $CXX $FLAGS -municode -mwindows -D_WIN32_WINNT=0x0A00 -Wl,-Map=build/Vizu.map -o Vizu.exe Vizu.cpp Vizu.res.o build/webp/libwebp.a -lshlwapi -lole32 -loleaut32 -luuid -lgdi32 -ldwmapi -lshell32 -ld2d1 -ldwrite -lwindowscodecs -lruntimeobject -lshcore -lwinhttp -lurlmon -lcomctl32 -lcomdlg32 -lxmllite -lbcrypt -lmscms -lpdh
 # O próprio Vizu é o instalador. Ele leva a versão no nome: dist/Vizu_Setup_9.8.11_x64.exe

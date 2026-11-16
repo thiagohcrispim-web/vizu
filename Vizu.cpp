@@ -1586,6 +1586,9 @@ static void BuildSides() {
                 s.items.push_back({name, icon, run(j, std::wstring(T(L"Convertendo para ", L"Converting to ", L"Convirtiendo a ")) + ops::Name(f))});
             }
         }
+        bool allPdf = !files.empty(); // PPT só aparece quando a seleção é de PDFs
+        for (const auto& file : files) allPdf &= conv::ExtOf(file) == L".pdf";
+        if (allPdf) s.items.push_back({L"PPT", L"\uE786", run(job(jobs::kPdfPptx), T(L"Convertendo para PowerPoint", L"Converting to PowerPoint", L"Convirtiendo a PowerPoint"))});
         s.items.push_back({L"ZIP", L"\uE7B8", [] { StartZip(g_convFiles); }});
         g_sides.push_back(s);
     }

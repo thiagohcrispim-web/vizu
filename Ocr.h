@@ -5,6 +5,7 @@
 #include "Pdf.h"
 #include <string>
 #include <vector>
+#include <algorithm>
 
 namespace ocr {
 
@@ -60,8 +61,12 @@ struct ISoftwareBitmapFactory : public IInspectable {
     virtual HRESULT STDMETHODCALLTYPE Create(int format, INT32 width, INT32 height, ISoftwareBitmap** value) = 0; // 87 = Bgra8
 };
 
+struct IOcrWord : public IInspectable {
+    virtual HRESULT STDMETHODCALLTYPE get_BoundingRect(pdfrt::Rect*) = 0;
+    virtual HRESULT STDMETHODCALLTYPE get_Text(HSTRING*) = 0;
+};
 struct IOcrLine : public IInspectable {
-    virtual HRESULT STDMETHODCALLTYPE get_Words(IInspectable**) = 0;
+    virtual HRESULT STDMETHODCALLTYPE get_Words(IVectorView<IOcrWord>**) = 0;
     virtual HRESULT STDMETHODCALLTYPE get_Text(HSTRING*) = 0;
 };
 struct IOcrResult : public IInspectable {
@@ -116,9 +121,13 @@ inline std::vector<std::wstring> Languages() {
     return r;
 }
 
+// Linha reconhecida com a caixa em pixels da imagem (união das caixas das palavras).
+struct LineBox { std::wstring text; float x0, y0, x1, y1; };
+
 // Lê o texto de uma imagem BGRA (de cima para baixo). keepLines: mantém as quebras de linha; senão junta numa linha.
-// Retorna false se o OCR do Windows não estiver disponível (lang recebe a explicação).
-inline bool Recognize(const BYTE* bgra, int w, int h, int stride, bool keepLines, std::wstring* text, std::wstring* langTag) {
+// boxes (opcional) recebe cada linha com a posição. Retorna false se o OCR do Windows não estiver disponível.
+inline bool Recognize(const BYTE* bgra, int w, int h, int stride, bool keepLines, std::wstring* text, std::wstring* langTag,
+                      std::vector<LineBox>* boxes = nullptr) {
     text->clear();
     IOcrEngineStatics* st = nullptr;
     if (FAILED(Factory(L"Windows.Media.Ocr.OcrEngine", IID_IOcrEngineStatics, &st))) return false;
@@ -186,6 +195,23 @@ inline bool Recognize(const BYTE* bgra, int w, int h, int stride, bool keepLines
                                 else *text += keepLines ? L"\r\n" : L" ";
                             }
                             *text += t;
+                            IVectorView<IOcrWord>* words = nullptr;
+                            if (boxes && SUCCEEDED(ln->get_Words(&words)) && words) {
+                                LineBox lb{t, 1e9f, 1e9f, -1e9f, -1e9f};
+                                UINT32 nw = 0; words->get_Size(&nw);
+                                for (UINT32 k = 0; k < nw; ++k) {
+                                    IOcrWord* wd = nullptr; pdfrt::Rect r{};
+                                    if (SUCCEEDED(words->GetAt(k, &wd)) && wd) {
+                                        if (SUCCEEDED(wd->get_BoundingRect(&r))) {
+                                            lb.x0 = std::min(lb.x0, r.X); lb.y0 = std::min(lb.y0, r.Y);
+                                            lb.x1 = std::max(lb.x1, r.X + r.Width); lb.y1 = std::max(lb.y1, r.Y + r.Height);
+                                        }
+                                        wd->Release();
+                                    }
+                                }
+                                if (lb.x1 > lb.x0 && lb.y1 > lb.y0) boxes->push_back(lb);
+                                words->Release();
+                            }
                         }
                         ln->Release();
                     }

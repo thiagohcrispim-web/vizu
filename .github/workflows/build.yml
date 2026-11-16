@@ -37,6 +37,13 @@ jobs:
           x86_64-w64-mingw32-g++ -O2 -DUNICODE -D_UNICODE -static -municode -Ithird_party/mingw-w64-headers -o build/clean-tests.exe tests/clean_tests.cpp -lshell32 -lole32 -luuid
           WINEDEBUG=-all timeout 120 wine build/clean-tests.exe
 
+      # PDF -> PPT: texto editável, vetores no fundo, texto girado no fundo, Form XObject, camada de scan.
+      - name: Testar PDF para PPT
+        run: |
+          (cd tests && x86_64-w64-mingw32-windres -c 65001 pptx_tests.rc -O coff -o ../build/pptx_tests.res.o)
+          x86_64-w64-mingw32-g++ -O2 -DUNICODE -D_UNICODE -static -municode -Ithird_party/mingw-w64-headers -o build/pptx-tests.exe tests/pptx_tests.cpp build/pptx_tests.res.o -lshlwapi -lole32 -loleaut32 -luuid -lgdi32 -ld2d1 -ldwrite -lwindowscodecs -lruntimeobject -lshcore
+          WINEDEBUG=-all timeout 300 wine build/pptx-tests.exe
+
       - name: Publicar artefato
         id: upload
         uses: actions/upload-artifact@v4

@@ -12,6 +12,11 @@
 311 RCDATA "jogo/joaquim.png"
 312 RCDATA "jogo/tobias-costas.png"
 313 RCDATA "jogo/joaquim-costas.png"
+320 RCDATA "pptx/slideMaster1.xml"
+321 RCDATA "pptx/slideLayout1.xml"
+322 RCDATA "pptx/theme1.xml"
+323 RCDATA "pptx/defaultTextStyle.xml"
+330 RCDATA "build/pdfium.dll.gz"
 VS_VERSION_INFO VERSIONINFO
 FILEVERSION 9,9,2,0
 PRODUCTVERSION 9,9,2,0

@@ -7,6 +7,7 @@
 #include "PdfEdit.h"
 #include "Extras.h"
 #include "VectorConvert.h"
+#include "PdfPptx.h"
 
 namespace jobs {
 using std::min; using std::max;
@@ -23,6 +24,7 @@ enum Action {
     kPaletteText,  // HEX / RGB / CSS em .txt
     kPaletteSwap,  // ASE <-> ACO
     kFontSheet,    // folha de amostra PNG + PDF
+    kPdfPptx,      // PDF -> PowerPoint com texto editável
 };
 
 struct Job {
@@ -254,6 +256,14 @@ inline Result Run(const std::vector<std::wstring>& files, const Job& j, const st
                 std::wstring out = UniquePath(dir, base, toAco ? L".aco" : L".ase");
                 if (ops::WriteFileBytes(out, b.data(), b.size())) { r.outputs.push_back(out); ok = true; }
             }
+            break;
+        }
+        case kPdfPptx: {
+            if (!IsPdfFile(f)) { r.errors.push_back(base + L": não é um PDF."); break; }
+            std::wstring out = UniquePath(dir, Named(base, j.suffix), L".pptx"), err;
+            pdfppt::Stats st;
+            ok = pdfppt::Convert(f, out, st, err);
+            if (ok) r.outputs.push_back(out); else r.errors.push_back(base + L": " + err);
             break;
         }
         case kFontSheet: {

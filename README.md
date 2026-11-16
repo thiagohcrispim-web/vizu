@@ -44,6 +44,7 @@ e clique para copiar.
 Selecione arquivos e segure **Alt**: um menu circular aparece em volta do mouse, só com o que faz sentido para eles.
 
 - **Converter** para PNG, JPG, PDF, WEBP, TIFF, SVG ou EPS, ou **compactar em ZIP**.
+- **PPT** (aparece só quando a seleção é de PDFs): converte o PDF em apresentação do PowerPoint com o **texto editável** — fonte, tamanho, cor, negrito e itálico; formas, tabelas e fotos ficam no fundo, sem texto duplicado. Texto girado ou contornado continua como imagem. Em PDF escaneado, cada linha só vira texto quando o fundo em volta é liso (camada de texto do PDF ou OCR do Windows).
 - **Ferramentas**: redimensionar, recortar com proporções prontas, girar, espelhar, tons de cinza, tirar metadados.
 - **PDF**: juntar na ordem em que você clicou, dividir, extrair páginas, comprimir.
 - **Extras**: exportar camadas do PSD, folha de cores, HEX/CSS, converter paletas ASE ⇄ ACO, amostra de fonte.

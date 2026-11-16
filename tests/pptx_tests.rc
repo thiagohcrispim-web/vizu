@@ -1,0 +1,5 @@
+320 RCDATA "../pptx/slideMaster1.xml"
+321 RCDATA "../pptx/slideLayout1.xml"
+322 RCDATA "../pptx/theme1.xml"
+323 RCDATA "../pptx/defaultTextStyle.xml"
+330 RCDATA "../build/pdfium.dll.gz"
