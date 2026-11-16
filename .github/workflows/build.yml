@@ -44,6 +44,12 @@ jobs:
           x86_64-w64-mingw32-g++ -O2 -DUNICODE -D_UNICODE -static -municode -Ithird_party/mingw-w64-headers -o build/pptx-tests.exe tests/pptx_tests.cpp build/pptx_tests.res.o -lshlwapi -lole32 -loleaut32 -luuid -lgdi32 -ld2d1 -ldwrite -lwindowscodecs -lruntimeobject -lshcore
           WINEDEBUG=-all timeout 300 wine build/pptx-tests.exe
 
+      # Word/Excel/PowerPoint -> PDF: tipos, chamadas COM por nome e mensagem sem Office/LibreOffice.
+      - name: Testar Office para PDF
+        run: |
+          x86_64-w64-mingw32-g++ -O2 -DUNICODE -D_UNICODE -static -municode -Ithird_party/mingw-w64-headers -o build/office-tests.exe tests/office_tests.cpp -lshlwapi -lole32 -loleaut32 -luuid -lshell32
+          WINEDEBUG=-all timeout 120 wine build/office-tests.exe
+
       - name: Publicar artefato
         id: upload
         uses: actions/upload-artifact@v4

@@ -1588,6 +1588,10 @@ static void BuildSides() {
         }
         bool allPdf = !files.empty(); // PPT só aparece quando a seleção é de PDFs
         for (const auto& file : files) allPdf &= conv::ExtOf(file) == L".pdf";
+        bool allOffice = !files.empty(); // Word, Excel, PowerPoint -> PDF
+        for (const auto& file : files) allOffice &= office::IsOfficeDoc(file);
+        if (allOffice) s.items.push_back({files.size() > 1 ? L"PDF \u00D7" + std::to_wstring(files.size()) : std::wstring(L"PDF"), L"\uE8A5",
+                                          run(job(jobs::kOfficePdf), T(L"Convertendo para PDF", L"Converting to PDF", L"Convirtiendo a PDF"))});
         if (allPdf) s.items.push_back({L"PPT", L"\uE786", run(job(jobs::kPdfPptx), T(L"Convertendo para PowerPoint", L"Converting to PowerPoint", L"Convirtiendo a PowerPoint"))});
         s.items.push_back({L"ZIP", L"\uE7B8", [] { StartZip(g_convFiles); }});
         g_sides.push_back(s);

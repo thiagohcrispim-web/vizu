@@ -8,6 +8,7 @@
 #include "Extras.h"
 #include "VectorConvert.h"
 #include "PdfPptx.h"
+#include "Office.h"
 
 namespace jobs {
 using std::min; using std::max;
@@ -25,6 +26,7 @@ enum Action {
     kPaletteSwap,  // ASE <-> ACO
     kFontSheet,    // folha de amostra PNG + PDF
     kPdfPptx,      // PDF -> PowerPoint com texto editável
+    kOfficePdf,    // Word/Excel/PowerPoint -> PDF (Office ou LibreOffice instalado)
 };
 
 struct Job {
@@ -263,6 +265,12 @@ inline Result Run(const std::vector<std::wstring>& files, const Job& j, const st
             std::wstring out = UniquePath(dir, Named(base, j.suffix), L".pptx"), err;
             pdfppt::Stats st;
             ok = pdfppt::Convert(f, out, st, err);
+            if (ok) r.outputs.push_back(out); else r.errors.push_back(base + L": " + err);
+            break;
+        }
+        case kOfficePdf: {
+            std::wstring out = UniquePath(dir, Named(base, j.suffix), L".pdf"), err;
+            ok = office::ToPdf(f, out, err);
             if (ok) r.outputs.push_back(out); else r.errors.push_back(base + L": " + err);
             break;
         }
