@@ -131,7 +131,7 @@ static const struct { int id; UINT mod, vk; } kOpenKeys[] = {
 enum { kRefreshTimer = 1, kFlashTimer, kAltTimer, kToastTimer, kSelTimer, kAnimTimer, kUpdateTimer };
 static const float kCaption = 56, kPad = 18;
 static ui::Theme g_theme = ui::MakeTheme(ui::kThemeDark, false);
-static std::wstring g_uiFont; // fonte da interface escolhida pelo usuário (vazio = Bahnschrift)
+static std::wstring g_uiFont; // fonte da interface escolhida pelo usuário (vazio = padrão: Inter)
 static void ClockRender();
 static bool FontInstalled(const wchar_t* face) {
     HDC dc = GetDC(nullptr);
@@ -3486,6 +3486,27 @@ static int Uninstall(bool silent, bool ask) {
     CleanupOld(dir);
     for (const wchar_t* f : {L"Vizu.ico", L"DesignPeek.ico", L"diagnostico.bat", L"README.md", L"Uninstall.exe"}) DeleteFileW((dir + L"\\" + f).c_str());
     RemoveDirectoryW(dir.c_str());
+    // Motor de PDF extraído no primeiro uso do PDF -> PPT (%LOCALAPPDATA%\Vizu\pdfium-*): sempre sai.
+    wchar_t local[MAX_PATH] = {};
+    if (GetEnvironmentVariableW(L"LOCALAPPDATA", local, MAX_PATH)) {
+        std::wstring data = std::wstring(local) + L"\\Vizu";
+        WIN32_FIND_DATAW fd; HANDLE h = FindFirstFileW((data + L"\\pdfium-*").c_str(), &fd);
+        if (h != INVALID_HANDLE_VALUE) {
+            do {
+                std::wstring sub = data + L"\\" + fd.cFileName;
+                DeleteFileW((sub + L"\\pdfium.dll").c_str()); DeleteFileW((sub + L"\\pdfium.dll.tmp").c_str());
+                RemoveDirectoryW(sub.c_str());
+            } while (FindNextFileW(h, &fd));
+            FindClose(h);
+        }
+        RemoveDirectoryW(data.c_str()); // só some se estiver vazia
+    }
+    // Configurações (tema, fontes, relógio, agenda, widgets): só saem se o usuário pedir; na remoção silenciosa ficam.
+    if (!silent && MessageBoxW(nullptr, T(L"Apagar também as suas configurações do Vizu (tema, fontes, relógio, agenda e widgets)?\n\nSe for instalar o Vizu de novo e quiser manter tudo como está, escolha Não.",
+                                          L"Also delete your Vizu settings (theme, fonts, clock, agenda and widgets)?\n\nIf you plan to reinstall Vizu and keep everything as it is, choose No.",
+                                          L"¿Borrar también tu configuración de Vizu (tema, fuentes, reloj, agenda y widgets)?\n\nSi vas a instalar Vizu de nuevo y quieres conservar todo, elige No."),
+                                L"Vizu", MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2) == IDYES)
+        RegDeleteTreeW(HKEY_CURRENT_USER, kCfgKey);
     if (!silent) MessageBoxW(nullptr, T(L"Vizu removido.", L"Vizu removed.", L"Vizu eliminado."), L"Vizu", MB_ICONINFORMATION);
     return 0;
 }
@@ -3625,6 +3646,11 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmd, int) {
     g_altWnd = CreateWindowExW(exStyle | WS_EX_LAYERED, L"VizuAlt", L"Vizu", WS_POPUP, 0, 0, 100, 100, nullptr, nullptr, inst, nullptr);
     g_toastWnd = CreateWindowExW(exStyle, L"VizuToast", L"Vizu", WS_POPUP, 0, 0, 100, 100, nullptr, nullptr, inst, nullptr);
     g_uiFont = ReadStr(L"UiFont", L"");
+    if (!ReadDword(L"UiFontMigrated", 0)) { // uma vez: a fonte padrão das versões antigas (Bahnschrift, Segoe UI) volta para a atual (Inter)
+        std::wstring low = g_uiFont; for (auto& ch : low) ch = (wchar_t)towlower(ch);
+        if (low.rfind(L"bahnschrift", 0) == 0 || low.rfind(L"segoe ui", 0) == 0) { g_uiFont.clear(); WriteStr(L"UiFont", L""); }
+        WriteDword(L"UiFontMigrated", 1);
+    }
     ApplyTheme(); // vidro + tema
     ClockLoad();
     if (g_clock.ocr) RegisterHotKey(g_wnd, kHotOcr, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, 'T'); // OCR funciona mesmo com o relógio desligado
