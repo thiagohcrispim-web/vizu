@@ -3,7 +3,7 @@
 <h3 align="center">Veja todos os seus arquivos de design no Windows,<br>mesmo sem os programas instalados.</h3>
 
 <p align="center">
-  <a href="https://github.com/thiagohcrispim-web/vizu/releases/latest/download/Vizu_Setup_9.9.2_x64.exe"><b>⬇ Baixar o Vizu para Windows</b></a> &nbsp;·&nbsp; grátis e de código aberto (MIT)
+  <a href="https://github.com/thiagohcrispim-web/vizu/releases/latest/download/Vizu_Setup_9.10.0_x64.exe"><b>⬇ Baixar o Vizu para Windows</b></a> &nbsp;·&nbsp; grátis e de código aberto (MIT)
 </p>
 
 ---
@@ -97,7 +97,7 @@ desligado nas Configurações.
 
 ## Instalar
 
-1. Baixe o **[instalador](https://github.com/thiagohcrispim-web/vizu/releases/latest/download/Vizu_Setup_9.9.2_x64.exe)** e abra. Não precisa de administrador.
+1. Baixe o **[instalador](https://github.com/thiagohcrispim-web/vizu/releases/latest/download/Vizu_Setup_9.10.0_x64.exe)** e abra. Não precisa de administrador.
 2. Pronto: as miniaturas aparecem conforme você navega pelas pastas.
 
 Para atualizar, o Vizu avisa sozinho quando sai versão nova. Para desinstalar, rode o instalador de novo ou use
@@ -153,7 +153,7 @@ https://docs.github.com/site-policy/privacy-policies/github-general-privacy-stat
 
 - Compilar no Linux: `./build.sh` (MinGW `g++-mingw-w64-x86-64-posix`; os headers mais novos do mingw-w64 estão em `third_party/`).
 - O GitHub Actions compila a cada envio e publica o instalador como artefato (`.github/workflows/build.yml`).
-- Instalação silenciosa: `Vizu_Setup_9.9.2_x64.exe /install /S` · desinstalar: `Vizu.exe /uninstall [/S]`.
+- Instalação silenciosa: `Vizu_Setup_9.10.0_x64.exe /install /S` · desinstalar: `Vizu.exe /uninstall [/S]`.
 - Diagnóstico de um arquivo: `Vizu.exe /diag "arquivo"` ou arraste o arquivo sobre `diagnostico.bat`.
 - A biblioteca `DesignThumbs.dll` (miniaturas do Explorer) e a chave de registro `HKCU\Software\DesignThumbs` mantêm o
   nome antigo, para não quebrar as miniaturas nem as configurações de quem já usa.
@@ -162,6 +162,7 @@ https://docs.github.com/site-policy/privacy-policies/github-general-privacy-stat
 <details>
 <summary><b>Histórico de versões</b></summary>
 
+- **v9.10.0** — **PDF → PPT**: com PDFs selecionados, o lado Converter do menu circular ganha **PPT**, que transforma o PDF numa apresentação do PowerPoint com o texto editável (fonte, tamanho, cor, negrito e itálico). Formas, tabelas e fotos ficam no fundo sem texto duplicado; texto girado ou contornado continua como imagem; em PDF escaneado, as linhas sobre fundo liso viram texto (camada de texto do PDF ou OCR do Windows). Usa o PDFium (BSD/Apache), embutido e extraído só no primeiro uso.
 - **v9.9.2** — O widget de desempenho pode ser anexado à barra de tarefas, como o relógio (botão direito › Anexar à barra de tarefas); o painel completo abre acima da barra ao passar o mouse. Botão direito nos widgets também oculta. Agradecimento especial mais discreto.
 - **v9.9.1** — Widget de disco mostra todos os discos (inclusive externos) quando "Todos" está marcado. Botão da Limpeza no relógio, antes do OCR. Ícones do relógio redesenhados, cheios e mais fáceis de reconhecer. Botão **Otimizar** no widget de desempenho: fecha os programas que mais pesam (com a sua confirmação, nunca à força), libera espaço quando o disco está quase cheio e sugere reiniciar quando o PC está ligado há muitos dias.
 - **v9.9.0** — **Limpeza**: o Crispy Clean agora faz parte do Vizu. Botão direito no fundo da pasta (ou bandeja) abre a análise de temporários e caches (Windows, navegadores, Adobe, mensageiros, jogos, desenvolvimento e apps detectados sozinhos), em lista ou mapa, com limpeza em um clique. Arquivos de trabalho (PSD, AI, INDD, PDF…) e o que estiver em uso nunca saem; o que é para revisar vai para a Lixeira; programas abertos são fechados só com a sua permissão, nunca à força. Widgets opcionais de espaço em disco e de desempenho (mostra se o PC está lento e o que está pesando). Nova seção Limpeza nas Configurações.
