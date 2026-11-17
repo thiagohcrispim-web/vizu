@@ -3,7 +3,7 @@
 <h3 align="center">Veja todos os seus arquivos de design no Windows,<br>mesmo sem os programas instalados.</h3>
 
 <p align="center">
-  <a href="https://github.com/thiagohcrispim-web/vizu/releases/latest/download/Vizu_Setup_9.11.0_x64.exe"><b>⬇ Baixar o Vizu para Windows</b></a> &nbsp;·&nbsp; grátis e de código aberto (MIT)
+  <a href="https://github.com/thiagohcrispim-web/vizu/releases/latest/download/Vizu_Setup_9.11.1_x64.exe"><b>⬇ Baixar o Vizu para Windows</b></a> &nbsp;·&nbsp; grátis e de código aberto (MIT)
 </p>
 
 ---
@@ -99,7 +99,7 @@ desligado nas Configurações.
 
 ## Instalar
 
-1. Baixe o **[instalador](https://github.com/thiagohcrispim-web/vizu/releases/latest/download/Vizu_Setup_9.11.0_x64.exe)** e abra. Não precisa de administrador.
+1. Baixe o **[instalador](https://github.com/thiagohcrispim-web/vizu/releases/latest/download/Vizu_Setup_9.11.1_x64.exe)** e abra. Não precisa de administrador.
 2. Pronto: as miniaturas aparecem conforme você navega pelas pastas.
 
 Para atualizar, o Vizu avisa sozinho quando sai versão nova. Para desinstalar, rode o instalador de novo ou use
@@ -155,7 +155,7 @@ https://docs.github.com/site-policy/privacy-policies/github-general-privacy-stat
 
 - Compilar no Linux: `./build.sh` (MinGW `g++-mingw-w64-x86-64-posix`; os headers mais novos do mingw-w64 estão em `third_party/`).
 - O GitHub Actions compila a cada envio e publica o instalador como artefato (`.github/workflows/build.yml`).
-- Instalação silenciosa: `Vizu_Setup_9.11.0_x64.exe /install /S` · desinstalar: `Vizu.exe /uninstall [/S]`.
+- Instalação silenciosa: `Vizu_Setup_9.11.1_x64.exe /install /S` · desinstalar: `Vizu.exe /uninstall [/S]`.
 - Diagnóstico de um arquivo: `Vizu.exe /diag "arquivo"` ou arraste o arquivo sobre `diagnostico.bat`.
 - A biblioteca `DesignThumbs.dll` (miniaturas do Explorer) e a chave de registro `HKCU\Software\DesignThumbs` mantêm o
   nome antigo, para não quebrar as miniaturas nem as configurações de quem já usa.
@@ -164,6 +164,7 @@ https://docs.github.com/site-policy/privacy-policies/github-general-privacy-stat
 <details>
 <summary><b>Histórico de versões</b></summary>
 
+- **v9.11.1** — Quem vinha de uma versão antiga e ficou com a fonte da interface antiga (Bahnschrift ou Segoe UI) volta para a Inter automaticamente; fontes escolhidas por você são mantidas. Ao desinstalar, o Vizu agora apaga o motor de PDF extraído em `%LOCALAPPDATA%\Vizu` e pergunta se também deve apagar as configurações (tema, fontes, relógio, agenda e widgets).
 - **v9.11.0** — **CorelDRAW sem Inkscape**: CDR e CMX viram **PDF vetorial**, **SVG** e PNG/JPG/WEBP/TIFF em alta resolução direto no Converter, sem baixar nada. O desenho é lido de verdade (libcdr embutida), não a miniatura do arquivo; textos viram curvas com as fontes do Windows; vários CDRs selecionados viram um PDF só. EPS continua no Vizu Ultra.
 - **v9.10.1** — **Word, Excel e PowerPoint → PDF**: com DOC, DOCX, XLS, XLSX, PPT, PPTX, RTF ou OpenDocument selecionados, o lado Converter do menu circular ganha **PDF**. Usa o Microsoft Office instalado (sem abrir janela) ou o LibreOffice (gratuito). O original não é alterado, arquivos com senha não são convertidos e uma instância do Office que já estava aberta nunca é fechada.
 - **v9.10.0** — **PDF → PPT**: com PDFs selecionados, o lado Converter do menu circular ganha **PPT**, que transforma o PDF numa apresentação do PowerPoint com o texto editável (fonte, tamanho, cor, negrito e itálico). Formas, tabelas e fotos ficam no fundo sem texto duplicado; texto girado ou contornado continua como imagem; em PDF escaneado, as linhas sobre fundo liso viram texto (camada de texto do PDF ou OCR do Windows). Usa o PDFium (BSD/Apache), embutido e extraído só no primeiro uso.
