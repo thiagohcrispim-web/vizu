@@ -40,6 +40,7 @@ struct ClockState {
     bool reminderOpen = false;
     bool ocr = true;          // botão e atalho Ctrl+Alt+T do OCR
     bool clean = true;        // botão da Limpeza (antes do OCR)
+    bool ocrBtn = true;       // botão do OCR no relógio (o atalho vale mesmo sem ele)
     bool theftOn = true, pomoOn = true, agendaOn = true; // recursos do relógio que o usuário pode desligar
     DWORD scalePct = 100;     // tamanho: 100, 90 ou 70%
     bool docked = false;      // anexado à barra de tarefas
@@ -397,7 +398,7 @@ static void ClockRender() {
     }
     float timeW = 2 * w2 + wc, chip = 40 * s, gap = 6 * s, theftW = g_clock.theft ? 104 * s : chip;
     bool showTri = pomo || g_clock.agendaOn;
-    float Wc = 14 * s + (showTri ? 20 * s + 12 * s : 0) + timeW + 12 * s + (g_clock.theftOn ? theftW + gap : 0) + (g_clock.pomoOn ? chip + gap : 0) + chip + (g_clock.clean ? gap + chip : 0) + (g_clock.ocr ? gap + chip : 0) + 10 * s;
+    float Wc = 14 * s + (showTri ? 20 * s + 12 * s : 0) + timeW + 12 * s + (g_clock.theftOn ? theftW + gap : 0) + (g_clock.pomoOn ? chip + gap : 0) + chip + (g_clock.clean ? gap + chip : 0) + (g_clock.ocr && g_clock.ocrBtn ? gap + chip : 0) + 10 * s;
     UINT W = (UINT)(Wc + 2 * M), Ht = (UINT)(H + 2 * M);
     fmt::Canvas cv(W, Ht);
     if (!cv.rt) return;
@@ -512,7 +513,7 @@ static void ClockRender() {
         p.Fill(g_clock.rChip[4], chip / 2, g_clock.hot == kClkChip4 ? hotBg : chipBg);
         p.FilledIcon("broom", g_clock.rChip[4], 20 * s, th.icon);
     }
-    if (g_clock.ocr) { // ler texto da tela (OCR)
+    if (g_clock.ocr && g_clock.ocrBtn) { // ler texto da tela (OCR)
         g_clock.rChip[3] = chipRect(chip);
         p.Fill(g_clock.rChip[3], chip / 2, g_clock.hot == kClkChip3 ? hotBg : chipBg);
         p.FilledIcon("scan-text", g_clock.rChip[3], 19 * s, th.icon);
@@ -755,11 +756,12 @@ static void ClockLoad() {
     g_clock.app = ReadStr(L"ClockApp", L"https://chatgpt.com");
     g_clock.ocr = ReadDword(L"OcrOn", 1) != 0;
     g_clock.clean = ReadDword(L"ClockClean", 1) != 0;
+    g_clock.ocrBtn = ReadDword(L"ClockOcr", 1) != 0;
     g_clock.theftOn = ReadDword(L"ClockTheft", 1) != 0;
     g_clock.pomoOn = ReadDword(L"ClockPomo", 1) != 0;
     g_clock.agendaOn = ReadDword(L"ClockAgenda", 1) != 0;
     { DWORD sc = ReadDword(L"ClockScale", 100); g_clock.scalePct = sc == 90 || sc == 70 ? sc : 100; }
     g_clock.docked = ReadDword(L"ClockDocked", 0) != 0;
-    if (g_lite) { g_clock.ocr = false; g_clock.clean = false; return; } // Vizu Lite: sem relógio nem OCR
+    if (g_lite) { g_clock.clean = false; return; } // Vizu Lite: sem relógio (o OCR fica, pelo atalho)
     if (ReadDword(L"ClockOn", 0)) ClockEnable(true); // desligado até o usuário ativar
 }

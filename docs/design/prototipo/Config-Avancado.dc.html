@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Vizu · Configurações · Avançado</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+.sec{display:grid;grid-template-columns:150px minmax(0,1fr);column-gap:24px}
+.sec>h2{margin:0;padding-top:14px;font-size:13px;line-height:20px;font-weight:500}
+.rows{display:flex;flex-direction:column}
+.row{display:flex;align-items:center;justify-content:space-between;gap:24px;min-height:52px;padding:6px 0;border-top:1px solid #5C6472;box-sizing:border-box}
+.rows>.row:first-child{border-top:0}
+.t{display:flex;flex-direction:column;gap:2px;min-width:0}
+.t b{font-weight:500;font-size:13px;line-height:18px}
+.t i{font-style:normal;font-size:11px;line-height:15px;color:#BCC2CC}
+.adv{display:flex;align-items:center;justify-content:space-between;min-height:44px;border-top:1px solid #5C6472;padding:0;background:transparent;border-left:0;border-right:0;border-bottom:0;color:#FFFFFF;font:inherit;font-size:13px;font-weight:500;cursor:pointer;width:100%;text-align:left}
+.oo{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:500;flex:none}
+.oo .off{color:#5C6472}.oo .on{color:#FFFFFF}
+.oo.isoff .off{color:#FFFFFF}.oo.isoff .on{color:#5C6472}
+.sw{width:40px;height:22px;border-radius:11px;border:0;background:#5C6472;position:relative;flex:none;padding:0;cursor:pointer}
+.sw span{position:absolute;left:3px;top:3px;width:16px;height:16px;border-radius:50%;background:#F2F2F2;box-shadow:0 1px 2px rgba(0,0,0,0.3)}
+.sw.on{background:#FF6633}.sw.on span{left:21px}
+.b{height:30px;padding:0 14px;border:0;border-radius:999px;box-shadow:inset 0 0 0 1px #5C6472;background:transparent;color:#FFFFFF;font:inherit;font-size:11px;font-weight:500;flex:none;cursor:pointer}
+.b.ghost{background:#23272E;box-shadow:none;color:#B0B6C0;padding:0 28px;height:34px}
+.ps{display:inline-flex;padding:3px;border-radius:999px;background:#23272E}
+.ps button{height:30px;padding:0 30px;border:0;border-radius:999px;background:transparent;color:#FFFFFF;font:inherit;font-size:12px;font-weight:500;cursor:pointer}
+.ps button.on{background:#FFFFFF;color:#2E333B}
+.tp{display:flex;flex-direction:column;align-items:center;gap:8px;padding:0;border:0;background:transparent;color:#FFFFFF;font:inherit;font-size:12px;cursor:pointer}
+.tp.on{font-weight:500}
+.tp i{display:flex;flex-direction:column;gap:6px;width:100%;height:64px;border-radius:10px;padding:10px;box-sizing:border-box;position:relative}
+.tp u{display:block;height:6px;border-radius:3px;text-decoration:none}
+.tp s{position:absolute;right:10px;bottom:10px;width:26px;height:10px;border-radius:5px}
+.lk{border:0;background:transparent;color:#FFFFFF;font:inherit;font-size:13px;font-weight:500;padding:0;cursor:pointer}
+.fb{height:40px;border:0;border-radius:999px;box-shadow:inset 0 0 0 1px #5C6472;background:transparent;color:#FFFFFF;font:inherit;font-size:12px;cursor:pointer}
+
+.advo{display:flex;align-items:center;justify-content:space-between;min-height:44px;border-top:1px solid #5C6472;font-size:13px;font-weight:500}
+.sub{margin:0 0 10px;padding:4px 16px;border-radius:12px;background:#23272E;box-shadow:inset 0 0 0 1px #5C6472;display:flex;flex-direction:column}
+.sub>.row:first-child{border-top:0}
+.seg{display:inline-flex;padding:2px;border-radius:999px;box-shadow:inset 0 0 0 1px #5C6472;flex:none}
+.seg button{height:24px;padding:0 10px;border:0;border-radius:999px;background:transparent;color:#FFFFFF;font:inherit;font-size:11px;font-weight:500;font-variant-numeric:tabular-nums}
+.seg button.on{background:#FFFFFF;color:#2E333B}
+.stp{display:inline-flex;align-items:center;height:28px;border-radius:999px;box-shadow:inset 0 0 0 1px #5C6472;flex:none;font-size:11px;font-weight:500;font-variant-numeric:tabular-nums}
+.stp button{width:28px;height:28px;border:0;background:transparent;color:#BCC2CC;font:inherit;font-size:13px}
+.stp span{min-width:48px;text-align:center}
+.pair{display:inline-flex;gap:2px;padding:2px;border-radius:5px;border:0;background:transparent}
+.pair i{display:block;width:10px;height:14px;border-radius:2px}
+</style>
+</helmet>
+<div style="width: 1300px; height: 3100px; box-sizing: border-box; padding: 40px 56px; background: #2E333B; color: #FFFFFF; font-family: Inter, system-ui, sans-serif; font-size: 14px; line-height: 20px; display: flex; flex-direction: column; gap: 40px">
+  <header style="display: flex; align-items: center; gap: 32px">
+    <div style="display: flex; flex-direction: column; gap: 4px; width: 150px"><img src="/_blob/a81b966bf2f457f4e4c0abf4a921b868" alt="Vizu." style="height: 26px; width: auto; display: block; align-self: flex-start"><span style="font-size: 12px; color: #BCC2CC">Configurações</span></div>
+    <span style="font-size: 12px; font-weight: 500">Aplicar presets:</span>
+    <div class="ps" role="group" aria-label="Presets"><button type="button">Minimal</button><button type="button" class="on" aria-pressed="true">Design</button><button type="button">Custom</button></div>
+    <span style="flex: 1"></span>
+    <span style="height: 30px; padding: 0 22px; display: inline-flex; align-items: center; border-radius: 999px; background: #23272E; color: #B0B6C0; font-size: 12px; font-variant-numeric: tabular-nums">v 9.12</span>
+    <button type="button" aria-label="Fechar" style="width: 32px; height: 32px; border: 0; border-radius: 50%; background: transparent; box-shadow: inset 0 0 0 1px #5C6472; color: #FFFFFF; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+  </header>
+
+  <p style="margin: 0; font-size: 12px; color: #BCC2CC">Todos os painéis Avançado abertos, no preset Design. Ver não tem Avançado.</p>
+
+  <section class="sec"><h2>Converter</h2><div class="rows">
+    <div class="row"><span class="t"><b>Menu circular ao segurar Alt</b><i>Roda do mouse ou clique no centro troca de lado</i></span><span class="oo"><span class="off">OFF</span><button type="button" role="switch" aria-checked="true" aria-label="Menu circular" class="sw on"><span></span></button><span class="on">ON</span></span></div>
+    <div class="advo" aria-expanded="true">Avançado<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#BCC2CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg></div>
+    <div class="sub">
+      <div class="row"><span class="t"><b>Tempo segurando</b><i>Quanto tempo Alt precisa ficar pressionado</i></span><span class="stp"><button type="button" aria-label="Diminuir">−</button><span>500 ms</span><button type="button" aria-label="Aumentar">+</button></span></div>
+      <div class="row"><span class="t"><b>Resolução</b><i>Para os formatos de imagem</i></span><span class="seg"><button type="button">72 dpi</button><button type="button" class="on">300 dpi</button></span></div>
+      <div class="row"><span class="t"><b>PDF</b><i>Compacto ou sem compressão</i></span><span class="seg"><button type="button">Compactado</button><button type="button" class="on">Sem compressão</button></span></div>
+      <div class="row"><span class="t"><b>Texto em SVG e EPS</b><i>Texto editável ou convertido em curvas</i></span><span class="seg"><button type="button" class="on">Editável</button><button type="button">Em curvas</button></span></div>
+      <div class="row"><span class="t"><b>Qualidade JPG e PDF</b></span><span class="stp"><button type="button" aria-label="Diminuir">−</button><span>100%</span><button type="button" aria-label="Aumentar">+</button></span></div>
+      <div class="row"><span class="t"><b>Qualidade WEBP</b><i>Menor = arquivo menor (75 é o ponto ideal)</i></span><span class="stp"><button type="button" aria-label="Diminuir">−</button><span>75%</span><button type="button" aria-label="Aumentar">+</button></span></div>
+    </div>
+  </div></section>
+
+  <section class="sec"><h2>Tempo</h2><div class="rows">
+    <div class="row"><span class="t"><b>Relógio na área de trabalho</b><i>Mostra hora e data no fundo do Windows</i></span><span class="oo"><span class="off">OFF</span><button type="button" role="switch" aria-checked="true" aria-label="Relógio" class="sw on"><span></span></button><span class="on">ON</span></span></div>
+    <div class="row"><span class="t"><b>Ativar Agenda</b><i>Mostra seus próximos compromissos</i></span><span class="oo"><span class="off">OFF</span><button type="button" role="switch" aria-checked="true" aria-label="Agenda" class="sw on"><span></span></button><span class="on">ON</span></span></div>
+    <div class="advo" aria-expanded="true">Avançado<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#BCC2CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg></div>
+    <div class="sub">
+      <div class="row"><span class="t"><b>Tamanho do relógio</b></span><span class="seg"><button type="button">100%</button><button type="button">90%</button><button type="button" class="on">70%</button></span></div>
+      <div class="row"><span class="t"><b>Fonte do relógio</b><i>Qualquer fonte instalada no Windows</i></span><button type="button" class="b">Bahnschrift · 38 px</button></div>
+      <div class="row"><span class="t"><b>Anexar à barra de tarefas</b><i>O relógio do Windows some enquanto estiver anexado</i></span><span class="oo isoff"><span class="off">OFF</span><button type="button" role="switch" aria-checked="false" aria-label="Anexar à barra de tarefas" class="sw"><span></span></button><span class="on">ON</span></span></div>
+      <div class="row"><span class="t"><b>Ativar Roubo de tempo</b><i>Caveira: conta quem te interrompeu</i></span><span class="oo"><span class="off">OFF</span><button type="button" role="switch" aria-checked="true" aria-label="Roubo de tempo" class="sw on"><span></span></button><span class="on">ON</span></span></div>
+      <div class="row"><span class="t"><b>Histórico do roubo de tempo</b><i>Hoje e últimos 7 dias</i></span><button type="button" class="b">Abrir</button></div>
+      <div class="row"><span class="t"><b>Ativar Foco · Pomodoro</b><i>Foco e pausa por cores</i></span><span class="oo"><span class="off">OFF</span><button type="button" role="switch" aria-checked="true" aria-label="Pomodoro" class="sw on"><span></span></button><span class="on">ON</span></span></div>
+      <div class="row"><span class="t"><b>Tempos</b><i>Foco · pausa · pausa longa, em minutos</i></span><span class="seg"><button type="button" class="on">25 · 5 · 15</button><button type="button">50 · 10 · 20</button><button type="button">15 · 3 · 10</button></span></div>
+      <div class="row"><span class="t"><b>Cores do Pomodoro</b><i>Foco / pausa</i></span><span style="display: flex; gap: 6px"><button type="button" class="pair" aria-label="Verde e vermelho" aria-pressed="true" style="box-shadow: 0 0 0 1px #FFFFFF"><i style="background: #34C759"></i><i style="background: #E0245E"></i></button><button type="button" class="pair" aria-label="Azul e cinza" aria-pressed="false"><i style="background: #0A84FF"></i><i style="background: #8E8E93"></i></button><button type="button" class="pair" aria-label="Lima e roxo" aria-pressed="false"><i style="background: #B6FF3B"></i><i style="background: #A855F7"></i></button></span></div>
+    </div>
+  </div></section>
+
+  <section class="sec"><h2>Limpeza</h2><div class="rows">
+    <div class="row"><span class="t"><b>Abrir a Limpeza</b><i>Também no botão direito do fundo da pasta e na bandeja</i></span><button type="button" class="b">Abrir</button></div>
+    <div class="advo" aria-expanded="true">Avançado<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#BCC2CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg></div>
+    <div class="sub">
+      <div class="row"><span class="t"><b>Excluir direto</b><i>Revisar também sai de vez, sem passar pela Lixeira</i></span><span class="oo isoff"><span class="off">OFF</span><button type="button" role="switch" aria-checked="false" aria-label="Excluir direto" class="sw"><span></span></button><span class="on">ON</span></span></div>
+      <div class="row"><span class="t"><b>Idade dos temporários</b><i>Só sai o que não foi mexido há mais tempo que isso</i></span><span class="seg"><button type="button">1 dia</button><button type="button" class="on">7 dias</button><button type="button">30 dias</button></span></div>
+      <div class="row"><span class="t"><b>Lixeira</b><i>Incluir a Lixeira na análise</i></span><span class="oo isoff"><span class="off">OFF</span><button type="button" role="switch" aria-checked="false" aria-label="Lixeira" class="sw"><span></span></button><span class="on">ON</span></span></div>
+      <div class="row"><span class="t"><b>Widget de disco</b><i>Espaço livre sempre visível na área de trabalho</i></span><span class="oo isoff"><span class="off">OFF</span><button type="button" role="switch" aria-checked="false" aria-label="Widget de disco" class="sw"><span></span></button><span class="on">ON</span></span></div>
+      <div class="row"><span class="t"><b>Widget de desempenho</b><i>Mostra se o PC está lento e o que está pesando</i></span><span class="oo isoff"><span class="off">OFF</span><button type="button" role="switch" aria-checked="false" aria-label="Widget de desempenho" class="sw"><span></span></button><span class="on">ON</span></span></div>
+    </div>
+  </div></section>
+
+  <section class="sec"><h2>Outros</h2><div class="rows">
+    <div class="row"><span class="t"><b>OCR</b><i>Lê o texto de qualquer área da tela · Ctrl+Alt+T</i></span><span class="oo"><span class="off">OFF</span><button type="button" role="switch" aria-checked="true" aria-label="OCR" class="sw on"><span></span></button><span class="on">ON</span></span></div>
+    <div class="advo" aria-expanded="true">Avançado<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#BCC2CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg></div>
+    <div class="sub">
+      <div class="row"><span class="t"><b>Quebras de linha</b><i>Ao copiar o texto lido</i></span><span class="seg"><button type="button">Manter</button><button type="button" class="on">Juntar</button></span></div>
+      <div class="row"><span class="t"><b>Idiomas de leitura</b><i>Instalados: Português (Brasil)</i></span><button type="button" class="b">Adicionar idioma…</button></div>
+      <div class="row"><span class="t"><b>Pastas padrão Vizu</b><i>Edit, Links, Preview · cada uma com _Morto</i></span><button type="button" class="b">Editar</button></div>
+    </div>
+  </div></section>
+
+  <section class="sec"><h2>Sistema</h2><div class="rows">
+    <div class="advo" aria-expanded="true">Avançado<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#BCC2CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg></div>
+    <div class="sub">
+      <div class="row"><span class="t"><b>Fonte da interface</b><i>Qualquer fonte instalada no Windows</i></span><button type="button" class="b">Segoe UI</button></div>
+      <div class="row"><span class="t"><b>Iniciar com o Windows</b></span><span class="oo"><span class="off">OFF</span><button type="button" role="switch" aria-checked="true" aria-label="Iniciar com o Windows" class="sw on"><span></span></button><span class="on">ON</span></span></div>
+      <div class="row"><span class="t"><b>Ícone na área de notificação</b><i>Reiniciar ou encerrar com um clique</i></span><span class="oo"><span class="off">OFF</span><button type="button" role="switch" aria-checked="true" aria-label="Ícone na área de notificação" class="sw on"><span></span></button><span class="on">ON</span></span></div>
+      <div class="row"><span class="t"><b>Idioma</b></span><span class="seg"><button type="button" class="on">Português</button><button type="button">English</button><button type="button">Español</button></span></div>
+      <div class="row"><span class="t"><b>Atualizar automaticamente</b><i>Versão 9.12</i></span><span class="oo"><span class="off">OFF</span><button type="button" role="switch" aria-checked="true" aria-label="Atualizar automaticamente" class="sw on"><span></span></button><span class="on">ON</span></span></div>
+    </div>
+  </div></section>
+
+  <section class="sec"><h2>Temas</h2><div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; padding-top: 10px"><button type="button" class="tp" aria-pressed="false"><i style="background: #F2F3F5;"><u style="width: 60%; background: #FDFDFD"></u><u style="width: 40%; background: #FDFDFD"></u><s style="background: #1B1B1F"></s></i>Claro</button><button type="button" class="tp" aria-pressed="false"><i style="background: #161618;"><u style="width: 60%; background: #2A2A2E"></u><u style="width: 40%; background: #2A2A2E"></u><s style="background: #55555B"></s></i>Escuro</button><button type="button" class="tp" aria-pressed="false"><i style="background: #E4E9F1;"><u style="width: 60%; background: #FDFDFD"></u><u style="width: 40%; background: #FDFDFD"></u><s style="background: #FF6633"></s></i>Windows</button><button type="button" class="tp on" aria-pressed="true"><i style="background: #4A4F57; box-shadow: 0 0 0 2px #FF6633;"><u style="width: 60%; background: #5C6472"></u><u style="width: 40%; background: #5C6472"></u><s style="background: #FF6633"></s></i>Vizu Classic</button><button type="button" class="tp" aria-pressed="false"><i style="background: #0E0E10;"><u style="width: 60%; background: #1A1A1D"></u><u style="width: 40%; background: #1A1A1D"></u><s style="background: #FF6633"></s></i>Vizu Crispy</button></div></section>
+
+  <section class="sec"><h2 style="font-weight: 400; color: #BCC2CC">Clique para ver</h2><div style="display: flex; gap: 40px; padding-top: 14px"><button type="button" class="lk">Sobre o programa</button><button type="button" class="lk">Agradecimentos</button></div></section>
+
+  <footer style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 16px"><button type="button" class="fb">Atualizações</button><button type="button" class="fb">Desinstalar</button><button type="button" class="fb">Pasta do programa</button><button type="button" class="fb">Encerrar processo</button></footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1300,"height":3100}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
