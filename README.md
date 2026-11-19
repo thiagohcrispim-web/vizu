@@ -3,7 +3,7 @@
 <h3 align="center">Veja todos os seus arquivos de design no Windows,<br>mesmo sem os programas instalados.</h3>
 
 <p align="center">
-  <a href="https://github.com/thiagohcrispim-web/vizu/releases/latest/download/Vizu_Setup_9.12.0_x64.exe"><b>⬇ Baixar o Vizu para Windows</b></a> &nbsp;·&nbsp; grátis e de código aberto (MIT)
+  <a href="https://github.com/thiagohcrispim-web/vizu/releases/latest/download/Vizu_Setup_9.12.1_x64.exe"><b>⬇ Baixar o Vizu para Windows</b></a> &nbsp;·&nbsp; grátis e de código aberto (MIT)
 </p>
 
 ---
@@ -99,7 +99,7 @@ desligado nas Configurações.
 
 ## Instalar
 
-1. Baixe o **[instalador](https://github.com/thiagohcrispim-web/vizu/releases/latest/download/Vizu_Setup_9.12.0_x64.exe)** e abra. Não precisa de administrador.
+1. Baixe o **[instalador](https://github.com/thiagohcrispim-web/vizu/releases/latest/download/Vizu_Setup_9.12.1_x64.exe)** e abra. Não precisa de administrador.
 2. Pronto: as miniaturas aparecem conforme você navega pelas pastas.
 
 Para atualizar, o Vizu avisa sozinho quando sai versão nova. Para desinstalar, rode o instalador de novo ou use
@@ -155,7 +155,7 @@ https://docs.github.com/site-policy/privacy-policies/github-general-privacy-stat
 
 - Compilar no Linux: `./build.sh` (MinGW `g++-mingw-w64-x86-64-posix`; os headers mais novos do mingw-w64 estão em `third_party/`).
 - O GitHub Actions compila a cada envio e publica o instalador como artefato (`.github/workflows/build.yml`).
-- Instalação silenciosa: `Vizu_Setup_9.12.0_x64.exe /install /S` · desinstalar: `Vizu.exe /uninstall [/S]`.
+- Instalação silenciosa: `Vizu_Setup_9.12.1_x64.exe /install /S` · desinstalar: `Vizu.exe /uninstall [/S]`.
 - Diagnóstico de um arquivo: `Vizu.exe /diag "arquivo"` ou arraste o arquivo sobre `diagnostico.bat`.
 - A biblioteca `DesignThumbs.dll` (miniaturas do Explorer) e a chave de registro `HKCU\Software\DesignThumbs` mantêm o
   nome antigo, para não quebrar as miniaturas nem as configurações de quem já usa.
@@ -164,6 +164,7 @@ https://docs.github.com/site-policy/privacy-policies/github-general-privacy-stat
 <details>
 <summary><b>Histórico de versões</b></summary>
 
+- **v9.12.1** — Em Configurações › Outros, o **botão do ChatGPT** no relógio ganhou liga/desliga e **Editar botão**: uma caixinha onde você digita outro site (ou o caminho de um programa) para o botão abrir. Em branco volta para o ChatGPT. O preset Minimal desliga o botão; o Design liga.
 - **v9.12.0** — **Configurações novas, com presets**: no topo, *Aplicar presets* troca entre **Minimal** (só o Espaço e o OCR, o resto desligado), **Design** (quase tudo ligado; o padrão de instalações novas) e **Custom**, que entra sozinho quando você muda alguma opção. A janela ficou mais larga, com o nome da seção numa coluna fixa, chaves com **OFF/ON** e cada seção mostrando só o essencial; o resto fica em **Avançado**, recolhível. Novidades: atalho de teclado configurável para o **OCR** (Ctrl+Alt+T continua o padrão) e para abrir a **Limpeza**, botão do OCR no relógio que pode ser escondido, OCR também no **Vizu Lite**, e *Sobre o programa* e *Agradecimentos* abertos por links. O rodapé ganhou Atualizações, Desinstalar, Pasta do programa e Encerrar processo.
 - **v9.11.1** — Quem vinha de uma versão antiga e ficou com a fonte da interface antiga (Bahnschrift ou Segoe UI) volta para a Inter automaticamente; fontes escolhidas por você são mantidas. Ao desinstalar, o Vizu agora apaga o motor de PDF extraído em `%LOCALAPPDATA%\Vizu` e pergunta se também deve apagar as configurações (tema, fontes, relógio, agenda e widgets).
 - **v9.11.0** — **CorelDRAW sem Inkscape**: CDR e CMX viram **PDF vetorial**, **SVG** e PNG/JPG/WEBP/TIFF em alta resolução direto no Converter, sem baixar nada. O desenho é lido de verdade (libcdr embutida), não a miniatura do arquivo; textos viram curvas com as fontes do Windows; vários CDRs selecionados viram um PDF só. EPS continua no Vizu Ultra.

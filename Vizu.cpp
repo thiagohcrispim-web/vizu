@@ -2493,7 +2493,7 @@ enum { kTogSpace = 1, kTogAlt, kDelayMinus, kDelayPlus, kDpi72, kDpi300, kPdfSma
        kTogPicker, kBtnFolders, kLangPt, kLangEn, kLangEs, kTogUpdate, kBtnUpdate, kTheme0, kTheme1, kTheme2, kTheme3, kWebpMinus, kWebpPlus, kTogTray, kTogTempDel, kNeon0, kNeon1, kNeon2, kNeon3, kNeon4, kNeon5, kNeonRgb,
        kClockOn, kClockFont, kPomoT0, kPomoT1, kPomoT2, kPomoC0, kPomoC1, kPomoC2, kPomoC3, kTheftHist, kUiFont, kOcrOn, kOcrKeep, kOcrJoin, kOcrLang, kClk100, kClk90, kClk70, kClockDock, kSte, kTheme4, kTheftOn, kFocoOn, kAgendaOn, kVecText, kVecCurves, kSysToggle,
        kClOpen, kAge1, kAge7, kAge30, kTogCleanBin, kTogDiskW, kTogDiskWarn, kDiskLimMinus, kDiskLimPlus, kDiskAll0, kDiskAll1, kTogPerfW, kTogClockClean, kPrimao,
-       kPreset0, kPreset1, kPreset2, kTogOcrBtn, kHkOcr, kHkClean, kAdv0, kAdv1, kAdv2, kAdv3, kAdv4, kAdv5, kLinkAbout, kLinkThanks, kBack, kBtnUninstall, kBtnLiteUpgrade };
+       kPreset0, kPreset1, kPreset2, kTogOcrBtn, kHkOcr, kHkClean, kAdv0, kAdv1, kAdv2, kAdv3, kAdv4, kAdv5, kLinkAbout, kLinkThanks, kBack, kBtnUninstall, kBtnLiteUpgrade, kTogChat, kChatEdit };
 static const UINT kNeonPresets[6] = {0xFF6633, 0xFF2D95, 0x00E5FF, 0xB6FF3B, 0xA855F7, 0xFFD400};
 
 
@@ -2627,9 +2627,9 @@ static void ApplyPreset(int pr) {
         bool full = d && !g_lite;
         if (!full && g_clock.theft) ToggleTheft();
         if (!full && g_clock.phase) PomoStop();
-        g_clock.theftOn = full; g_clock.pomoOn = full; g_clock.agendaOn = full; g_clock.clean = full; g_clock.ocr = true; g_clock.ocrBtn = full;
+        g_clock.theftOn = full; g_clock.pomoOn = full; g_clock.agendaOn = full; g_clock.clean = full; g_clock.ocr = true; g_clock.ocrBtn = full; g_clock.chat = full;
         WriteDword(L"ClockTheft", full); WriteDword(L"ClockPomo", full); WriteDword(L"ClockAgenda", full); WriteDword(L"ClockClean", full);
-        WriteDword(L"OcrOn", 1); WriteDword(L"ClockOcr", full);
+        WriteDword(L"OcrOn", 1); WriteDword(L"ClockOcr", full); WriteDword(L"ClockChat", full);
         WriteDword(L"CleanRecycle", 0); // Lixeira fora da análise nos dois presets
         for (int k : {kWDisk, kWPerf}) if (WidgetOn(k)) { WriteDword(k == kWDisk ? L"DiskWidget" : L"PerfWidget", 0); WidgetEnable(k, false); }
         if (!g_lite && g_clock.on != full) { if (!full && g_clock.docked) ClockDock(false); ClockEnable(full); }
@@ -2642,8 +2642,8 @@ static void ApplyPreset(int pr) {
 // Sem preset guardado (quem vem da 9.11): reconhece se as opções batem com um dos presets; senão, Custom.
 static int DetectPreset() {
     bool base = g_cfg.space && g_clock.ocr && !g_cfg.tempPermanent && !ReadDword(L"CleanRecycle", 1) && !WidgetOn(kWDisk) && !WidgetOn(kWPerf);
-    bool on = g_cfg.picker && g_cfg.alt && g_clock.on && g_clock.agendaOn && g_clock.theftOn && g_clock.pomoOn && g_clock.clean && g_clock.ocrBtn;
-    bool off = !g_cfg.picker && !g_cfg.alt && !g_clock.on && !g_clock.agendaOn && !g_clock.theftOn && !g_clock.pomoOn && !g_clock.clean && !g_clock.ocrBtn;
+    bool on = g_cfg.picker && g_cfg.alt && g_clock.on && g_clock.agendaOn && g_clock.theftOn && g_clock.pomoOn && g_clock.clean && g_clock.ocrBtn && g_clock.chat;
+    bool off = !g_cfg.picker && !g_cfg.alt && !g_clock.on && !g_clock.agendaOn && !g_clock.theftOn && !g_clock.pomoOn && !g_clock.clean && !g_clock.ocrBtn && !g_clock.chat;
     return !base ? kPresetCustom : on ? kPresetDesign : off ? kPresetMinimal : kPresetCustom;
 }
 static void LoadPreset() {
@@ -2656,7 +2656,7 @@ static bool PresetOption(int id) {
     switch (id) {
     case kTogSpace: case kTogPicker: case kTogAlt: case kDelayMinus: case kDelayPlus: case kDpi72: case kDpi300: case kPdfSmall: case kPdfRaw:
     case kVecText: case kVecCurves: case kQualMinus: case kQualPlus: case kWebpMinus: case kWebpPlus: case kClockOn: case kTheftOn: case kFocoOn:
-    case kAgendaOn: case kTogClockClean: case kTogTempDel: case kTogCleanBin: case kTogDiskW: case kTogPerfW: case kOcrOn: case kTogOcrBtn:
+    case kAgendaOn: case kTogClockClean: case kTogTempDel: case kTogCleanBin: case kTogDiskW: case kTogPerfW: case kOcrOn: case kTogOcrBtn: case kTogChat:
     case kTogAuto: case kTogTray: case kTogUpdate: return true;
     default: return false;
     }
@@ -2667,11 +2667,72 @@ static std::wstring ShortVersion() { // "9.12.0" -> "9.12"
     return v;
 }
 
+// "Editar botão": caixinha com o endereço que o botão do ChatGPT abre (site ou programa).
+static int g_chatEditResult;
+static std::wstring g_chatEditText;
+static LRESULT CALLBACK ChatEditProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
+    if (msg == WM_COMMAND && (LOWORD(wp) == IDOK || LOWORD(wp) == IDCANCEL)) {
+        if (LOWORD(wp) == IDOK) { wchar_t b[2048] = {}; GetDlgItemTextW(h, 100, b, 2048); g_chatEditText = b; }
+        g_chatEditResult = LOWORD(wp); DestroyWindow(h); return 0;
+    }
+    if (msg == WM_CLOSE) { g_chatEditResult = IDCANCEL; DestroyWindow(h); return 0; }
+    return DefWindowProcW(h, msg, wp, lp);
+}
+// Endereço digitado: "chatgpt.com" vira https://chatgpt.com; caminho de programa ou outro esquema fica como está.
+static std::wstring NormalizeChatTarget(std::wstring v) {
+    v.erase(0, v.find_first_not_of(L" \t\"")); v.erase(v.find_last_not_of(L" \t\"") + 1);
+    if (v.empty()) return L"https://chatgpt.com";
+    bool path = v.find(L'\\') != std::wstring::npos || (v.size() > 1 && v[1] == L':');
+    if (!path && v.find(L"://") == std::wstring::npos && v.rfind(L"mailto:", 0) != 0) v = L"https://" + v;
+    return v;
+}
+static void EditChatButton(HWND owner) {
+    static bool reg = false;
+    if (!reg) { WNDCLASSW wc = {}; wc.lpfnWndProc = ChatEditProc; wc.hInstance = g_inst; wc.lpszClassName = L"VizuChatEdit"; wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
+                wc.hbrBackground = GetSysColorBrush(COLOR_BTNFACE); wc.hIcon = LoadIcon(g_inst, MAKEINTRESOURCE(1)); RegisterClassW(&wc); reg = true; }
+    UINT dpi = owner ? GetDpiForWindow(owner) : 96;
+    auto S = [dpi](int v) { return MulDiv(v, (int)dpi, 96); };
+    RECT orc = {0, 0, 800, 600}; if (owner) GetWindowRect(owner, &orc);
+    RECT rc = {0, 0, S(460), S(150)};
+    AdjustWindowRectExForDpi(&rc, WS_CAPTION | WS_SYSMENU, FALSE, WS_EX_DLGMODALFRAME, dpi);
+    int w = rc.right - rc.left, hh = rc.bottom - rc.top;
+    HWND d = CreateWindowExW(WS_EX_DLGMODALFRAME | WS_EX_TOPMOST, L"VizuChatEdit", T(L"Editar botão", L"Edit button", L"Editar botón"), WS_CAPTION | WS_SYSMENU | WS_POPUP,
+                             (orc.left + orc.right - w) / 2, (orc.top + orc.bottom - hh) / 2, w, hh, owner, nullptr, g_inst, nullptr);
+    if (!d) return;
+    NONCLIENTMETRICSW ncm = {sizeof(ncm)}; SystemParametersInfoForDpi(SPI_GETNONCLIENTMETRICS, sizeof(ncm), &ncm, 0, dpi);
+    HFONT font = CreateFontIndirectW(&ncm.lfMessageFont);
+    HWND lab = CreateWindowExW(0, L"STATIC", T(L"Site (ou programa) que o botão do relógio abre:", L"Site (or program) the clock button opens:", L"Sitio (o programa) que abre el botón del reloj:"),
+                               WS_CHILD | WS_VISIBLE, S(16), S(14), S(428), S(20), d, nullptr, g_inst, nullptr);
+    HWND ed = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", g_clock.app.c_str(), WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL, S(16), S(40), S(428), S(26), d, (HMENU)100, g_inst, nullptr);
+    HWND hint = CreateWindowExW(0, L"STATIC", T(L"Em branco volta para o ChatGPT.", L"Leave blank to go back to ChatGPT.", L"En blanco vuelve a ChatGPT."),
+                                WS_CHILD | WS_VISIBLE, S(16), S(72), S(428), S(20), d, nullptr, g_inst, nullptr);
+    HWND ok = CreateWindowExW(0, L"BUTTON", T(L"Salvar", L"Save", L"Guardar"), WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON, S(248), S(106), S(96), S(30), d, (HMENU)IDOK, g_inst, nullptr);
+    HWND ca = CreateWindowExW(0, L"BUTTON", T(L"Cancelar", L"Cancel", L"Cancelar"), WS_CHILD | WS_VISIBLE | WS_TABSTOP, S(348), S(106), S(96), S(30), d, (HMENU)IDCANCEL, g_inst, nullptr);
+    for (HWND c : {lab, ed, hint, ok, ca}) SendMessageW(c, WM_SETFONT, (WPARAM)font, TRUE);
+    SendMessageW(ed, EM_SETSEL, 0, -1);
+    g_chatEditResult = 0;
+    if (owner) EnableWindow(owner, FALSE);
+    ShowWindow(d, SW_SHOW); SetForegroundWindow(d); SetFocus(ed);
+    MSG m = {};
+    bool quit = false;
+    while (IsWindow(d)) {
+        if (GetMessageW(&m, nullptr, 0, 0) <= 0) { quit = true; break; }
+        if (m.message == WM_KEYDOWN && m.wParam == VK_ESCAPE) { SendMessageW(d, WM_COMMAND, IDCANCEL, 0); continue; }
+        if (!IsDialogMessageW(d, &m)) { TranslateMessage(&m); DispatchMessageW(&m); } // Enter = Salvar (botão padrão)
+    }
+    if (owner) { EnableWindow(owner, TRUE); SetForegroundWindow(owner); }
+    DeleteObject(font);
+    if (quit) { PostQuitMessage((int)m.wParam); return; }
+    if (g_chatEditResult == IDOK) { g_clock.app = NormalizeChatTarget(g_chatEditText); ClockSave(); ClockRender(); }
+}
+
 static void SettingsAction(int id) {
     if (g_capHot && id != kHkOcr && id != kHkClean) CaptureHotkey(g_capHot); // clicar em outro lugar cancela a captura
     if (!g_lite && g_preset != kPresetCustom && PresetOption(id)) { g_preset = kPresetCustom; WriteDword(L"SettingsPreset", kPresetCustom); }
     switch (id) {
     case kPreset0: case kPreset1: case kPreset2: ApplyPreset(id - kPreset0); return;
+    case kTogChat: g_clock.chat = !g_clock.chat; WriteDword(L"ClockChat", g_clock.chat); ClockRender(); return;
+    case kChatEdit: EditChatButton(g_settingsWnd); return;
     case kTogOcrBtn: g_clock.ocrBtn = !g_clock.ocrBtn; WriteDword(L"ClockOcr", g_clock.ocrBtn); ClockRender(); return;
     case kHkOcr: case kHkClean: CaptureHotkey(id); return;
     case kAdv0: case kAdv1: case kAdv2: case kAdv3: case kAdv4: case kAdv5: g_advOpen[id - kAdv0] = !g_advOpen[id - kAdv0]; return;
@@ -3045,6 +3106,13 @@ static void PaintSettings(HWND h) {
     rows = {{RH, 0, [&](D2D1_RECT_F r) { rlabel(r, L"OCR", ocrSub.c_str()); rtoggle(kOcrOn, r, g_clock.ocr); }}};
     if (!g_lite) rows.push_back({RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Botão no relógio", L"Button on the clock", L"Botón en el reloj"), T(L"O botão de ler texto no relógio abre o OCR", L"The read-text button on the clock opens OCR", L"El botón de leer texto en el reloj abre el OCR")); rtoggle(kTogOcrBtn, r, g_clock.ocrBtn); }});
     rows.push_back(hotkeyRow(kHkOcr, OcrHotkey(), T(L"do OCR", L"OCR", L"del OCR")));
+    std::wstring chatSub; // o que o botão abre hoje
+    if (!g_lite) {
+        chatSub = g_clock.app == L"https://chatgpt.com" ? std::wstring(T(L"Abre o ChatGPT no relógio", L"Opens ChatGPT from the clock", L"Abre ChatGPT desde el reloj"))
+                                                        : std::wstring(T(L"Abre ", L"Opens ", L"Abre ")) + g_clock.app;
+        rows.push_back({RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Botão do ChatGPT", L"ChatGPT button", L"Botón de ChatGPT"), chatSub.c_str()); rtoggle(kTogChat, r, g_clock.chat); }});
+        rows.push_back({RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Endereço do botão", L"Button address", L"Dirección del botón"), T(L"Troque o ChatGPT por outro site ou programa", L"Swap ChatGPT for another site or program", L"Cambia ChatGPT por otro sitio o programa")); rpill(r, kChatEdit, T(L"Editar botão", L"Edit button", L"Editar botón"), 120 * s); }});
+    }
     {
         std::vector<SRow> adv;
         adv.push_back({SH, 1, [&](D2D1_RECT_F r) { rlabel(r, T(L"Quebras de linha", L"Line breaks", L"Saltos de línea"), T(L"Ao copiar o texto lido", L"When copying the text", L"Al copiar el texto")); rseg(r, 200 * s, {T(L"Manter", L"Keep", L"Mantener"), T(L"Juntar", L"Join", L"Unir")}, ReadDword(L"OcrJoin", 1) ? 1 : 0, kOcrKeep); }});

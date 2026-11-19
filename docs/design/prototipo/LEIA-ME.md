@@ -32,4 +32,4 @@ Página "2 · Vizu Classic" do canvas. O programa segue estas telas (`PaintSetti
 - `Config-Avancado.dc.html`: os quadros de "Avançado" abertos.
 - `Config-Lite.dc.html`: edição Lite, sem presets, com Ver, Outros (OCR) e Sistema.
 
-Chaves de registro novas em `HKCU\Software\DesignThumbs`: `SettingsPreset` (0 Minimal, 1 Design, 2 Custom; 100 = aplicar Design na primeira abertura depois de uma instalação nova), `ClockOcr` (botão do OCR no relógio), `OcrHotkey` e `CleanHotkey` (modificadores << 16 | tecla virtual; o OCR usa Ctrl+Alt+T por padrão e a Limpeza começa sem atalho).
+Chaves de registro novas em `HKCU\Software\DesignThumbs`: `SettingsPreset` (0 Minimal, 1 Design, 2 Custom; 100 = aplicar Design na primeira abertura depois de uma instalação nova), `ClockOcr` (botão do OCR no relógio), `ClockChat` (botão do ChatGPT no relógio, 9.12.1; o endereço continua em `ClockApp`), `OcrHotkey` e `CleanHotkey` (modificadores << 16 | tecla virtual; o OCR usa Ctrl+Alt+T por padrão e a Limpeza começa sem atalho).
