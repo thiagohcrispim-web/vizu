@@ -40,6 +40,7 @@ struct ClockState {
     bool reminderOpen = false;
     bool ocr = true;          // botão e atalho Ctrl+Alt+T do OCR
     bool clean = true;        // botão da Limpeza (antes do OCR)
+    bool chat = true;         // botão do ChatGPT (ou do site/programa escolhido em ClockApp)
     bool ocrBtn = true;       // botão do OCR no relógio (o atalho vale mesmo sem ele)
     bool theftOn = true, pomoOn = true, agendaOn = true; // recursos do relógio que o usuário pode desligar
     DWORD scalePct = 100;     // tamanho: 100, 90 ou 70%
@@ -398,7 +399,7 @@ static void ClockRender() {
     }
     float timeW = 2 * w2 + wc, chip = 40 * s, gap = 6 * s, theftW = g_clock.theft ? 104 * s : chip;
     bool showTri = pomo || g_clock.agendaOn;
-    float Wc = 14 * s + (showTri ? 20 * s + 12 * s : 0) + timeW + 12 * s + (g_clock.theftOn ? theftW + gap : 0) + (g_clock.pomoOn ? chip + gap : 0) + chip + (g_clock.clean ? gap + chip : 0) + (g_clock.ocr && g_clock.ocrBtn ? gap + chip : 0) + 10 * s;
+    float Wc = 14 * s + (showTri ? 20 * s + 12 * s : 0) + timeW + 12 * s + (g_clock.theftOn ? theftW + gap : 0) + (g_clock.pomoOn ? chip + gap : 0) + (pomo || g_clock.chat ? chip : -gap) + (g_clock.clean ? gap + chip : 0) + (g_clock.ocr && g_clock.ocrBtn ? gap + chip : 0) + 10 * s;
     UINT W = (UINT)(Wc + 2 * M), Ht = (UINT)(H + 2 * M);
     fmt::Canvas cv(W, Ht);
     if (!cv.rt) return;
@@ -496,7 +497,7 @@ static void ClockRender() {
         p.FilledIcon("skull", g_clock.rChip[0], 20 * s, th.icon);
     }
     if (g_clock.pomoOn) g_clock.rChip[1] = chipRect(chip);
-    g_clock.rChip[2] = chipRect(chip);
+    if (pomo || g_clock.chat) g_clock.rChip[2] = chipRect(chip); // no Pomodoro vira o botão de parar
     if (pomo) {
         p.Fill(g_clock.rChip[1], chip / 2, ui::Rgba(pc, g_clock.hot == kClkChip1 ? 0.8f : 1.0f));
         UINT on = (pc >> 16 & 255) * 3 + (pc >> 8 & 255) * 6 + (pc & 255) > 1700 ? 0x0B0B0C : 0xFFFFFF; // texto legível sobre a cor
@@ -505,8 +506,10 @@ static void ClockRender() {
         p.FeatherIcon("square", g_clock.rChip[2], 16 * s, th.icon);
     } else {
         if (g_clock.pomoOn) { p.Fill(g_clock.rChip[1], chip / 2, g_clock.hot == kClkChip1 ? hotBg : chipBg); p.FilledIcon("timer", g_clock.rChip[1], 20 * s, th.icon); }
+        if (g_clock.chat) {
         p.Fill(g_clock.rChip[2], chip / 2, g_clock.hot == kClkChip2 ? hotBg : chipBg);
         p.FilledIcon("chat-ai", g_clock.rChip[2], 20 * s, th.icon);
+        }
     }
     if (g_clock.clean) { // Limpeza (vem antes do OCR)
         g_clock.rChip[4] = chipRect(chip);
@@ -757,6 +760,7 @@ static void ClockLoad() {
     g_clock.ocr = ReadDword(L"OcrOn", 1) != 0;
     g_clock.clean = ReadDword(L"ClockClean", 1) != 0;
     g_clock.ocrBtn = ReadDword(L"ClockOcr", 1) != 0;
+    g_clock.chat = ReadDword(L"ClockChat", 1) != 0;
     g_clock.theftOn = ReadDword(L"ClockTheft", 1) != 0;
     g_clock.pomoOn = ReadDword(L"ClockPomo", 1) != 0;
     g_clock.agendaOn = ReadDword(L"ClockAgenda", 1) != 0;
