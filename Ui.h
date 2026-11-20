@@ -9,6 +9,8 @@
 #include <cstring>
 #include <cstdlib>
 #include <cmath>
+#include <map>
+#include <vector>
 #include "Feather.h"
 #include "Fonts.h"
 
@@ -54,16 +56,17 @@ inline UINT SystemAccent() {
     return 0x0067C0;
 }
 
-// Crispy: preto, neon cyberpunk #FF6633 e fonte Bahnschrift.
+// Crispy V2: grafite em vidro, cartões em degradê de 115°, borda degradê branco -> neon e neon em duas camadas.
+// Cor dominante #FF6633 (ou a "Cor do neon" escolhida pelo usuário). Fonte Bahnschrift.
 inline Theme CrispyTheme(bool glass) {
     Theme t;
     t.dark = true; t.glass = glass; t.neon = true;
     t.font = L"Bahnschrift";
-    t.tint = glass ? Rgba(0x0A0A0B, 0.85f) : Rgba(0x0A0A0B); // 85%: vidro translúcido
-    t.panel = Rgba(0xFFFFFF, 0.045f); t.panelHot = Rgba(NeonColor(), 0.16f); t.stroke = Rgba(NeonColor(), 0.32f);
-    t.text = Rgba(0xF2F2F2); t.text2 = Rgba(0x9A9AA1);
+    t.tint = glass ? Rgba(0x101013, 0.55f) : Rgba(0x08080A); // vidro: grafite ~55% sobre o acrílico do DWM
+    t.panel = Rgba(0x16171B, 0.92f); t.panelHot = Rgba(NeonColor(), 0.16f); t.stroke = Rgba(0x232326);
+    t.text = Rgba(0xF2F2F2); t.text2 = Rgba(0xA8A8AF);
     t.accent = Rgba(NeonColor()); t.onAccent = Rgba(0x0E0E10); t.danger = Rgba(0xFF3B5C);
-    t.track = Rgba(0xFFFFFF, 0.10f); t.knob = Rgba(0xF2F2F2); t.knobOn = Rgba(0xF2F2F2);
+    t.track = Rgba(0x141416); t.knob = Rgba(0xF2F2F2); t.knobOn = Rgba(0xF2F2F2);
     t.glow = NeonColor(); t.glowA = 0.40f;
     t.segFill = Rgba(NeonColor(), 0.18f); t.segText = Rgba(NeonColor()); t.icon = t.text;
     return t;
@@ -131,6 +134,16 @@ inline Theme MakeTheme(int mode, bool glass) {
 inline void Backdrop(ID2D1RenderTarget* rt, const Theme& th, float w, float h) {
     if (th.classic) return; // Vizu Classic: fundo chapado
     struct B { float x, y, r; UINT c; float a; };
+    if (th.neon) { // Crispy V2: mancha laranja em cima à esquerda e azulada embaixo à direita (mais fortes sem o vidro do DWM)
+        float m = (w > h ? w : h), k = th.glass ? 0.6f : 1.0f;
+        B cb[2] = {{w * 0.08f, h * 0.02f, m * 0.60f, NeonColor(), 0.20f * k}, {w * 0.95f, h * 1.0f, m * 0.55f, 0x3A5BFF, 0.12f * k}};
+        ID2D1SolidColorBrush* b = nullptr;
+        for (auto& x : cb) for (int i = 24; i >= 1; --i) {
+            float r = x.r * i / 24;
+            if (SUCCEEDED(rt->CreateSolidColorBrush(Rgba(x.c, x.a / 24 * 1.6f), &b))) { rt->FillEllipse(D2D1::Ellipse(D2D1::Point2F(x.x, x.y), r, r), b); b->Release(); }
+        }
+        return;
+    }
     B bl[3] = {{w * 0.05f, h * 0.0f, (w > h ? w : h) * 0.55f, th.neon ? NeonColor() : th.dark ? 0x5A5A62u : 0xFFFFFFu, th.neon ? 0.22f : th.dark ? 0.16f : 0.55f},
                {w * 1.0f, h * 1.05f, (w > h ? w : h) * 0.55f, th.neon ? NeonColor() : th.dark ? 0x3A3A40u : 0xD0D4DCu, th.neon ? 0.05f : th.dark ? 0.14f : 0.35f},
                {w * 0.85f, h * 0.1f, (w > h ? w : h) * 0.30f, th.neon ? NeonColor() : th.glow, th.neon ? 0.10f : th.dark ? 0.04f : 0.10f}};
@@ -156,10 +169,103 @@ inline bool EnableGlass(HWND h, bool dark) {
     struct CompositionData { int attrib; void* data; SIZE_T size; };
     typedef BOOL(WINAPI * SetWca)(HWND, CompositionData*);
     static SetWca set = (SetWca)(void*)GetProcAddress(GetModuleHandleW(L"user32.dll"), "SetWindowCompositionAttribute");
+    DWORD backdrop = 3; // DWMSBT_TRANSIENTWINDOW (acrílico do Windows 11 22H2+); ignorado nas versões antigas
+    DwmSetWindowAttribute(h, 38, &backdrop, sizeof(backdrop));
     if (!set) return false;
     AccentPolicy ap = {4 /* ACCENT_ENABLE_ACRYLICBLURBEHIND */, 0, 0x01000000, 0};
     CompositionData cd = {19 /* WCA_ACCENT_POLICY */, &ap, sizeof(ap)};
     return set(h, &cd) != FALSE;
+}
+
+
+// ---------- movimento ----------
+
+// "Mostrar animações no Windows" desligado = reduzir movimento.
+inline bool ReducedMotion() { BOOL on = TRUE; SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &on, 0); return !on; }
+
+// cubic-bezier(x1, y1, x2, y2) como no CSS.
+inline float CubicBezier(float x1, float y1, float x2, float y2, float x) {
+    if (x <= 0) return 0;
+    if (x >= 1) return 1;
+    auto bx = [&](float t) { float u = 1 - t; return 3 * u * u * t * x1 + 3 * u * t * t * x2 + t * t * t; };
+    auto by = [&](float t) { float u = 1 - t; return 3 * u * u * t * y1 + 3 * u * t * t * y2 + t * t * t; };
+    float lo = 0, hi = 1, t = x;
+    for (int i = 0; i < 24; ++i) { float v = bx(t); if (fabsf(v - x) < 1e-4f) break; if (v < x) lo = t; else hi = t; t = (lo + hi) / 2; }
+    return by(t);
+}
+inline float EaseOut(float t) { return CubicBezier(0.23f, 1, 0.32f, 1, t); }   // entradas
+inline float EaseInOut(float t) { return CubicBezier(0.77f, 0, 0.175f, 1, t); } // o que já está na tela
+
+inline double NowMs() {
+    static LARGE_INTEGER f = {}; if (!f.QuadPart) QueryPerformanceFrequency(&f);
+    LARGE_INTEGER c; QueryPerformanceCounter(&c);
+    return c.QuadPart * 1000.0 / f.QuadPart;
+}
+
+// Valores que deslizam até o alvo. Cada janela tem um; Frame() no começo do desenho, Pump() no fim.
+// Nada anima sozinho: um valor só se move quando o alvo muda (ação ou mouse).
+struct Anim {
+    struct V { float from, to, cur; double start; float dur; bool inout; };
+    std::map<int, V> m;
+    double now = 0;
+    bool busy = false, reduced = false;
+    void Frame() { now = NowMs(); busy = false; reduced = ReducedMotion(); }
+    // motion: posição/escala (some no "reduzir movimento"); senão opacidade/cor (no máx. 150 ms nesse modo).
+    float Get(int key, float target, float dur = 220, bool inout = false, bool motion = false) {
+        auto it = m.find(key);
+        if (it == m.end()) { m[key] = {target, target, target, now, 0, inout}; return target; }
+        V& v = it->second;
+        if (v.to != target) {
+            v.from = v.cur; v.to = target; v.start = now; v.inout = inout;
+            v.dur = reduced ? (motion ? 0 : (dur < 150 ? dur : 150)) : dur;
+        }
+        if (v.dur <= 0) return v.cur = v.to;
+        float k = (float)((now - v.start) / v.dur);
+        if (k >= 1) return v.cur = v.to;
+        if (k < 0) k = 0;
+        busy = true;
+        return v.cur = v.from + (v.to - v.from) * (v.inout ? EaseInOut(k) : EaseOut(k));
+    }
+    // Começa do valor "from" (entrada de janela/aviso).
+    void Start(int key, float from, float to, float dur, bool motion = false) {
+        float d = reduced || ReducedMotion() ? (motion ? 0 : (dur < 150 ? dur : 150)) : dur;
+        m[key] = {from, to, from, NowMs(), d, false};
+    }
+    // Ainda animando: pede outro quadro em ~16 ms. Janela oculta ou minimizada não gasta nada.
+    void Pump(HWND h, UINT_PTR timer) {
+        if (busy && IsWindowVisible(h) && !IsIconic(h)) SetTimer(h, timer, 16, nullptr);
+        else KillTimer(h, timer);
+    }
+};
+enum : UINT_PTR { kAnimTick = 0x7A11 }; // id de timer reservado para Anim::Pump em todas as janelas
+
+inline D2D1_COLOR_F Mix(D2D1_COLOR_F a, D2D1_COLOR_F b, float k) {
+    return D2D1::ColorF(a.r + (b.r - a.r) * k, a.g + (b.g - a.g) * k, a.b + (b.b - a.b) * k, a.a + (b.a - a.a) * k);
+}
+
+// Granulado: bitmap 128x128 de ruído fixo, repetido. Um por render target (vive enquanto ele viver).
+inline ID2D1BitmapBrush* NoiseBrush(ID2D1RenderTarget* rt) {
+    struct E { ID2D1RenderTarget* rt; ID2D1BitmapBrush* b; };
+    static std::vector<E> cache;
+    for (size_t i = 0; i < cache.size();) { // solta os de render targets já liberados (só a cache segura a referência)
+        cache[i].rt->AddRef();
+        if (cache[i].rt->Release() == 1 && cache[i].rt != rt) { cache[i].b->Release(); cache[i].rt->Release(); cache.erase(cache.begin() + i); }
+        else ++i;
+    }
+    for (auto& e : cache) if (e.rt == rt) return e.b;
+    const UINT N = 128;
+    std::vector<UINT> px(N * N);
+    UINT seed = 0x9E3779B9;
+    for (auto& v : px) { seed ^= seed << 13; seed ^= seed >> 17; seed ^= seed << 5; UINT a = (seed >> 24) & 0xFF, g = a; v = a << 24 | g << 16 | g << 8 | g; } // pré-multiplicado: cinza = alfa
+    ID2D1Bitmap* bmp = nullptr; ID2D1BitmapBrush* br = nullptr;
+    D2D1_BITMAP_PROPERTIES bp = D2D1::BitmapProperties(D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED));
+    if (FAILED(rt->CreateBitmap(D2D1::SizeU(N, N), px.data(), N * 4, bp, &bmp))) return nullptr;
+    rt->CreateBitmapBrush(bmp, D2D1::BitmapBrushProperties(D2D1_EXTEND_MODE_WRAP, D2D1_EXTEND_MODE_WRAP), &br);
+    bmp->Release();
+    if (!br) return nullptr;
+    rt->AddRef();
+    cache.push_back({rt, br});
+    return br;
 }
 
 // ---------- superfície Direct2D com transparência ----------
@@ -289,7 +395,13 @@ public:
     IDWriteFactory* dw;
     const Theme& th;
     float s; // escala de DPI
+    Anim* an = nullptr;               // valores animados da janela (nulo: sem animação)
+    float mx = -1e6f, my = -1e6f;     // mouse em coordenadas do cliente (luz que segue o cursor)
+    bool down = false;                // botão do mouse apertado (efeito de "afundar")
     Painter(ID2D1RenderTarget* r, IDWriteFactory* d, const Theme& t, float scale) : rt(r), dw(d), th(t), s(scale) {}
+    // Valor animado (sem Anim, vai direto ao alvo).
+    float A(int key, float target, float dur = 220, bool inout = false, bool motion = false) { return an && key ? an->Get(key, target, dur, inout, motion) : target; }
+    bool Over(const D2D1_RECT_F& r) const { return mx >= r.left && mx < r.right && my >= r.top && my < r.bottom; }
 
     static const wchar_t* IconFont() {
         static const wchar_t* name = nullptr;
@@ -312,25 +424,127 @@ public:
         D2D1_RECT_F in = D2D1::RectF(r.left + w / 2, r.top + w / 2, r.right - w / 2, r.bottom - w / 2);
         if (SUCCEEDED(rt->CreateSolidColorBrush(c, &b))) { rt->DrawRoundedRectangle(D2D1::RoundedRect(in, radius, radius), b, w); b->Release(); }
     }
-    // Cartão de vidro: preenchimento translúcido + borda de luz (no Crispy, borda laranja com leve brilho).
-    void Glass(const D2D1_RECT_F& r, float radius, bool hot = false) {
+    // Cartão de vidro: preenchimento translúcido + borda de luz. No Crispy, o cartão V2 (ver Card).
+    void Glass(const D2D1_RECT_F& r, float radius, bool hot = false, int key = 0) {
+        if (th.neon) { Card(r, radius, key); return; }
         Fill(r, radius, hot ? th.panelHot : th.panel);
-        if (th.neon && hot) Glow(r, radius);
         Stroke(r, radius, th.stroke);
     }
-    // Brilho neon discreto em volta de um retângulo arredondado.
-    void Glow(const D2D1_RECT_F& r, float radius) {
-        for (int i = 3; i >= 1; --i) {
-            float g = i * 1.6f * s;
-            Stroke(D2D1::RectF(r.left - g, r.top - g, r.right + g, r.bottom + g), radius + g, Rgba(NeonColor(), 0.07f * (4 - i)), 1.4f * s);
+    // Degradê linear em um ângulo CSS (0° = para cima, 90° = para a direita) cobrindo o retângulo.
+    ID2D1LinearGradientBrush* Angle(const D2D1_RECT_F& r, float deg, const D2D1_GRADIENT_STOP* st, UINT n) {
+        float a = deg * 3.14159265f / 180, dx = sinf(a), dy = -cosf(a);
+        float w = r.right - r.left, h = r.bottom - r.top, half = (fabsf(w * dx) + fabsf(h * dy)) / 2;
+        float cx = (r.left + r.right) / 2, cy = (r.top + r.bottom) / 2;
+        ID2D1GradientStopCollection* c = nullptr; ID2D1LinearGradientBrush* b = nullptr;
+        if (FAILED(rt->CreateGradientStopCollection(st, n, &c))) return nullptr;
+        rt->CreateLinearGradientBrush(D2D1::LinearGradientBrushProperties(D2D1::Point2F(cx - dx * half, cy - dy * half), D2D1::Point2F(cx + dx * half, cy + dy * half)), c, &b);
+        c->Release();
+        return b;
+    }
+    void FillBrush(const D2D1_RECT_F& r, float radius, ID2D1Brush* b) { if (b) rt->FillRoundedRectangle(D2D1::RoundedRect(r, radius, radius), b); }
+    void StrokeBrush(const D2D1_RECT_F& r, float radius, ID2D1Brush* b, float w) {
+        if (b) rt->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(r.left + w / 2, r.top + w / 2, r.right - w / 2, r.bottom - w / 2), radius, radius), b, w);
+    }
+    // Brilho difuso atrás do cartão (~22 px, mais forte embaixo à direita). k: 0..1 de intensidade.
+    void BackGlow(const D2D1_RECT_F& r, float radius, float k) {
+        const int n = 9; const float spread = 22 * s;
+        for (int i = n; i >= 1; --i) {
+            float g = spread * i / n, t = (float)i / n;
+            D2D1_RECT_F q = D2D1::RectF(r.left - g * 0.6f, r.top - g * 0.5f, r.right + g, r.bottom + g * 1.1f);
+            Fill(q, radius + g, Rgba(NeonColor(), k * 0.30f / n * (1.6f - t)));
         }
     }
+    // Granulado sobre uma área arredondada (a = opacidade).
+    void Noise(const D2D1_RECT_F& r, float radius, float a) {
+        ID2D1BitmapBrush* nb = NoiseBrush(rt);
+        if (!nb || a <= 0) return;
+        nb->SetOpacity(a);
+        rt->FillRoundedRectangle(D2D1::RoundedRect(r, radius, radius), nb);
+    }
+    // Cartão Crispy V2: brilho atrás, degradê de 115°, borda em degradê, filete no topo e luz que segue o mouse.
+    // key != 0 anima o brilho e a luz do cursor (aparece ao entrar, apaga em ~250 ms ao sair).
+    void Card(const D2D1_RECT_F& r, float radius, int key = 0, bool glow = true) {
+        if (!th.neon) { Fill(r, radius, th.panel); Stroke(r, radius, th.stroke); return; }
+        bool over = Over(r);
+        float hov = A(key ? key * 4 + 1 : 0, over ? 1.0f : 0.0f, over ? 300.0f : 250.0f);
+        if (glow) { BackGlow(r, radius, 0.75f + 0.25f * hov); Noise(D2D1::RectF(r.left - 16 * s, r.top - 12 * s, r.right + 22 * s, r.bottom + 24 * s), radius + 18 * s, 0.10f * 0.30f); }
+        Fill(r, radius, Rgba(0x16171B));
+        D2D1_GRADIENT_STOP fs[4] = {{0, Rgba(0x0A0B0E, 0.94f)}, {0.45f, Rgba(0x121318, 0.94f)}, {0.75f, Rgba(0x16171B, 0.92f)}, {1, Rgba(0x1E2028, 0.90f)}};
+        if (auto* b = Angle(r, 115, fs, 4)) { FillBrush(r, radius, b); b->Release(); }
+        UINT n = NeonColor(), hi = 0xFF8A5C;
+        if (n != 0xFF6633) hi = n; // outra cor do neon: o fim da borda segue a escolha
+        D2D1_GRADIENT_STOP bs[4] = {{0, Rgba(0xFFFFFF, 0.10f)}, {0.35f, Rgba(n, 0.18f)}, {0.70f, Rgba(n, 0.55f)}, {1, Rgba(hi)}};
+        if (auto* b = Angle(r, 115, bs, 4)) { StrokeBrush(r, radius, b, 1 * s); b->Release(); }
+        Fill(D2D1::RectF(r.left + radius, r.top + 1 * s, r.right - radius, r.top + 2 * s), 0, Rgba(0xFFFFFF, 0.06f)); // filete de luz no topo
+        // luz que segue o cursor (guarda a última posição para apagar no lugar ao sair)
+        if (key && an) {
+            float lx = A(key * 4 + 2, over ? mx : an->m.count(key * 4 + 2) ? an->m[key * 4 + 2].to : mx, 0);
+            float ly = A(key * 4 + 3, over ? my : an->m.count(key * 4 + 3) ? an->m[key * 4 + 3].to : my, 0);
+            if (hov > 0.01f) CursorLight(r, radius, lx, ly, hov);
+        }
+    }
+    void CursorLight(const D2D1_RECT_F& r, float radius, float x, float y, float k) {
+        ID2D1GradientStopCollection* c = nullptr; ID2D1RadialGradientBrush* b = nullptr;
+        D2D1_GRADIENT_STOP st[2] = {{0, Rgba(NeonColor(), 0.09f * k)}, {1, Rgba(NeonColor(), 0)}};
+        if (SUCCEEDED(rt->CreateGradientStopCollection(st, 2, &c))) {
+            float R = 220 * s;
+            rt->CreateRadialGradientBrush(D2D1::RadialGradientBrushProperties(D2D1::Point2F(x, y), D2D1::Point2F(0, 0), R, R), c, &b);
+            c->Release();
+        }
+        if (b) { FillBrush(r, radius, b); b->Release(); }
+        D2D1_GRADIENT_STOP bs[2] = {{0, Rgba(NeonColor(), 0.55f * k)}, {1, Rgba(NeonColor(), 0)}}; // borda mais intensa perto do cursor
+        if (SUCCEEDED(rt->CreateGradientStopCollection(bs, 2, &c))) {
+            float R = 140 * s;
+            rt->CreateRadialGradientBrush(D2D1::RadialGradientBrushProperties(D2D1::Point2F(x, y), D2D1::Point2F(0, 0), R, R), c, &b);
+            c->Release();
+            if (b) { StrokeBrush(r, radius, b, 1 * s); b->Release(); }
+        }
+    }
+    // Moldura da janela Crispy: contorno interno fino, filete branco no topo, toque laranja embaixo e granulado de 6%.
+    void WindowFrame(const D2D1_RECT_F& r, float radius) {
+        if (!th.neon) { Stroke(r, radius, th.stroke); return; }
+        Noise(r, radius, 0.06f);
+        D2D1_GRADIENT_STOP bs[4] = {{0, Rgba(0xFFFFFF, 0.10f)}, {0.35f, Rgba(NeonColor(), 0.18f)}, {0.70f, Rgba(NeonColor(), 0.40f)}, {1, Rgba(NeonColor(), 0.75f)}};
+        if (auto* b = Angle(r, 115, bs, 4)) { StrokeBrush(r, radius, b, 1 * s); b->Release(); }
+        Fill(D2D1::RectF(r.left + radius, r.top + 1 * s, r.right - radius, r.top + 2 * s), 0, Rgba(0xFFFFFF, 0.10f));
+        D2D1_GRADIENT_STOP ls[3] = {{0, Rgba(NeonColor(), 0)}, {0.5f, Rgba(NeonColor(), 0.55f)}, {1, Rgba(NeonColor(), 0)}};
+        D2D1_RECT_F bl = D2D1::RectF(r.left + radius, r.bottom - 2 * s, r.right - radius, r.bottom - 1 * s);
+        if (auto* b = Angle(bl, 90, ls, 3)) { rt->FillRectangle(bl, b); b->Release(); }
+    }
+    // Barra de rolagem: trilho grafite fino e botão laranja com neon (Crispy) ou discreto (demais temas).
+    void ScrollBar(const D2D1_RECT_F& track, float pos, float len) { // pos/len em fração 0..1
+        float w = track.right - track.left, h = track.bottom - track.top, th2 = len * h; if (th2 < 30 * s) th2 = 30 * s;
+        float ty = track.top + (h - th2) * pos;
+        D2D1_RECT_F k = D2D1::RectF(track.left, ty, track.right, ty + th2);
+        if (th.neon) { Fill(track, w / 2, Rgba(0x141416)); Neon(k, w / 2, 0.8f); Fill(k, w / 2, th.accent); }
+        else Fill(k, w / 2, th.dark ? Rgba(0xFFFFFF, 0.22f) : Rgba(0x000000, 0.22f));
+    }
+    // Neon em duas camadas: próxima e intensa + larga e suave. k: 0..1. Só no Crispy.
+    void Neon(const D2D1_RECT_F& r, float radius, float k = 1) {
+        if (!th.neon || k <= 0.01f) return;
+        for (int i = 8; i >= 1; --i) { // larga e suave (~14 px)
+            float g = i * 1.8f * s;
+            Fill(D2D1::RectF(r.left - g, r.top - g, r.right + g, r.bottom + g), radius + g, Rgba(NeonColor(), k * 0.022f));
+        }
+        for (int i = 3; i >= 1; --i) { // próxima e intensa (~4 px)
+            float g = i * 1.3f * s;
+            Stroke(D2D1::RectF(r.left - g, r.top - g, r.right + g, r.bottom + g), radius + g, Rgba(NeonColor(), k * 0.16f * (4 - i)), 1.4f * s);
+        }
+    }
+    void Glow(const D2D1_RECT_F& r, float radius) { Neon(r, radius, 1); }
     // Sombra suave barata (camadas translúcidas).
     void Shadow(const D2D1_RECT_F& r, float radius) {
         for (int i = 4; i >= 1; --i) {
             float g = i * 3 * s;
             Fill(D2D1::RectF(r.left - g, r.top - g + 2 * s, r.right + g, r.bottom + g + 4 * s), radius + g, Rgba(0x000000, th.dark ? 0.07f : 0.035f));
         }
+    }
+    // "Afundar" ao clicar: escala 0,97 por ~120 ms em volta do centro. Devolve o retângulo a usar.
+    D2D1_RECT_F Press(const D2D1_RECT_F& r, int key, bool hot) {
+        float k = A(key ? key * 4 + 3 : 0, hot && down ? 0.97f : 1.0f, 120, true, true);
+        if (k >= 0.999f) return r;
+        float cx = (r.left + r.right) / 2, cy = (r.top + r.bottom) / 2, w = (r.right - r.left) * k / 2, h = (r.bottom - r.top) * k / 2;
+        return D2D1::RectF(cx - w, cy - h, cx + w, cy + h);
     }
 
     IDWriteTextFormat* Format(float size, DWRITE_FONT_WEIGHT weight, DWRITE_TEXT_ALIGNMENT align, const wchar_t* family = nullptr, bool wrap = false) {
@@ -445,40 +659,56 @@ public:
         if (f && SUCCEEDED(rt->CreateSolidColorBrush(c, &b))) { rt->DrawText(glyph, (UINT32)wcslen(glyph), f, r, b); b->Release(); }
         if (f) f->Release();
     }
-    // Botão redondo de vidro com ícone.
-    void CircleButton(const D2D1_RECT_F& r, const wchar_t* glyph, bool hot) {
-        float rad = (r.bottom - r.top) / 2;
-        if (hot) Fill(r, rad, th.panelHot);
-        if (hot && th.neon) Glow(r, rad);
-        Stroke(r, rad, hot ? (th.neon ? th.accent : th.stroke) : th.stroke);
-        Icon(glyph, r, 13, hot ? (th.neon ? th.accent : th.icon) : th.text2);
+    // Botão redondo de vidro com ícone (no Crispy: translúcido, acende em laranja com neon ao passar o mouse).
+    void CircleButton(const D2D1_RECT_F& r0, const wchar_t* glyph, bool hot, int key = 0, bool accent = false) {
+        D2D1_RECT_F r = Press(r0, key, hot);
+        float rad = (r.bottom - r.top) / 2, k = A(key ? key * 4 + 1 : 0, hot ? 1.0f : 0.0f, 200);
+        if (th.neon) {
+            Fill(r, rad, Rgba(0xFFFFFF, 0.05f));
+            if (accent) Neon(r, rad, 0.6f + 0.4f * k); else Neon(r, rad, k);
+            if (k > 0) Fill(r, rad, Rgba(NeonColor(), 0.16f * k));
+            Stroke(r, rad, accent ? th.accent : Mix(Rgba(0xFFFFFF, 0.14f), th.accent, k));
+            Icon(glyph, r, 13, accent ? th.accent : Mix(th.text2, th.accent, k));
+            return;
+        }
+        if (k > 0) { D2D1_COLOR_F c = th.panelHot; c.a *= k; Fill(r, rad, c); }
+        Stroke(r, rad, th.stroke);
+        Icon(glyph, r, 13, Mix(th.text2, th.icon, k));
     }
-    // Interruptor estilo iOS.
-    void Toggle(const D2D1_RECT_F& r, bool on, bool hot) {
+    // Interruptor estilo iOS. key anima a bolinha e a cor (~220 ms).
+    void Toggle(const D2D1_RECT_F& r, bool on, bool hot, int key = 0) {
         float h = r.bottom - r.top;
-        if (on && th.neon) Glow(r, h / 2);
-        Fill(r, h / 2, on ? th.accent : th.track);
+        float pos = A(key ? key * 4 + 1 : 0, on ? 1.0f : 0.0f, 220, true, true);
+        float col = A(key ? key * 4 + 2 : 0, on ? 1.0f : 0.0f, 220, true);
+        if (th.neon) Neon(r, h / 2, col);
+        Fill(r, h / 2, th.track);
+        if (col > 0) { D2D1_COLOR_F c = th.accent; c.a *= col; Fill(r, h / 2, c); }
+        if (th.neon && col < 1) Stroke(r, h / 2, Rgba(0xFFFFFF, 0.10f * (1 - col)));
         if (hot) Fill(r, h / 2, Rgba(0xFFFFFF, 0.10f));
-        float k = h - 4 * s, x = on ? r.right - 2 * s - k : r.left + 2 * s;
+        float k = h - 4 * s, x = r.left + 2 * s + (r.right - r.left - 4 * s - k) * pos;
         D2D1_RECT_F kr = D2D1::RectF(x, r.top + 2 * s, x + k, r.top + 2 * s + k);
         Fill(D2D1::RectF(kr.left, kr.top + 1 * s, kr.right, kr.bottom + 1 * s), k / 2, Rgba(0x000000, 0.18f));
-        Fill(kr, k / 2, on ? th.knobOn : th.knob);
+        Fill(kr, k / 2, Mix(th.knob, th.knobOn, col));
     }
-    // Controle segmentado; retorna nada, quem chama guarda os retângulos de cada parte.
-    void Segmented(const D2D1_RECT_F& r, const std::wstring* labels, int n, int sel, int hot, D2D1_RECT_F* parts) {
+    // Controle segmentado; quem chama guarda os retângulos de cada parte. key: o indicador desliza (~220 ms).
+    void Segmented(const D2D1_RECT_F& r, const std::wstring* labels, int n, int sel, int hot, D2D1_RECT_F* parts, int key = 0) {
         float h = r.bottom - r.top;
         Fill(r, h / 2, th.track);
+        if (th.neon) Stroke(r, h / 2, Rgba(0xFFFFFF, 0.06f));
         float w = (r.right - r.left - 4 * s) / n;
-        for (int i = 0; i < n; ++i) {
-            D2D1_RECT_F p = D2D1::RectF(r.left + 2 * s + i * w, r.top + 2 * s, r.left + 2 * s + (i + 1) * w, r.bottom - 2 * s);
-            parts[i] = p;
-            if (i == sel) {
-                Fill(p, (h - 4 * s) / 2, th.segFill);
-                if (th.neon || !th.classic) Stroke(p, (h - 4 * s) / 2, th.neon ? th.accent : th.stroke);
-            }
-            else if (i == hot) Fill(p, (h - 4 * s) / 2, Rgba(th.dark ? 0xFFFFFF : 0x000000, 0.06f));
-            Text(labels[i], p, 12.5f, i == sel ? th.segText : th.text2, i == sel ? DWRITE_FONT_WEIGHT_SEMI_BOLD : DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER);
+        for (int i = 0; i < n; ++i) parts[i] = D2D1::RectF(r.left + 2 * s + i * w, r.top + 2 * s, r.left + 2 * s + (i + 1) * w, r.bottom - 2 * s);
+        for (int i = 0; i < n; ++i) if (i == hot && i != sel) Fill(parts[i], (h - 4 * s) / 2, Rgba(th.dark ? 0xFFFFFF : 0x000000, 0.06f));
+        if (sel >= 0 && sel < n) {
+            float x = A(key ? key * 4 + 1 : 0, (float)sel, 220, true, true);
+            D2D1_RECT_F ind = D2D1::RectF(r.left + 2 * s + x * w, r.top + 2 * s, r.left + 2 * s + (x + 1) * w, r.bottom - 2 * s);
+            float rad = (h - 4 * s) / 2;
+            if (th.neon) Neon(ind, rad, 0.7f);
+            Fill(ind, rad, th.neon ? Rgba(0x1A1410) : th.segFill);
+            if (th.neon) Fill(ind, rad, th.segFill);
+            if (th.neon || !th.classic) Stroke(ind, rad, th.neon ? th.accent : th.stroke);
         }
+        for (int i = 0; i < n; ++i)
+            Text(labels[i], parts[i], 12.5f, i == sel ? th.segText : th.text2, i == sel ? DWRITE_FONT_WEIGHT_SEMI_BOLD : DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER);
     }
     // [ − valor + ]; minus/plus recebem os retângulos clicáveis.
     void Stepper(const D2D1_RECT_F& r, const std::wstring& value, int hot, D2D1_RECT_F* minus, D2D1_RECT_F* plus) {
@@ -492,16 +722,35 @@ public:
         Icon(L"", *plus, 11, th.text);
         Text(value, D2D1::RectF(r.left + h, r.top, r.right - h, r.bottom), 12.5f, th.text, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
     }
-    // Botão "pílula" com texto.
-    void Pill(const D2D1_RECT_F& r, const std::wstring& label, bool hot, bool primary = false) {
-        float h = r.bottom - r.top;
-        if (primary) { if (th.neon) Glow(r, h / 2); Fill(r, h / 2, th.accent); if (hot) Fill(r, h / 2, Rgba(0xFFFFFF, 0.14f)); }
-        else {
-            if (hot) Fill(r, h / 2, th.panelHot);
-            if (hot && th.neon) Glow(r, h / 2);
-            Stroke(r, h / 2, hot && th.neon ? th.accent : th.stroke);
+    // Botão "pílula" com texto. key: o fundo acende (~200 ms) e afunda ao clicar.
+    void Pill(const D2D1_RECT_F& r0, const std::wstring& label, bool hot, bool primary = false, int key = 0) {
+        D2D1_RECT_F r = Press(r0, key, hot);
+        float h = r.bottom - r.top, k = A(key ? key * 4 + 1 : 0, hot ? 1.0f : 0.0f, 200);
+        if (primary) {
+            if (th.neon) Neon(r, h / 2, 0.8f + 0.2f * k);
+            Fill(r, h / 2, th.accent);
+            if (k > 0) Fill(r, h / 2, Rgba(0xFFFFFF, 0.14f * k));
+        } else if (th.neon) {
+            Fill(r, h / 2, Rgba(0xFFFFFF, 0.04f));
+            Neon(r, h / 2, k);
+            if (k > 0) Fill(r, h / 2, Rgba(NeonColor(), 0.16f * k));
+            Stroke(r, h / 2, Mix(Rgba(0xFFFFFF, 0.12f), th.accent, k));
+        } else {
+            if (k > 0) { D2D1_COLOR_F c = th.panelHot; c.a *= k; Fill(r, h / 2, c); }
+            Stroke(r, h / 2, th.stroke);
         }
-        Text(label, r, 12.5f, primary ? th.onAccent : (hot && th.neon ? th.accent : th.text), DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
+        Text(label, r, 12.5f, primary ? th.onAccent : th.neon ? Mix(th.text, th.accent, k) : th.text, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
+    }
+    // Texto com neon (links, "Encerrar processo"): duas cópias deslocadas e translúcidas atrás do texto.
+    void NeonText(const std::wstring& t, const D2D1_RECT_F& r, float size, DWRITE_FONT_WEIGHT w, DWRITE_TEXT_ALIGNMENT al, float k = 1) {
+        if (th.neon && k > 0.01f) {
+            const float o[8][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}, {2, 2}, {-2, -2}, {2, -2}, {-2, 2}};
+            for (int i = 0; i < 8; ++i) {
+                float d = (i < 4 ? 1.2f : 2.4f) * s;
+                Text(t, D2D1::RectF(r.left + o[i][0] * d, r.top + o[i][1] * d, r.right + o[i][0] * d, r.bottom + o[i][1] * d), size, Rgba(NeonColor(), (i < 4 ? 0.22f : 0.10f) * k), w, al);
+            }
+        }
+        Text(t, r, size, th.neon ? th.accent : th.text, w, al);
     }
 };
 

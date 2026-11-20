@@ -1,4 +1,4 @@
-# Protótipo da interface do Vizu (9.12)
+# Protótipo da interface do Vizu (9.13)
 
 Arquivos de referência das telas aprovadas e dos temas. Não são carregados pelo programa.
 
@@ -6,7 +6,7 @@ Arquivos de referência das telas aprovadas e dos temas. Não são carregados pe
 - `*.dc.html`: uma tela por arquivo.
   - `Config*.dc.html`: Configurações da 9.12 (veja a seção abaixo).
   - `Settings-copia.dc.html`, `Settings-Lite-copia.dc.html`: Configurações até a 9.11, guardadas como registro.
-  - `V-*`: tema Vizu Classic. `L-*`: tema Claro. `D-*`: tema Escuro. `C-*`: tema Crispy. `W-*`: Padrão Windows.
+  - `V-*`: tema Vizu Classic. `L-*`: tema Claro. `D-*`: tema Escuro. `CrispyV2-*`: tema Vizu Crispy (visual V2, 9.13; substitui o antigo `C-Settings`). `W-*`: Padrão Windows.
   - `Inst-*-copia`: telas aprovadas do instalador.
   - `Ring`, `Toast`, `Preview`, `Clock`, `Ocr`, `Agenda`, `Extras`, `Picker`: telas de uso e ferramentas.
 
@@ -33,3 +33,22 @@ Página "2 · Vizu Classic" do canvas. O programa segue estas telas (`PaintSetti
 - `Config-Lite.dc.html`: edição Lite, sem presets, com Ver, Outros (OCR) e Sistema.
 
 Chaves de registro novas em `HKCU\Software\DesignThumbs`: `SettingsPreset` (0 Minimal, 1 Design, 2 Custom; 100 = aplicar Design na primeira abertura depois de uma instalação nova), `ClockOcr` (botão do OCR no relógio), `ClockChat` (botão do ChatGPT no relógio, 9.12.1; o endereço continua em `ClockApp`), `OcrHotkey` e `CleanHotkey` (modificadores << 16 | tecla virtual; o OCR usa Ctrl+Alt+T por padrão e a Limpeza começa sem atalho).
+
+## Vizu Crispy V2 (9.13)
+
+Página "5.2 · Crispy V2" do canvas, 21 telas. O tema continua se chamando **Vizu Crispy**; só o visual mudou.
+
+- `CrispyV2-Config*.dc.html`: Configurações (Design, Minimal, Custom, Avançado aberto e Lite).
+- `CrispyV2-Usar-*`: Espiar, Converter, Aviso e bandeja, Conta-gotas.
+- `CrispyV2-Ferr-*`: Relógio e Foco, Ler texto, Agenda, Extras.
+- `CrispyV2-Limpeza-B1` a `B8`: a janela Limpeza do analisando às Configurações.
+
+Tokens (em `ui::CrispyTheme` e `ui::Painter::Card` no `Ui.h`): fundo #08080A, cor dominante #FF6633 ("Cor do neon"), base dos cartões #16171B com degradê de 115° (rgba(10,11,14,.94) → rgba(18,19,24,.94) 45% → rgba(22,23,27,.92) 75% → rgba(30,32,40,.90)), borda de 1 px em degradê (branco 10% → laranja 18% em 35% → laranja 55% em 70% → #FF8A5C), filete branco de 6% no topo, divisórias #232326, texto secundário #A8A8AF.
+
+Como o Direct2D reproduz o que é CSS no protótipo:
+
+- `backdrop-filter`: acrílico do DWM (`DWMWA_SYSTEMBACKDROP_TYPE`) com grafite a 55% por cima; sem ele, #08080A com as manchas laranja e azulada (`ui::Backdrop`). Com o acrílico, os cantos são os do Windows 11.
+- Brilho atrás dos cartões (`filter: blur(22px)`) e neon (`box-shadow` em duas camadas): camadas concêntricas translúcidas (`Painter::BackGlow`, `Painter::Neon`).
+- Granulado (`feTurbulence`): bitmap de ruído fixo de 128×128 repetido (`ui::NoiseBrush`).
+- Luz que segue o cursor: pincel radial na posição do mouse, no preenchimento e na borda (`Painter::CursorLight`).
+- `transition`: `ui::Anim`, com valores que deslizam até o alvo (ease-out cubic-bezier(0.23, 1, 0.32, 1) nas entradas, ease-in-out no que já está na tela). Só roda enquanto algo anima e nunca com a janela oculta ou minimizada. Com "Mostrar animações no Windows" desligado, sobram só fades de até 150 ms.

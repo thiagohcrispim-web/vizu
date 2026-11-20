@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Vizu Crispy V2 · Agenda</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+.lbl{font-size:12px;line-height:16px;font-weight:500;color:#9A9AA1}
+.cap{font-size:12px;line-height:16px;color:#A8A8AF}
+.fld{display:flex;flex-direction:column;gap:6px;font-size:12px;color:#A8A8AF}
+.inp{height:36px;padding:0 12px;border:1px solid #8A8A92;border-radius:8px;background:#0E0E10;color:#F2F2F2;font:inherit;font-size:13px;box-sizing:border-box;width:100%}
+.seg{display:flex;gap:4px;padding:4px;border-radius:8px;background:#0E0E10}
+.seg button{flex:1;height:28px;border:0;border-radius:6px;background:transparent;color:#A8A8AF;font:inherit;font-size:12px;font-weight:500}
+.seg button.on{background:#3A2B25;color:#F2F2F2}
+.ev{position:absolute;left:64px;right:0;border-radius:8px;padding:8px 12px;box-sizing:border-box;background:#1A1A1D;display:flex;flex-direction:column;font-size:13px}
+.hr{position:absolute;left:0;right:0;height:1px;background:#1A1A1D}
+.hl{position:absolute;left:0;width:48px;font-size:11px;color:#9A9AA1;font-variant-numeric:tabular-nums;transform:translateY(-8px)}
+.day{display:flex;flex-direction:column;align-items:center;gap:2px;width:52px;padding:8px 0;border-radius:8px;font-size:11px;color:#9A9AA1}
+.day b{font-size:15px;font-weight:500;color:#F2F2F2}
+.bgx{position:absolute;inset:0;z-index:-3;overflow:hidden;border-radius:20px;pointer-events:none}
+.bgx b{position:absolute;border-radius:50%;filter:blur(90px)}
+.glassx{position:absolute;inset:0;z-index:-2;border-radius:20px;pointer-events:none;background:linear-gradient(115deg,rgba(22,23,27,0.62) 0%,rgba(18,19,23,0.55) 50%,rgba(22,23,27,0.48) 100%);-webkit-backdrop-filter:blur(40px) saturate(150%);backdrop-filter:blur(40px) saturate(150%);box-shadow:inset 0 1px 0 rgba(255,255,255,0.10),inset 0 0 0 1px rgba(255,255,255,0.07),inset 0 -1px 0 rgba(255,102,51,0.18)}
+.glassx svg{position:absolute;inset:0;width:100%;height:100%;opacity:.06;mix-blend-mode:overlay;border-radius:20px}
+.glow,.grain{position:absolute;left:6%;right:-3%;top:35%;bottom:-34px;z-index:-1;pointer-events:none;border-radius:28px}
+.glow{background:radial-gradient(60% 70% at 62% 72%,rgba(255,102,51,0.30),rgba(255,102,51,0.10) 55%,transparent 78%);filter:blur(22px);opacity:.85;transition:opacity .3s ease}
+.grain{opacity:.10;mix-blend-mode:overlay;-webkit-mask-image:radial-gradient(60% 70% at 62% 72%,#000,transparent 78%);mask-image:radial-gradient(60% 70% at 62% 72%,#000,transparent 78%)}
+.grain svg{width:100%;height:100%;display:block}
+
+/* Crispy V2 */
+.lbl{text-transform:uppercase;letter-spacing:0.12em;font-size:11px;opacity:.8}
+.gc{position:relative;border:1px solid transparent!important;background:linear-gradient(115deg,rgba(10,11,14,0.94) 0%,rgba(18,19,24,0.94) 45%,rgba(22,23,27,0.92) 75%,rgba(30,32,40,0.9) 100%) padding-box,linear-gradient(115deg,rgba(255,255,255,0.10) 0%,rgba(255,140,100,0.18) 35%,rgba(255,102,51,0.55) 70%,#FF8A5C 100%) border-box!important}
+.ev{background:rgba(255,255,255,0.05);box-shadow:inset 0 0 0 1px rgba(255,255,255,0.06)}
+.hr{background:#1F2026}
+.day{transition:background-color .2s ease}
+.inp{border-color:#2A2A2E;background:rgba(7,7,9,0.6)}
+.seg{background:rgba(7,7,9,0.6);box-shadow:inset 0 0 0 1px #232326}
+.seg button.on{background:#FF6633;color:#000000;box-shadow:0 0 6px rgba(255,102,51,0.8),0 0 14px rgba(255,102,51,0.4)}
+</style>
+</helmet>
+<div style="isolation: isolate; position: relative; border-radius: 20px; width: 1500px; height: 940px; box-sizing: border-box; padding: 48px; background: #08080A; color: #F2F2F2; font-family: Inter, system-ui, sans-serif; font-size: 14px; line-height: 20px; display: flex; gap: 56px">
+  <svg width="0" height="0" style="position: absolute" aria-hidden="true"><filter id="vzgrain" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/></filter></svg>
+  <div class="bgx" aria-hidden="true"><b style="width: 720px; height: 720px; left: -220px; top: -260px; background: rgba(255,102,51,0.35)"></b><b style="width: 640px; height: 640px; right: -200px; top: 420px; background: rgba(70,80,120,0.40)"></b><b style="width: 760px; height: 760px; left: 280px; bottom: -320px; background: rgba(255,90,40,0.30)"></b></div>
+  <div class="glassx" aria-hidden="true"><svg><rect width="100%" height="100%" filter="url(#vzgrain)"/></svg></div>
+  
+
+  <section class="gc" aria-label="Agenda" style="width: 940px; height: 844px; border-radius: 18px; display: flex"><i class="glow" aria-hidden="true"></i><i class="grain" aria-hidden="true"><svg><rect width="100%" height="100%" filter="url(#vzgrain)"/></svg></i>
+    <div style="flex: 1; padding: 32px; display: flex; flex-direction: column; gap: 24px">
+      <header style="display: flex; align-items: center; justify-content: space-between">
+        <div style="display: flex; flex-direction: column"><span style="font-size: 11px; font-weight: 500; letter-spacing: 0.08em; opacity: 0.7">AGENDA</span><span style="font-size: 18px; line-height: 24px; font-weight: 500">Sexta, 6 de novembro</span><span class="cap">3 eventos restantes</span></div>
+        <div style="display: flex; gap: 4px">
+          <button type="button" aria-label="Semana anterior" style="width: 32px; height: 32px; border: 0; border-radius: 6px; background: transparent; color: #F2F2F2"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
+          <button type="button" style="height: 32px; padding: 0 12px; border: 1px solid #8A8A92; border-radius: 6px; background: transparent; color: #F2F2F2; font: inherit; font-size: 12px; font-weight: 500">Hoje</button>
+          <button type="button" aria-label="Próxima semana" style="width: 32px; height: 32px; border: 0; border-radius: 6px; background: transparent; color: #F2F2F2"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></button>
+        </div>
+      </header>
+      <div style="display: flex; justify-content: space-between">
+        <span class="day">SEG<b>2</b></span><span class="day">TER<b>3</b></span><span class="day">QUA<b>4</b></span><span class="day">QUI<b>5</b></span>
+        <span class="day" style="background: #1A1A1D; color: #A8A8AF">SEX<b>6</b></span><span class="day">SÁB<b>7</b></span><span class="day">DOM<b>8</b></span>
+      </div>
+      <div style="position: relative; height: 540px; margin-top: 8px">
+        <div class="hr" style="top: 0"></div><span class="hl" style="top: 0">09:00</span>
+        <div class="hr" style="top: 60px"></div><span class="hl" style="top: 60px">10:00</span>
+        <div class="hr" style="top: 120px"></div><span class="hl" style="top: 120px">11:00</span>
+        <div class="hr" style="top: 180px"></div><span class="hl" style="top: 180px">12:00</span>
+        <div class="hr" style="top: 240px"></div><span class="hl" style="top: 240px">13:00</span>
+        <div class="hr" style="top: 300px"></div><span class="hl" style="top: 300px">14:00</span>
+        <div class="hr" style="top: 360px"></div><span class="hl" style="top: 360px">15:00</span>
+        <div class="hr" style="top: 420px"></div><span class="hl" style="top: 420px">16:00</span>
+        <div class="hr" style="top: 480px"></div><span class="hl" style="top: 480px">17:00</span>
+        <div class="hr" style="top: 540px"></div><span class="hl" style="top: 540px">18:00</span>
+        <div class="ev" style="top: 31px; height: 44px; opacity: 0.6"><span style="font-weight: 500">Daily da equipe</span><span class="cap">09:30–10:15</span></div>
+        <div class="ev" style="top: 241px; height: 58px; opacity: 0.6"><span style="font-weight: 500">Almoço com cliente</span><span class="cap">13:00–14:00</span></div>
+        <div class="ev" style="top: 421px; height: 58px; background: #FF6633; color: #000000; box-shadow: 0 0 8px rgba(255,102,51,0.8), 0 0 22px rgba(255,102,51,0.4)"><span style="font-weight: 500">Reunião de pauta — revista</span><span style="font-size: 12px; line-height: 16px">16:00–17:00 · EM 18 MIN</span></div>
+        <div class="ev" style="top: 511px; height: 28px; padding: 4px 12px; flex-direction: row; gap: 8px"><span style="font-weight: 500">Enviar artes da campanha</span><span class="cap" style="line-height: 20px">17:30</span></div>
+        <div aria-hidden="true" style="position: absolute; left: 56px; right: 0; top: 402px; height: 2px; background: #F2F2F2"></div>
+        <div aria-hidden="true" style="position: absolute; left: 51px; top: 398px; width: 10px; height: 10px; border-radius: 50%; background: #F2F2F2"></div>
+      </div>
+    </div>
+
+    <form style="width: 300px; padding: 32px 24px; background: rgba(255,255,255,0.03); border-left: 1px solid #232326; border-radius: 0 17px 17px 0; display: flex; flex-direction: column; gap: 20px; box-sizing: border-box">
+      <span style="font-size: 15px; font-weight: 500">NOVO EVENTO</span>
+      <label class="fld">Título<input class="inp" value="Ligar para a gráfica"></label>
+      <div style="display: flex; gap: 12px">
+        <label class="fld" style="flex: 1">Dia (dd/mm)<input class="inp" value="06/11"></label>
+        <label class="fld" style="flex: 1">Hora<input class="inp" value="16:30"></label>
+      </div>
+      <div class="fld"><span>Duração</span><div class="seg"><button type="button">15 min</button><button type="button" class="on">30 min</button><button type="button">1 h</button></div></div>
+      <div class="fld"><span>Avisar antes</span><div class="seg"><button type="button" class="on">10 min</button><button type="button">5 min</button><button type="button">Na hora</button></div></div>
+      <button type="submit" style="margin-top: auto; height: 40px; border: 0; border-radius: 999px; background: #FF6633; color: #000000; box-shadow: 0 0 8px rgba(255,102,51,0.8), 0 0 22px rgba(255,102,51,0.4); font: inherit; font-size: 13px; font-weight: 500">Adicionar à agenda</button>
+    </form>
+  </section>
+
+  <div style="flex: 1; display: flex; flex-direction: column; gap: 40px">
+    <div style="display: flex; flex-direction: column; gap: 12px">
+      <span class="lbl">Aviso · 10 min antes</span>
+      <div class="gc" role="status" style="padding: 16px; border-radius: 16px; display: flex; flex-direction: column; gap: 12px"><i class="glow" aria-hidden="true"></i><i class="grain" aria-hidden="true"><svg><rect width="100%" height="100%" filter="url(#vzgrain)"/></svg></i>
+        <div style="display: flex; flex-direction: column"><span class="cap" style="font-variant-numeric: tabular-nums">Em 10 min · 16:00</span><span style="font-weight: 500">Reunião de pauta — revista</span></div>
+        <div style="display: flex; gap: 8px">
+          <button type="button" style="height: 32px; padding: 0 12px; border: 1px solid #8A8A92; border-radius: 8px; background: transparent; color: #F2F2F2; font: inherit; font-size: 13px; font-weight: 500">Abrir agenda</button>
+          <button type="button" style="height: 32px; padding: 0 12px; border: 0; border-radius: 8px; background: transparent; color: #F2F2F2; font: inherit; font-size: 13px; font-weight: 500">Dispensar</button>
+        </div>
+        <div style="height: 2px; border-radius: 1px; background: #0E0E10"><div style="width: 70%; height: 2px; background: #A8A8AF"></div></div>
+      </div>
+      <span class="cap">Some sozinho em 20 s.</span>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 12px">
+      <span class="lbl">Aviso · 5 min antes</span>
+      <div class="gc" role="alert" style="padding: 16px; border-radius: 16px; box-shadow: 0 0 0 1px #FF6633, 0 0 18px rgba(255,102,51,0.45); display: flex; flex-direction: column; gap: 12px"><i class="glow" aria-hidden="true"></i><i class="grain" aria-hidden="true"><svg><rect width="100%" height="100%" filter="url(#vzgrain)"/></svg></i>
+        <div style="display: flex; flex-direction: column"><span class="cap" style="font-variant-numeric: tabular-nums">Em 5 min · 16:00</span><span style="font-size: 16px; font-weight: 500">Reunião de pauta — revista</span></div>
+        <div style="display: flex; gap: 8px">
+          <button type="button" style="height: 32px; padding: 0 12px; border: 0; border-radius: 8px; background: #FF6633; color: #000000; font: inherit; font-size: 13px; font-weight: 500">Ok</button>
+          <button type="button" style="height: 32px; padding: 0 12px; border: 1px solid #8A8A92; border-radius: 8px; background: transparent; color: #F2F2F2; font: inherit; font-size: 13px; font-weight: 500">Adiar 5 min</button>
+        </div>
+      </div>
+      <span class="cap">Fica até você clicar.</span>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1500,"height":940}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

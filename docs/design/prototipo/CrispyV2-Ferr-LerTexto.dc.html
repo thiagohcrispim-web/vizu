@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Vizu Crispy V2 · Ler texto</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+.lbl{font-size:12px;line-height:16px;font-weight:500;color:#9A9AA1}
+.cap{font-size:12px;line-height:16px;color:#A8A8AF}
+.key{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;border-radius:4px;border:1px solid #8A8A92;font-size:11px;font-weight:500;color:#F2F2F2;box-sizing:border-box}
+.card{padding:20px;border-radius:12px;background:#1A1A1D;display:flex;flex-direction:column;gap:12px}
+.pill{height:28px;padding:0 10px;border:1px solid #8A8A92;border-radius:6px;background:transparent;color:#F2F2F2;font:inherit;font-size:12px;font-weight:500}
+.pill.on{background:#FF6633;border-color:#FF6633;color:#000}
+.row{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:52px;border-top:1px solid #3A2B25}
+.bgx{position:absolute;inset:0;z-index:-3;overflow:hidden;border-radius:20px;pointer-events:none}
+.bgx b{position:absolute;border-radius:50%;filter:blur(90px)}
+.glassx{position:absolute;inset:0;z-index:-2;border-radius:20px;pointer-events:none;background:linear-gradient(115deg,rgba(22,23,27,0.62) 0%,rgba(18,19,23,0.55) 50%,rgba(22,23,27,0.48) 100%);-webkit-backdrop-filter:blur(40px) saturate(150%);backdrop-filter:blur(40px) saturate(150%);box-shadow:inset 0 1px 0 rgba(255,255,255,0.10),inset 0 0 0 1px rgba(255,255,255,0.07),inset 0 -1px 0 rgba(255,102,51,0.18)}
+.glassx svg{position:absolute;inset:0;width:100%;height:100%;opacity:.06;mix-blend-mode:overlay;border-radius:20px}
+.glow,.grain{position:absolute;left:6%;right:-3%;top:35%;bottom:-34px;z-index:-1;pointer-events:none;border-radius:28px}
+.glow{background:radial-gradient(60% 70% at 62% 72%,rgba(255,102,51,0.30),rgba(255,102,51,0.10) 55%,transparent 78%);filter:blur(22px);opacity:.85;transition:opacity .3s ease}
+.grain{opacity:.10;mix-blend-mode:overlay;-webkit-mask-image:radial-gradient(60% 70% at 62% 72%,#000,transparent 78%);mask-image:radial-gradient(60% 70% at 62% 72%,#000,transparent 78%)}
+.grain svg{width:100%;height:100%;display:block}
+
+/* Crispy V2 */
+.lbl{text-transform:uppercase;letter-spacing:0.12em;font-size:11px;opacity:.8}
+.card,.shot{position:relative;border:1px solid transparent;background:linear-gradient(115deg,rgba(10,11,14,0.94) 0%,rgba(18,19,24,0.94) 45%,rgba(22,23,27,0.92) 75%,rgba(30,32,40,0.9) 100%) padding-box,linear-gradient(115deg,rgba(255,255,255,0.10) 0%,rgba(255,140,100,0.18) 35%,rgba(255,102,51,0.55) 70%,#FF8A5C 100%) border-box;box-shadow:inset 0 1px 0 rgba(255,255,255,0.06);border-radius:16px}
+.card p{background:rgba(7,7,9,0.6)!important;box-shadow:inset 0 0 0 1px #232326}
+.pill{border-color:#2A2A2E;border-radius:999px;transition:background-color .2s ease,box-shadow .2s ease}
+.pill.on{box-shadow:0 0 6px rgba(255,102,51,0.9),0 0 18px rgba(255,102,51,0.5)}
+.row{border-top-color:#232326}
+.key{border-color:#3A3A40;background:rgba(255,255,255,0.04)}
+</style>
+</helmet>
+<div style="isolation: isolate; position: relative; border-radius: 20px; width: 1500px; height: 900px; box-sizing: border-box; padding: 48px; background: #08080A; color: #F2F2F2; font-family: Inter, system-ui, sans-serif; font-size: 14px; line-height: 20px; display: grid; grid-template-columns: 820px 1fr; gap: 56px">
+  <svg width="0" height="0" style="position: absolute" aria-hidden="true"><filter id="vzgrain" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/></filter></svg>
+  <div class="bgx" aria-hidden="true"><b style="width: 720px; height: 720px; left: -220px; top: -260px; background: rgba(255,102,51,0.35)"></b><b style="width: 640px; height: 640px; right: -200px; top: 420px; background: rgba(70,80,120,0.40)"></b><b style="width: 760px; height: 760px; left: 280px; bottom: -320px; background: rgba(255,90,40,0.30)"></b></div>
+  <div class="glassx" aria-hidden="true"><svg><rect width="100%" height="100%" filter="url(#vzgrain)"/></svg></div>
+  
+
+  <div style="display: flex; flex-direction: column; gap: 12px">
+    <span class="lbl" style="display: flex; align-items: center; gap: 8px">1 · Arraste sobre o texto <span class="key">Ctrl</span><span class="key">Alt</span><span class="key">T</span></span>
+    <div style="position: relative; height: 560px; border-radius: 16px; padding: 1px; background: linear-gradient(115deg,rgba(255,255,255,0.10),rgba(255,102,51,0.55) 70%,#FF8A5C); box-shadow: 0 24px 60px -24px rgba(255,102,51,0.35)"><div style="position: relative; height: 100%; border-radius: 15px; overflow: hidden; background: #F2EEE6">
+      <div style="position: absolute; left: 64px; top: 64px; width: 560px; color: #1F1B16; display: flex; flex-direction: column; gap: 24px">
+        <span style="font-size: 48px; line-height: 52px; font-weight: 500">Summer Design Week</span>
+        <span style="font-size: 20px; line-height: 30px">Join us for five days of talks, workshops and open studios. Free entry for students with a valid ID.</span>
+        <span style="font-size: 13px; font-weight: 500; letter-spacing: 1px">JUNE 12–16 · CITY HALL · 9AM–6PM</span>
+      </div>
+      <div aria-hidden="true" style="position: absolute; inset: 0; background: rgba(35,39,46,0.55); clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 0 0, 52px 180px, 52px 286px, 640px 286px, 640px 180px, 52px 180px)"></div>
+      <div aria-hidden="true" style="position: absolute; left: 52px; top: 180px; width: 588px; height: 106px; box-shadow: 0 0 0 2px #FF6633"></div>
+      <span style="position: absolute; left: 52px; top: 294px; height: 22px; padding: 0 6px; display: inline-flex; align-items: center; border-radius: 4px; background: #FF6633; color: #000; font-size: 11px; font-weight: 500; font-variant-numeric: tabular-nums">588 × 106</span>
+      <span style="position: absolute; left: 0; right: 0; bottom: 20px; display: flex; justify-content: center; gap: 16px; font-size: 12px; color: #F2F2F2">
+        <span style="display: flex; gap: 6px; align-items: center; padding: 6px 10px; border-radius: 8px; background: #0E0E10"><span class="key">Esc</span>cancela</span>
+      </span>
+    </div></div>
+    <span class="cap">A tela congela até você soltar o mouse.</span>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 40px">
+    <div style="display: flex; flex-direction: column; gap: 12px">
+      <span class="lbl">2 · Texto já copiado</span>
+      <div class="card"><i class="glow" aria-hidden="true"></i><i class="grain" aria-hidden="true"><svg><rect width="100%" height="100%" filter="url(#vzgrain)"/></svg></i>
+        <div style="display: flex; align-items: center; gap: 8px; font-weight: 500"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Copiado<span style="font-weight: 400; color: #A8A8AF">· inglês</span></div>
+        <p style="margin: 0; padding: 12px; border-radius: 8px; background: #0E0E10">Join us for five days of talks, workshops and open studios. Free entry for students with a valid ID.</p>
+        <div style="display: flex; align-items: center; gap: 8px"><span class="cap" style="flex: 1">Traduzir</span><button type="button" class="pill">PT</button><button type="button" class="pill">ES</button></div>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 12px">
+      <span class="lbl">3 · Depois de PT</span>
+      <div class="card"><i class="glow" aria-hidden="true"></i><i class="grain" aria-hidden="true"><svg><rect width="100%" height="100%" filter="url(#vzgrain)"/></svg></i>
+        <div style="display: flex; align-items: center; gap: 8px; font-weight: 500"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Tradução copiada<span style="font-weight: 400; color: #A8A8AF">· inglês → português</span></div>
+        <p style="margin: 0; padding: 12px; border-radius: 8px; background: #0E0E10">Participe de cinco dias de palestras, oficinas e estúdios abertos. Entrada gratuita para estudantes com carteirinha válida.</p>
+        <div style="display: flex; align-items: center; gap: 8px"><span class="cap" style="flex: 1">Traduzir</span><button type="button" class="pill on" aria-pressed="true">PT</button><button type="button" class="pill">ES</button><button type="button" class="pill">Original</button></div>
+      </div>
+      <span class="cap">A leitura acontece no PC. O texto só vai para o tradutor quando você escolhe um idioma.</span>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 4px">
+      <span class="lbl" style="margin-bottom: 8px">Configurações</span>
+      <div class="row" style="border-top: 0"><span>Atalho</span><span style="display: flex; gap: 4px"><span class="key">Ctrl</span><span class="key">Alt</span><span class="key">T</span></span></div>
+      <div class="row"><span>Quebras de linha</span><span style="display: flex; gap: 4px"><button type="button" class="pill">Manter</button><button type="button" class="pill on" aria-pressed="true">Juntar</button></span></div>
+      <div class="row"><span style="display: flex; flex-direction: column"><span>Idiomas de leitura</span><span class="cap">Português, inglês</span></span><button type="button" class="pill">Adicionar</button></div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1500,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

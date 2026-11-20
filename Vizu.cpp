@@ -714,6 +714,30 @@ static bool CursorOver(HWND h) {
 static ULONGLONG g_altDownAt;
 static bool g_altFired;          // botões já mostrados neste toque
 
+// Avisos: entram deslizando de baixo com fade (~240 ms) e saem com fade (~180 ms).
+static int g_toastX, g_toastY; static double g_toastAt; static bool g_toastHiding;
+enum : UINT_PTR { kToastAnim = 0x7A12 };
+static void ToastAnimStep(HWND h) {
+    bool red = ui::ReducedMotion();
+    float dur = g_toastHiding ? 180.0f : (red ? 150.0f : 240.0f), t = (float)((ui::NowMs() - g_toastAt) / dur);
+    if (t > 1) t = 1;
+    float k = ui::EaseOut(t);
+    if (g_toastHiding) {
+        SetLayeredWindowAttributes(h, 0, (BYTE)(255 * (1 - k)), LWA_ALPHA);
+        if (t >= 1) { KillTimer(h, kToastAnim); ShowWindow(h, SW_HIDE); g_toastHiding = false; SetLayeredWindowAttributes(h, 0, 255, LWA_ALPHA); }
+        return;
+    }
+    SetLayeredWindowAttributes(h, 0, (BYTE)(255 * k), LWA_ALPHA);
+    int dy = red ? 0 : (int)((1 - k) * 24 * GetDpiForWindow(h) / 96.0f);
+    SetWindowPos(h, HWND_TOPMOST, g_toastX, g_toastY + dy, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE);
+    if (t >= 1) KillTimer(h, kToastAnim);
+}
+static void HideToast(HWND h) {
+    if (!IsWindowVisible(h) || g_toastHiding) return;
+    g_toastHiding = true; g_toastAt = ui::NowMs();
+    SetTimer(h, kToastAnim, 16, nullptr);
+}
+
 static void ShowToast(const std::wstring& title, const std::wstring& text, DWORD hideAfterMs, int state) {
     g_toastTitle = title; g_toastText = text; g_toastState = state;
     HMONITOR mon = MonitorFromPoint({0, 0}, MONITOR_DEFAULTTOPRIMARY);
@@ -722,7 +746,14 @@ static void ShowToast(const std::wstring& title, const std::wstring& text, DWORD
     GetMonitorInfoW(mon, &mi);
     float ui = GetDpiForWindow(g_defView ? g_defView : GetDesktopWindow()) / 96.0f;
     int w = (int)(380 * ui), h = (int)(80 * ui), m = (int)(18 * ui);
-    SetWindowPos(g_toastWnd, HWND_TOPMOST, mi.rcWork.right - w - m, mi.rcWork.bottom - h - m, w, h, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    bool wasShown = IsWindowVisible(g_toastWnd) && !g_toastHiding;
+    g_toastX = mi.rcWork.right - w - m; g_toastY = mi.rcWork.bottom - h - m; g_toastHiding = false;
+    if (!wasShown) { // entra: começa 24 px abaixo e transparente
+        g_toastAt = ui::NowMs();
+        SetLayeredWindowAttributes(g_toastWnd, 0, 0, LWA_ALPHA);
+        SetWindowPos(g_toastWnd, HWND_TOPMOST, g_toastX, g_toastY + (ui::ReducedMotion() ? 0 : (int)(24 * ui)), w, h, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        SetTimer(g_toastWnd, kToastAnim, 16, nullptr);
+    } else { KillTimer(g_toastWnd, kToastAnim); SetLayeredWindowAttributes(g_toastWnd, 0, 255, LWA_ALPHA); SetWindowPos(g_toastWnd, HWND_TOPMOST, g_toastX, g_toastY, w, h, SWP_NOACTIVATE | SWP_SHOWWINDOW); }
     InvalidateRect(g_toastWnd, nullptr, TRUE);
     KillTimer(g_toastWnd, kToastTimer);
     if (hideAfterMs) SetTimer(g_toastWnd, kToastTimer, hideAfterMs, nullptr);
@@ -1560,6 +1591,7 @@ struct Side { std::wstring name; std::vector<Slice> items; };
 static std::vector<Side> g_sides;
 static int g_side, g_ringHot = -2;   // -1 = centro (troca de lado), -2 = nada
 static BYTE g_ringAlpha;
+static double g_ringShownAt; // abertura: escala 0,92 -> 1 e fade (~180 ms)
 static float g_ringScale = 1;
 
 static void OpenResizeDialog();
@@ -1676,6 +1708,8 @@ static void RenderRing() {
     const ui::Theme& th = g_theme;
     float s = g_ringScale, c = S / 2.0f, rIn = RingIn(), rOut = RingOut();
     D2D1_POINT_2F C = D2D1::Point2F(c, c);
+    { float t = (float)((ui::NowMs() - g_ringShownAt) / 180.0), k = ui::EaseOut(t > 1 ? 1 : t), sc = ui::ReducedMotion() ? 1.0f : 0.92f + 0.08f * k;
+      if (sc < 0.999f) rt->SetTransform(D2D1::Matrix3x2F::Scale(sc, sc, C)); }
     ID2D1Factory* fac = nullptr; rt->GetFactory(&fac);
     ID2D1SolidColorBrush* br = nullptr;
     auto solid = [&](D2D1_COLOR_F col) { if (br) br->Release(); rt->CreateSolidColorBrush(col, &br); return br; };
@@ -1922,7 +1956,7 @@ static void ShowAltPopup() {
     int x = max((int)mi.rcWork.left, min((int)mi.rcWork.right - S, (int)pt.x - S / 2));
     int y = max((int)mi.rcWork.top, min((int)mi.rcWork.bottom - S, (int)pt.y - S / 2));
     g_ringHot = -2;
-    g_ringAlpha = 60;
+    g_ringAlpha = 0; g_ringShownAt = ui::NowMs();
     SetWindowPos(g_altWnd, HWND_TOPMOST, x, y, S, S, SWP_NOACTIVATE | SWP_SHOWWINDOW);
     RenderRing();
     SetTimer(g_altWnd, 1, 15, nullptr); // aparece suavemente
@@ -1937,7 +1971,7 @@ static LRESULT CALLBACK AltProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         return RingHit(p) == -2 ? HTTRANSPARENT : HTCLIENT;
     }
     case WM_TIMER:
-        g_ringAlpha = (BYTE)min(255, g_ringAlpha + 65);
+        { float t = (float)((ui::NowMs() - g_ringShownAt) / (ui::ReducedMotion() ? 150.0 : 180.0)); g_ringAlpha = (BYTE)(255 * ui::EaseOut(t > 1 ? 1 : t)); }
         RenderRing();
         if (g_ringAlpha == 255) KillTimer(h, 1);
         return 0;
@@ -2391,7 +2425,7 @@ static void RevealOutputs() {
 static LRESULT CALLBACK ToastProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
     case WM_MOUSEACTIVATE: return MA_NOACTIVATE;
-    case WM_TIMER: KillTimer(h, wp); ShowWindow(h, SW_HIDE); return 0;
+    case WM_TIMER: if (wp == kToastAnim) { ToastAnimStep(h); return 0; } KillTimer(h, wp); HideToast(h); return 0;
     case WM_SETCURSOR: SetCursor(LoadCursor(nullptr, g_converting ? IDC_ARROW : IDC_HAND)); return TRUE;
     case WM_LBUTTONUP:
         if (g_converting) return 0;
@@ -2412,7 +2446,7 @@ static LRESULT CALLBACK ToastProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         } else if (g_toastAction == 0) RevealOutputs();
         else if (g_toastAction == 3) ShellExecuteW(nullptr, L"open", g_toastLog.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
         return 0;
-    case WM_RBUTTONUP: if (!g_converting) ShowWindow(h, SW_HIDE); return 0;
+    case WM_RBUTTONUP: if (!g_converting) HideToast(h); return 0;
     case WM_SIZE: g_toastSurf.Resize(LOWORD(lp), HIWORD(lp)); return 0;
     case WM_ERASEBKGND: return 1;
     case WM_PAINT: {
@@ -2545,6 +2579,11 @@ static int g_setHot;
 static float g_setScroll, g_setContentH;
 enum { kSecConv, kSecTime, kSecClean, kSecOther, kSecSys, kSecCount }; // seções com "Avançado"
 static bool g_advOpen[kSecCount]; // tudo começa recolhido
+static ui::Anim g_setAnim;          // movimento das Configurações (chaves, seletores, Avançado, abrir/fechar)
+static POINT g_setMouse = {-100000, -100000};
+static bool g_setDown, g_setClosing;
+enum { kSetOpenKey = 0x40000 };
+static void CloseSettings();
 static int g_setPage; // 0 = Configurações, 1 = Sobre o programa, 2 = Agradecimentos
 static int g_capHot;  // capturando atalho: kHkOcr ou kHkClean (0 = não)
 static bool g_capFail; // o último atalho escolhido já era usado por outro programa
@@ -2832,7 +2871,7 @@ static void SettingsAction(int id) {
         i18n::Load();
         return;
     }
-    case kBtnClose: DestroyWindow(g_settingsWnd); return;
+    case kBtnClose: CloseSettings(); return;
     default: return;
     }
     SaveConfig();
@@ -2846,8 +2885,18 @@ static void PaintSettings(HWND h) {
     ID2D1RenderTarget* rt = g_setSurf.rt;
     D2D1_SIZE_F sz = rt->GetSize();
     const ui::Theme& th = g_theme;
-    rt->Clear(th.tint);
+    g_setAnim.Frame();
+    // abrir: fade + escala 0,98 -> 1 (~220 ms); fechar: o inverso, mais rápido (~150 ms)
+    float openK = g_setAnim.Get(kSetOpenKey, g_setClosing ? 0.0f : 1.0f, g_setClosing ? 150.0f : 220.0f, g_setClosing);
+    if (g_setClosing && openK <= 0.001f) { g_setSurf.End(); PostMessage(h, WM_CLOSE, 1, 0); return; }
+    { D2D1_COLOR_F tint = th.tint; if (th.glass) tint.a *= openK; rt->Clear(tint); }
+    float sc = g_setAnim.reduced ? 1.0f : 0.98f + 0.02f * openK;
+    rt->SetTransform(D2D1::Matrix3x2F::Scale(sc, sc, D2D1::Point2F(sz.width / 2, sz.height / 2)));
+    bool openLayer = openK < 0.999f;
+    if (openLayer) rt->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), nullptr, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE, D2D1::IdentityMatrix(), openK), nullptr);
     ui::Painter p(rt, g_dw, th, s);
+    p.an = &g_setAnim; p.mx = (float)g_setMouse.x; p.my = (float)g_setMouse.y; p.down = g_setDown;
+    if (th.neon && !th.glass) ui::Backdrop(rt, th, sz.width, sz.height); // sem o vidro do DWM: #08080A com manchas desfocadas
     g_setHits.clear();
     float clipTop = 0; // depois do cabeçalho: o que rolou para baixo dele não recebe clique
     auto hit = [&](int id, D2D1_RECT_F r) { if (r.top < clipTop) return false; g_setHits.push_back({id, r}); return g_setHot == id; };
@@ -2861,7 +2910,7 @@ static void PaintSettings(HWND h) {
     ui::Brand(rt, th, x0, 26 * s, 24 * s);
     p.Text(T(L"Configurações", L"Settings", L"Configuración"), D2D1::RectF(x0, 52 * s, x0 + colW, 72 * s), 12, th.text2);
     D2D1_RECT_F close = D2D1::RectF(sz.width - pad - 32 * s, 28 * s, sz.width - pad, 60 * s);
-    p.CircleButton(close, L"", hit(kBtnClose, close));
+    p.CircleButton(close, L"", hit(kBtnClose, close), kBtnClose, th.neon); // no Crispy: X laranja com contorno e neon
     {
         std::wstring ver = (g_lite ? L"Lite · v " : L"v ") + ShortVersion();
         float vw = p.Measure(ver, 12) + 44 * s;
@@ -2871,12 +2920,13 @@ static void PaintSettings(HWND h) {
         if (!g_lite) {
             const wchar_t* lab = T(L"Aplicar presets:", L"Apply presets:", L"Aplicar presets:");
             float lw = p.Measure(lab, 12, DWRITE_FONT_WEIGHT_MEDIUM);
-            p.Text(lab, D2D1::RectF(rx, 28 * s, rx + lw + 4 * s, 60 * s), 12, th.text, DWRITE_FONT_WEIGHT_MEDIUM);
-            float segL = rx + lw + 20 * s, segR = min(segL + 330 * s, vp.left - 20 * s);
+            float lx = th.neon ? x0 + colW + colGap - 16 * s : rx; // Crispy: alinhado com o início dos cartões
+            p.Text(lab, D2D1::RectF(lx, 28 * s, lx + lw + 4 * s, 60 * s), 12, th.text, DWRITE_FONT_WEIGHT_MEDIUM);
+            float segL = lx + lw + 20 * s, segR = min(segL + 330 * s, vp.left - 20 * s);
             std::wstring names[3] = {L"Minimal", L"Design", L"Custom"};
             D2D1_RECT_F seg = D2D1::RectF(segL, 27 * s, segR, 61 * s), parts[3];
             int hot = g_setHot >= kPreset0 && g_setHot <= kPreset2 ? g_setHot - kPreset0 : -1;
-            p.Segmented(seg, names, 3, g_preset, hot, parts);
+            p.Segmented(seg, names, 3, g_preset, hot, parts, kPreset0);
             for (int i = 0; i < 3; ++i) hit(kPreset0 + i, parts[i]);
             if (g_preset == kPresetCustom)
                 p.Text(T(L"Ajustado à mão: muda sozinho para Custom quando você mexe em algo.", L"Set by hand: switches to Custom by itself when you change something.",
@@ -2892,21 +2942,31 @@ static void PaintSettings(HWND h) {
     float y = top + 8 * s - g_setScroll;
 
     // Linhas: cada uma desenha a si mesma. level 0 = linha da seção; 1 = dentro do quadro recuado do Avançado; 2 = subitem dentro dele.
-    struct SRow { float h; int level; std::function<void(D2D1_RECT_F)> draw; };
+    struct SRow { float h; int level; std::function<void(D2D1_RECT_F)> draw; float k = 1; }; // k < 1: Avançado abrindo/fechando
     D2D1_COLOR_F subBg = th.classic ? ui::Rgba(0x23272E) : th.neon ? ui::Rgba(ui::NeonColor(), 0.06f) : th.dark ? ui::Rgba(0xFFFFFF, 0.04f) : ui::Rgba(0x000000, 0.035f);
+    int secNo = 0;
     auto drawSection = [&](const wchar_t* title, std::vector<SRow>& rows, bool titleDim = false) {
-        p.Text(title, D2D1::RectF(x0, y + 14 * s, x0 + colW, y + 36 * s), 13, titleDim ? th.text2 : th.text, titleDim ? DWRITE_FONT_WEIGHT_NORMAL : DWRITE_FONT_WEIGHT_MEDIUM);
+        ++secNo;
+        if (th.neon) { // Crispy: maiúsculas espaçadas a 80%, alinhado à esquerda
+            std::wstring up = title; CharUpperBuffW(&up[0], (DWORD)up.size());
+            D2D1_COLOR_F c = th.text; c.a = 0.8f;
+            float tw = p.Measure(up, 11.5f, DWRITE_FONT_WEIGHT_SEMI_BOLD) + up.size() * 0.14f * 11.5f * s + 4 * s;
+            p.TextSpaced(up, D2D1::RectF(x0, y + 14 * s, x0 + min(tw, colW), y + 36 * s), 11.5f, c, DWRITE_FONT_WEIGHT_SEMI_BOLD, 0.14f);
+        } else p.Text(title, D2D1::RectF(x0, y + 14 * s, x0 + colW, y + 36 * s), 13, titleDim ? th.text2 : th.text, titleDim ? DWRITE_FONT_WEIGHT_NORMAL : DWRITE_FONT_WEIGHT_MEDIUM);
         size_t n = rows.size();
         std::vector<float> ys(n);
         float yy = y;
         for (size_t i = 0; i < n; ++i) { // posições: depois do quadro do Avançado vem um respiro
-            ys[i] = yy; yy += rows[i].h;
-            if (rows[i].level && (i + 1 == n || !rows[i + 1].level)) yy += 10 * s;
+            ys[i] = yy; yy += rows[i].h * rows[i].k;
+            if (rows[i].level && (i + 1 == n || !rows[i + 1].level)) yy += 10 * s * rows[i].k;
         }
+        if (th.neon && n) // Crispy: a seção inteira num cartão V2 (brilho atrás, degradê e luz do cursor)
+            p.Card(D2D1::RectF(rx - 16 * s, ys[0], rx + rw + 16 * s, yy + 4 * s), 16 * s, 0x1000 + secNo);
         for (size_t i = 0; i < n; ++i) { // quadro recuado: um bloco por sequência de linhas do Avançado
             if (!rows[i].level || (i && rows[i - 1].level)) continue;
             size_t j = i; while (j < n && rows[j].level) ++j;
-            D2D1_RECT_F box = D2D1::RectF(rx + 16 * s, ys[i] + 2 * s, rx + rw, ys[j - 1] + rows[j - 1].h + 2 * s);
+            D2D1_RECT_F box = D2D1::RectF(rx + 16 * s, ys[i] + 2 * s, rx + rw, ys[j - 1] + rows[j - 1].h * rows[j - 1].k + 2 * s);
+            if (box.bottom - box.top < 4 * s) continue;
             p.Fill(box, 12 * s, subBg);
             p.Stroke(box, 12 * s, th.stroke);
         }
@@ -2917,7 +2977,15 @@ static void PaintSettings(HWND h) {
             if (lv == 2) p.Fill(D2D1::RectF(rx + 38 * s, ys[i] + 8 * s, rx + 40 * s, ys[i] + rows[i].h - 8 * s), 1 * s, th.stroke); // fio do subitem
             // level 0 encosta nas bordas (rlabel/rbox já recuam 16 px); dentro do quadro, recua mais
             float l = lv == 0 ? rx - 16 * s : lv == 1 ? rx + 16 * s : rx + 40 * s, r = lv == 0 ? rx + rw + 16 * s : rx + rw;
-            rows[i].draw(D2D1::RectF(l, ys[i], r, ys[i] + rows[i].h));
+            float k = rows[i].k;
+            if (k < 0.999f) { // Avançado: altura animada, conteúdo em fade + leve subida
+                if (k < 0.01f) continue;
+                rt->PushAxisAlignedClip(D2D1::RectF(l, ys[i], r, ys[i] + rows[i].h * k + 1 * s), D2D1_ANTIALIAS_MODE_ALIASED);
+                rt->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), nullptr, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE, D2D1::IdentityMatrix(), k), nullptr);
+                float dy = g_setAnim.reduced ? 0 : (1 - k) * 8 * s;
+                rows[i].draw(D2D1::RectF(l, ys[i] + dy, r, ys[i] + dy + rows[i].h));
+                rt->PopLayer(); rt->PopAxisAlignedClip();
+            } else rows[i].draw(D2D1::RectF(l, ys[i], r, ys[i] + rows[i].h));
         }
         y = max(yy, y + 50 * s) + 34 * s; // mais respiro entre as seções
     };
@@ -2934,9 +3002,14 @@ static void PaintSettings(HWND h) {
         D2D1_RECT_F onR = D2D1::RectF(rr - onW, cy - 10 * s, rr, cy + 10 * s), tg = D2D1::RectF(onR.left - 8 * s - tw, cy - 12 * s, onR.left - 8 * s, cy + 12 * s);
         D2D1_RECT_F offR = D2D1::RectF(tg.left - 8 * s - offW, cy - 10 * s, tg.left - 8 * s, cy + 10 * s);
         bool hh = hit(id, D2D1::RectF(offR.left, cy - 16 * s, onR.right, cy + 16 * s));
-        p.Text(L"OFF", offR, 10.5f, on ? dim : th.text, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_TRAILING);
-        p.Toggle(tg, on, hh);
-        p.Text(L"ON", onR, 10.5f, on ? th.text : dim, DWRITE_FONT_WEIGHT_SEMI_BOLD);
+        if (!th.neon) p.Text(L"OFF", offR, 10.5f, on ? dim : th.text, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_TRAILING);
+        p.Toggle(tg, on, hh, id);
+        if (th.neon) { // Crispy: o lado inativo fica #4A4A50; o ON ativo acende em laranja com neon junto com a chave
+            float k = p.A(id * 4 + 2, on ? 1.0f : 0.0f, 220, true);
+            p.Text(L"OFF", offR, 10.5f, ui::Mix(th.text, ui::Rgba(0x4A4A50), k), DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_TRAILING);
+            p.NeonText(L"ON", onR, 10.5f, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_LEADING, k);
+            if (k < 1) p.Text(L"ON", onR, 10.5f, ui::Rgba(0x4A4A50, 1 - k), DWRITE_FONT_WEIGHT_SEMI_BOLD);
+        } else p.Text(L"ON", onR, 10.5f, on ? th.text : dim, DWRITE_FONT_WEIGHT_SEMI_BOLD);
     };
     auto rstep = [&](D2D1_RECT_F r, int idMinus, int idPlus, const std::wstring& v) {
         D2D1_RECT_F b = rbox(r, 150 * s), mi, pl;
@@ -2946,12 +3019,13 @@ static void PaintSettings(HWND h) {
     auto rseg = [&](D2D1_RECT_F r, float bw, std::vector<std::wstring> l, int sel, int id0) {
         D2D1_RECT_F b = rbox(r, bw), parts[6];
         int hot = g_setHot >= id0 && g_setHot < id0 + (int)l.size() ? g_setHot - id0 : -1;
-        p.Segmented(b, l.data(), (int)l.size(), sel, hot, parts);
+        p.Segmented(b, l.data(), (int)l.size(), sel, hot, parts, id0);
         for (size_t i = 0; i < l.size(); ++i) hit(id0 + (int)i, parts[i]);
     };
-    auto rpill = [&](D2D1_RECT_F r, int id, const std::wstring& t, float bw) { D2D1_RECT_F b = rbox(r, bw); p.Pill(b, t, hit(id, b)); };
+    auto rpill = [&](D2D1_RECT_F r, int id, const std::wstring& t, float bw) { D2D1_RECT_F b = rbox(r, bw); p.Pill(b, t, hit(id, b), false, id); };
     auto rghost = [&](D2D1_RECT_F r, int id, const std::wstring& t, float bw, bool active) { // botão "Definir": preenchido, sem contorno
         D2D1_RECT_F b = rbox(r, bw, 34); bool hh = hit(id, b);
+        if (active) p.Neon(b, 17 * s);
         p.Fill(b, 17 * s, active ? th.accent : th.track);
         if (hh && !active) p.Fill(b, 17 * s, ui::Rgba(th.dark ? 0xFFFFFF : 0x000000, 0.06f));
         p.Text(t, b, 11.5f, active ? th.onAccent : th.text2, DWRITE_FONT_WEIGHT_MEDIUM, DWRITE_TEXT_ALIGNMENT_CENTER);
@@ -2962,9 +3036,15 @@ static void PaintSettings(HWND h) {
         rows.push_back({AH, 0, [&, sec](D2D1_RECT_F r) {
             bool hh = hit(kAdv0 + sec, D2D1::RectF(r.left + 16 * s, r.top, r.right - 16 * s, r.bottom));
             p.Text(T(L"Avançado", L"Advanced", L"Avanzado"), D2D1::RectF(r.left + 16 * s, r.top, r.right - 60 * s, r.bottom), 13, th.text, DWRITE_FONT_WEIGHT_MEDIUM);
-            p.Feather(g_advOpen[sec] ? "m18 15-6-6-6 6" : "m6 9 6 6 6-6", D2D1::RectF(r.right - 44 * s, r.top, r.right - 16 * s, r.bottom), 16 * s, hh ? th.text : th.text2, 1.6f);
+            D2D1_RECT_F ar = D2D1::RectF(r.right - 44 * s, r.top, r.right - 16 * s, r.bottom);
+            float rot = g_setAnim.m.count(kAdv0 + sec) ? g_setAnim.m[kAdv0 + sec].cur : (g_advOpen[sec] ? 1.0f : 0.0f);
+            D2D1_MATRIX_3X2_F old; rt->GetTransform(&old);
+            rt->SetTransform(D2D1::Matrix3x2F::Rotation(rot * 180, D2D1::Point2F((ar.left + ar.right) / 2, (ar.top + ar.bottom) / 2)) * old); // a seta gira 180°
+            p.Feather("m6 9 6 6 6-6", ar, 16 * s, hh ? th.text : th.text2, 1.6f);
+            rt->SetTransform(old);
         }});
-        if (g_advOpen[sec]) for (auto& e : extra) rows.push_back(std::move(e));
+        float k = g_setAnim.Get(kAdv0 + sec, g_advOpen[sec] ? 1.0f : 0.0f, 240, true, true);
+        if (k > 0.001f) for (auto& e : extra) { e.k = k; rows.push_back(std::move(e)); }
     };
     auto hotkeyRow = [&](int id, DWORD key, const wchar_t* who) {
         return SRow{RH, 0, [&, id, key, who](D2D1_RECT_F r) {
@@ -2984,7 +3064,7 @@ static void PaintSettings(HWND h) {
 
     if (g_setPage) { // ---------- Sobre o programa / Agradecimentos: fora do corpo da página ----------
         D2D1_RECT_F back = D2D1::RectF(x0, y, x0 + 110 * s, y + 34 * s);
-        p.Pill(back, T(L"‹  Voltar", L"‹  Back", L"‹  Volver"), hit(kBack, back));
+        p.Pill(back, T(L"‹  Voltar", L"‹  Back", L"‹  Volver"), hit(kBack, back), false, kBack);
         y = back.bottom + 26 * s;
         const wchar_t* title = g_setPage == 1 ? T(L"Sobre o programa", L"About", L"Acerca del programa") : T(L"Agradecimentos", L"Thanks", L"Agradecimientos");
         p.Text(title, D2D1::RectF(x0, y, sz.width - pad, y + 28 * s), 18, th.text, DWRITE_FONT_WEIGHT_MEDIUM);
@@ -3156,6 +3236,7 @@ static void PaintSettings(HWND h) {
             D2D1_RECT_F b = D2D1::RectF(cx, cy, cx + cw, cy + chh);
             int id = tc[i].mode == ui::kThemeClassic ? kTheme4 : kTheme0 + tc[i].mode;
             bool sel = (int)g_cfg.themeMode == tc[i].mode, hh = hit(id, D2D1::RectF(b.left - 4 * s, b.top - 4 * s, b.right + 4 * s, b.bottom + 28 * s));
+            if (sel && th.neon) p.Neon(D2D1::RectF(b.left - 3 * s, b.top - 3 * s, b.right + 3 * s, b.bottom + 3 * s), 12 * s); // tema selecionado com neon
             if (sel) p.Stroke(D2D1::RectF(b.left - 3 * s, b.top - 3 * s, b.right + 3 * s, b.bottom + 3 * s), 12 * s, th.classic || th.neon ? th.accent : th.text, 2 * s);
             else if (hh) p.Stroke(D2D1::RectF(b.left - 3 * s, b.top - 3 * s, b.right + 3 * s, b.bottom + 3 * s), 12 * s, th.text2, 1 * s);
             p.Fill(b, 10 * s, ui::Rgba(tc[i].bg));
@@ -3163,7 +3244,8 @@ static void PaintSettings(HWND h) {
             p.Fill(D2D1::RectF(b.left + 10 * s, b.top + 10 * s, b.left + 10 * s + (cw - 20 * s) * 0.6f, b.top + 16 * s), 3 * s, ui::Rgba(tc[i].panel));
             p.Fill(D2D1::RectF(b.left + 10 * s, b.top + 22 * s, b.left + 10 * s + (cw - 20 * s) * 0.4f, b.top + 28 * s), 3 * s, ui::Rgba(tc[i].panel));
             p.Fill(D2D1::RectF(b.right - 36 * s, b.bottom - 20 * s, b.right - 10 * s, b.bottom - 10 * s), 5 * s, ui::Rgba(tc[i].acc));
-            p.Text(tc[i].name, D2D1::RectF(b.left - 10 * s, b.bottom + 8 * s, b.right + 10 * s, b.bottom + 26 * s), 12, sel ? th.text : th.text2, sel ? DWRITE_FONT_WEIGHT_MEDIUM : DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER);
+            if (sel && th.neon) p.NeonText(tc[i].name, D2D1::RectF(b.left - 10 * s, b.bottom + 8 * s, b.right + 10 * s, b.bottom + 26 * s), 12, DWRITE_FONT_WEIGHT_MEDIUM, DWRITE_TEXT_ALIGNMENT_CENTER);
+            else p.Text(tc[i].name, D2D1::RectF(b.left - 10 * s, b.bottom + 8 * s, b.right + 10 * s, b.bottom + 26 * s), 12, sel ? th.text : th.text2, sel ? DWRITE_FONT_WEIGHT_MEDIUM : DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER);
         }
     }});
     if (g_cfg.themeMode == ui::kThemeCrispy)
@@ -3209,7 +3291,8 @@ static void PaintSettings(HWND h) {
             float tw = p.Measure(t, 13, DWRITE_FONT_WEIGHT_MEDIUM);
             D2D1_RECT_F lr = D2D1::RectF(lx, y, lx + tw + 2 * s, y + 22 * s);
             bool hh = hit(i ? kLinkThanks : kLinkAbout, D2D1::RectF(lr.left - 4 * s, lr.top - 4 * s, lr.right + 4 * s, lr.bottom + 4 * s));
-            p.Text(t, lr, 13, hh && (th.classic || th.neon) ? th.accent : th.text, DWRITE_FONT_WEIGHT_MEDIUM);
+            if (th.neon) p.NeonText(t, lr, 13, DWRITE_FONT_WEIGHT_MEDIUM, DWRITE_TEXT_ALIGNMENT_LEADING, p.A(kLinkAbout * 64 + i, hh ? 1.0f : 0.35f, 200)); // links com neon
+            else p.Text(t, lr, 13, hh && th.classic ? th.accent : th.text, DWRITE_FONT_WEIGHT_MEDIUM);
             if (hh) p.Fill(D2D1::RectF(lr.left, lr.bottom - 1 * s, lr.right - 2 * s, lr.bottom), 0, hh && (th.classic || th.neon) ? th.accent : th.text);
             lx = lr.right + 40 * s;
         }
@@ -3225,14 +3308,25 @@ static void PaintSettings(HWND h) {
                                  T(L"Pasta do programa", L"Program folder", L"Carpeta del programa"), T(L"Encerrar processo", L"Quit process", L"Cerrar proceso")};
         for (int i = 0; i < 4; ++i) {
             D2D1_RECT_F b = D2D1::RectF(x0 + i * (bw + gap), y, x0 + i * (bw + gap) + bw, y + 40 * s);
-            p.Pill(b, lab[i], hit(ids[i], b));
+            bool hh = hit(ids[i], b);
+            if (th.neon && ids[i] == kBtnQuit) { // "Encerrar processo": neon no laranja
+                p.Pill(b, L"", hh, false, ids[i]);
+                p.NeonText(lab[i], p.Press(b, ids[i], hh), 12.5f, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
+            } else p.Pill(b, lab[i], hh, false, ids[i]);
         }
         y += 40 * s + 32 * s;
     }
     g_setContentH = y + g_setScroll - top;
     rt->PopAxisAlignedClip();
-    p.Stroke(D2D1::RectF(0, 0, sz.width, sz.height), 8 * s, th.stroke);
+    if (th.neon) { // barra de rolagem Crispy: trilho grafite fino e botão laranja com neon
+        float viewH = sz.height - top, maxS = g_setContentH - viewH;
+        if (maxS > 1) p.ScrollBar(D2D1::RectF(sz.width - 9 * s, top + 6 * s, sz.width - 5 * s, sz.height - 14 * s), g_setScroll / maxS, viewH / g_setContentH);
+    }
+    p.WindowFrame(D2D1::RectF(0, 0, sz.width, sz.height), th.neon && !th.glass ? 20 * s : 8 * s);
+    if (openLayer) rt->PopLayer();
+    rt->SetTransform(D2D1::IdentityMatrix());
     g_setSurf.End();
+    g_setAnim.Pump(h, ui::kAnimTick);
 }
 
 static LRESULT CALLBACK SettingsProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
@@ -3249,14 +3343,18 @@ static LRESULT CALLBACK SettingsProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         POINT pt = {GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
         int hot = 0;
         for (auto& e : g_setHits) if (ui::Hit(e.second, pt)) hot = e.first;
-        if (hot != g_setHot) { g_setHot = hot; InvalidateRect(h, nullptr, FALSE); }
+        g_setMouse = pt;
+        if (hot != g_setHot || g_theme.neon) { g_setHot = hot; InvalidateRect(h, nullptr, FALSE); } // Crispy: a luz segue o cursor
         TRACKMOUSEEVENT tme = {sizeof(tme), TME_LEAVE, h, 0};
         TrackMouseEvent(&tme);
         return 0;
     }
     case WM_SETCURSOR: if (LOWORD(lp) == HTCLIENT) { SetCursor(LoadCursor(nullptr, g_setHot && g_setHot != kPrimao ? IDC_HAND : IDC_ARROW)); return TRUE; } break; // o segredo não muda o cursor
-    case WM_MOUSELEAVE: if (g_setHot) { g_setHot = 0; InvalidateRect(h, nullptr, FALSE); } return 0;
+    case WM_MOUSELEAVE: g_setMouse = {-100000, -100000}; g_setDown = false; g_setHot = 0; InvalidateRect(h, nullptr, FALSE); return 0;
+    case WM_TIMER: if (wp == ui::kAnimTick) { KillTimer(h, wp); InvalidateRect(h, nullptr, FALSE); return 0; } break;
+    case WM_LBUTTONDOWN: g_setDown = true; InvalidateRect(h, nullptr, FALSE); return 0;
     case WM_LBUTTONUP: {
+        g_setDown = false;
         POINT pt = {GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
         for (auto& e : g_setHits) if (ui::Hit(e.second, pt)) { int id = e.first; SettingsAction(id); break; }
         if (g_settingsWnd) InvalidateRect(h, nullptr, FALSE);
@@ -3271,7 +3369,7 @@ static LRESULT CALLBACK SettingsProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     }
     case WM_KEYDOWN: case WM_SYSKEYDOWN: // capturando atalho: a tecla vira o atalho (Alt incluído)
         if (CaptureKey((UINT)wp)) { InvalidateRect(h, nullptr, FALSE); return 0; }
-        if (msg == WM_KEYDOWN && wp == VK_ESCAPE) { if (g_setPage) { g_setPage = 0; g_setScroll = 0; InvalidateRect(h, nullptr, FALSE); } else DestroyWindow(h); return 0; }
+        if (msg == WM_KEYDOWN && wp == VK_ESCAPE) { if (g_setPage) { g_setPage = 0; g_setScroll = 0; InvalidateRect(h, nullptr, FALSE); } else CloseSettings(); return 0; }
         break;
     case WM_SYSCHAR: if (g_capHot) return 0; break; // sem bipe com Alt+tecla durante a captura
     case WM_ACTIVATE: if (LOWORD(wp) == WA_INACTIVE && g_capHot) { CaptureHotkey(g_capHot); InvalidateRect(h, nullptr, FALSE); } break;
@@ -3286,15 +3384,15 @@ static LRESULT CALLBACK SettingsProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         EndPaint(h, &ps);
         return 0;
     }
-    case WM_CLOSE: DestroyWindow(h); return 0;
-    case WM_DESTROY: if (g_capHot) CaptureHotkey(g_capHot); g_setPage = 0; g_setSurf.Release(); g_setHits.clear(); g_settingsWnd = nullptr; if (g_dimWnd) { DestroyWindow(g_dimWnd); g_dimWnd = nullptr; } return 0;
+    case WM_CLOSE: if (wp == 1 || !IsWindowVisible(h) || IsIconic(h)) DestroyWindow(h); else CloseSettings(); return 0; // wp = 1: fim da animação de fechar
+    case WM_DESTROY: g_setClosing = false; g_setAnim.m.clear(); KillTimer(h, ui::kAnimTick); if (g_capHot) CaptureHotkey(g_capHot); g_setPage = 0; g_setSurf.Release(); g_setHits.clear(); g_settingsWnd = nullptr; if (g_dimWnd) { DestroyWindow(g_dimWnd); g_dimWnd = nullptr; } return 0;
     }
     return DefWindowProcW(h, msg, wp, lp);
 }
 
 // Fundo das Configurações: a tela esmaece para o preto (70%) com desfoque, destacando a janela.
 static LRESULT CALLBACK DimProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
-    if (msg == WM_LBUTTONDOWN) { if (g_settingsWnd) DestroyWindow(g_settingsWnd); return 0; } // clicar fora fecha
+    if (msg == WM_LBUTTONDOWN) { if (g_settingsWnd) CloseSettings(); return 0; } // clicar fora fecha
     if (msg == WM_ERASEBKGND) { RECT r; GetClientRect(h, &r); FillRect((HDC)wp, &r, (HBRUSH)GetStockObject(BLACK_BRUSH)); return 1; }
     return DefWindowProcW(h, msg, wp, lp);
 }
@@ -3337,8 +3435,18 @@ static void OpenSettings() {
                                     mi.rcWork.left + (mi.rcWork.right - mi.rcWork.left - w) / 2, mi.rcWork.top + (mi.rcWork.bottom - mi.rcWork.top - h) / 2,
                                     w, h, g_dimWnd, nullptr, g_inst, nullptr); // o fundo escuro é o dono: a janela fica sempre por cima dele
     ui::EnableGlass(g_settingsWnd, g_theme.dark);
+    g_setClosing = false; g_setAnim.m.clear();
+    g_setAnim.Start(kSetOpenKey, 0, 1, 220); // entra com fade + escala 0,98 -> 1
     ShowWindow(g_settingsWnd, SW_SHOW);
     SetForegroundWindow(g_settingsWnd);
+}
+
+// Fecha as Configurações com fade + escala (~150 ms); a janela some de verdade no fim (WM_CLOSE com wp = 1).
+static void CloseSettings() {
+    if (!g_settingsWnd || g_setClosing) return;
+    if (!IsWindowVisible(g_settingsWnd) || IsIconic(g_settingsWnd)) { DestroyWindow(g_settingsWnd); return; }
+    g_setClosing = true;
+    InvalidateRect(g_settingsWnd, nullptr, FALSE);
 }
 
 // Atalho na pasta Inicializar (em vez de chave Run no registro).
@@ -3961,7 +4069,8 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmd, int) {
     DWORD exStyle = WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE;
     g_wnd = CreateWindowExW(exStyle, L"VizuWnd", L"Vizu", WS_POPUP, 0, 0, 100, 100, nullptr, nullptr, inst, nullptr);
     g_altWnd = CreateWindowExW(exStyle | WS_EX_LAYERED, L"VizuAlt", L"Vizu", WS_POPUP, 0, 0, 100, 100, nullptr, nullptr, inst, nullptr);
-    g_toastWnd = CreateWindowExW(exStyle, L"VizuToast", L"Vizu", WS_POPUP, 0, 0, 100, 100, nullptr, nullptr, inst, nullptr);
+    g_toastWnd = CreateWindowExW(exStyle | WS_EX_LAYERED, L"VizuToast", L"Vizu", WS_POPUP, 0, 0, 100, 100, nullptr, nullptr, inst, nullptr);
+    SetLayeredWindowAttributes(g_toastWnd, 0, 255, LWA_ALPHA);
     g_uiFont = ReadStr(L"UiFont", L"");
     if (!ReadDword(L"UiFontMigrated", 0)) { // uma vez: a fonte padrão das versões antigas (Bahnschrift, Segoe UI) volta para a atual (Inter)
         std::wstring low = g_uiFont; for (auto& ch : low) ch = (wchar_t)towlower(ch);

@@ -278,7 +278,7 @@ struct ClColors { D2D1_COLOR_F panel, line, used, track, accent, onAccent, warn,
 static ClColors ClPalette(const ui::Theme& th) {
     ClColors c;
     c.accent = th.accent; c.onAccent = th.onAccent;
-    c.line = th.classic ? ui::Rgba(0x4A4F57) : th.neon ? ui::Rgba(ui::NeonColor(), 0.32f) : th.dark ? ui::Rgba(0xFFFFFF, 0.10f) : ui::Rgba(0xD5D9DF);
+    c.line = th.classic ? ui::Rgba(0x4A4F57) : th.neon ? ui::Rgba(0x232326) : th.dark ? ui::Rgba(0xFFFFFF, 0.10f) : ui::Rgba(0xD5D9DF);
     c.panel = th.classic ? ui::Rgba(0x3A3F47) : th.neon ? ui::Rgba(0xFFFFFF, 0.045f) : th.dark ? ui::Rgba(0xFFFFFF, 0.05f) : ui::Rgba(0xF5F5F7);
     c.used = th.classic ? ui::Rgba(0x8A919C) : th.dark ? ui::Rgba(0x5A5A62) : ui::Rgba(0xAEB4BD);
     c.track = th.classic ? ui::Rgba(0x2A2F36) : th.dark ? ui::Rgba(0xFFFFFF, 0.08f) : ui::Rgba(0xECEDF0);
@@ -355,7 +355,11 @@ static void ClLegend(ui::Painter& p, const ClColors& c, float x, float y, float 
 
 static void ClButton(ui::Painter& p, const ClColors& c, D2D1_RECT_F r, const std::wstring& label, bool primary, bool hot, float s, bool enabled = true, const char* icon = nullptr) {
     float rad = 10 * s;
-    if (primary) {
+    if (p.th.neon) { // Crispy: pílula; secundário acende em laranja com neon ao passar o mouse
+        rad = (r.bottom - r.top) / 2;
+        if (primary) { if (enabled) p.Neon(r, rad); D2D1_COLOR_F f = c.accent; if (!enabled) f.a = 0.35f; p.Fill(r, rad, f); if (hot && enabled) p.Fill(r, rad, ui::Rgba(0xFFFFFF, 0.14f)); }
+        else { p.Fill(r, rad, ui::Rgba(0xFFFFFF, 0.04f)); if (hot) { p.Neon(r, rad); p.Fill(r, rad, ui::Rgba(ui::NeonColor(), 0.16f)); } p.Stroke(r, rad, hot ? c.accent : ui::Rgba(0xFFFFFF, 0.12f), 1 * s); }
+    } else if (primary) {
         D2D1_COLOR_F f = c.accent; if (!enabled) f.a = 0.35f;
         if (p.th.neon && enabled) p.Glow(r, rad);
         p.Fill(r, rad, f);
@@ -364,7 +368,7 @@ static void ClButton(ui::Painter& p, const ClColors& c, D2D1_RECT_F r, const std
         if (hot) p.Fill(r, rad, c.hover);
         p.Stroke(r, rad, c.line, 1 * s);
     }
-    D2D1_COLOR_F tc = primary ? c.onAccent : p.th.text;
+    D2D1_COLOR_F tc = primary ? c.onAccent : p.th.neon && hot ? c.accent : p.th.text;
     float tw = ClMeasure(p, label, 14, DWRITE_FONT_WEIGHT_SEMI_BOLD), iw = icon ? 22 * s : 0;
     float x0 = (r.left + r.right) / 2 - (tw + iw) / 2;
     if (icon) p.Feather(icon, D2D1::RectF(x0, r.top, x0 + 16 * s, r.bottom), 15 * s, tc);
@@ -397,6 +401,12 @@ static void PaintClean(HWND h) {
     rt->Clear(th.tint);
     ui::Backdrop(rt, th, sz.width, sz.height);
     ui::Painter p(rt, g_dw, th, s);
+    static ui::Anim an; static HWND last; an.Frame(); p.an = &an;
+    if (last != h) { last = h; an.m.clear(); an.Start(0x3000, 0, 1, 220); } // janela nova: fade + escala 0,98 -> 1
+    float openK = an.Get(0x3000, 1, 220), openSc = an.reduced ? 1.0f : 0.98f + 0.02f * openK;
+    rt->SetTransform(D2D1::Matrix3x2F::Scale(openSc, openSc, D2D1::Point2F(sz.width / 2, sz.height / 2)));
+    bool openLayer = openK < 0.999f;
+    if (openLayer) rt->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), nullptr, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE, D2D1::IdentityMatrix(), openK), nullptr);
     g_cl.hits.clear();
     auto hit = [&](int id, D2D1_RECT_F r) { g_cl.hits.push_back({id, r}); return g_cl.hot == id && !(g_cl.overlay && id < kClDlgCancel); };
     const wchar_t* HF = L"Space Grotesk";
@@ -466,7 +476,7 @@ static void PaintClean(HWND h) {
 
     float bandTop = 56 * s, bandH = narrow ? 172 * s : 108 * s;
     D2D1_RECT_F band = D2D1::RectF(pad, bandTop, sz.width - pad, bandTop + bandH);
-    p.Fill(band, 12 * s, c.panel);
+    if (th.neon) p.Card(band, 16 * s, 0x2001); else p.Fill(band, 12 * s, c.panel);
     {
         float numW = 190 * s;
         float bx = band.left + 24 * s, by = band.top + (narrow ? 18 : 20) * s;
@@ -487,7 +497,10 @@ static void PaintClean(HWND h) {
         float dx0 = narrow ? bx : bx + numW, dx1 = narrow ? band.right - 24 * s : band.right - 24 * s - colW - 28 * s;
         float dy = narrow ? by + 92 * s : band.top + 22 * s;
         ClText(p, diskTitle, D2D1::RectF(dx0, dy, dx1, dy + 18 * s), 13, th.text, DWRITE_FONT_WEIGHT_MEDIUM);
-        ClDiskBar(p, c, D2D1::RectF(dx0, dy + 26 * s, dx1, dy + 36 * s), dk.total, dk.free, barClean, barFreed);
+        { // a largura das barras anima (~300 ms) quando o valor muda
+        float kc = an.Get(1, (float)barClean, 300, true, true), kf = an.Get(2, (float)barFreed, 300, true, true);
+        ClDiskBar(p, c, D2D1::RectF(dx0, dy + 26 * s, dx1, dy + 36 * s), dk.total, dk.free, (ULONGLONG)kc, (ULONGLONG)kf);
+    }
         ClLegend(p, c, dx0, dy + 44 * s, dx1, s, legend);
     }
 
@@ -699,7 +712,8 @@ static void PaintClean(HWND h) {
         rt->PopAxisAlignedClip();
         if (maxScroll > 0) { // barra de rolagem fina
             float vh = view.bottom - view.top, th2 = max(30 * s, vh * vh / total), ty = view.top + (vh - th2) * (g_cl.scroll / maxScroll);
-            p.Fill(D2D1::RectF(view.right + 6 * s, ty, view.right + 10 * s, ty + th2), 2 * s, c.line);
+            if (th.neon) p.ScrollBar(D2D1::RectF(view.right + 6 * s, view.top, view.right + 10 * s, view.bottom), g_cl.scroll / maxScroll, vh / total);
+            else p.Fill(D2D1::RectF(view.right + 6 * s, ty, view.right + 10 * s, ty + th2), 2 * s, c.line);
         }
         if (footer) { // o que acontece ao limpar o item sob o mouse (consequência do targets.json)
             std::wstring tip;
@@ -795,7 +809,11 @@ static void PaintClean(HWND h) {
         ClButton(p, c, caR, cancel, false, g_cl.hot == kClDlgCancel, s);
         ClButton(p, c, okR, ok, true, g_cl.hot == kClDlgOk, s);
     }
+    if (th.neon) p.WindowFrame(D2D1::RectF(0, 0, sz.width, sz.height), th.glass ? 8 * s : 20 * s);
+    if (openLayer) rt->PopLayer();
+    rt->SetTransform(D2D1::IdentityMatrix());
     if (!g_cl.surf.End()) InvalidateRect(h, nullptr, FALSE);
+    an.Pump(h, ui::kAnimTick);
 }
 
 // ---------- ações ----------
@@ -928,7 +946,8 @@ static LRESULT CALLBACK CleanProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     case WM_TIMER: { // número animado e girando
         float target = (float)g_cl.shownTarget, d = target - g_cl.shown;
         bool busy = g_cl.phase == kClScan || g_cl.phase == kClCleaning;
-        if (fabsf(d) > 1) g_cl.shown += d * 0.22f; else g_cl.shown = target;
+        if (wp == ui::kAnimTick) { KillTimer(h, wp); InvalidateRect(h, nullptr, FALSE); return 0; }
+        if (fabsf(d) > 1 && !ui::ReducedMotion()) g_cl.shown += d * 0.22f; else g_cl.shown = target; // ~300 ms; sem contagem ao reduzir movimento
         if (busy || fabsf(d) > 1) InvalidateRect(h, nullptr, FALSE);
         return 0;
     }

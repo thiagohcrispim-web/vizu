@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Vizu Crispy V2 · Converter</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>body{margin:0}
+.vz{font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--ink);font-size:14px;line-height:20px;position:relative;overflow:hidden}
+.vz *{box-sizing:border-box}
+.lbl{margin:0;font-size:12px;line-height:16px;font-weight:500;color:var(--ink-3);letter-spacing:.02em}
+.title{font-size:18px;line-height:24px;font-weight:500}
+.cap{font-size:12px;line-height:16px;color:var(--ink-2)}
+.panel{background:var(--surface);border-radius:12px;padding:24px}
+.sunken{background:var(--sunken);border-radius:8px}
+.key{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;border-radius:4px;border:1px solid var(--line);font-size:11px;line-height:14px;font-weight:500;color:var(--ink)}
+.btn{display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 16px;border-radius:8px;border:1px solid var(--line);font-size:13px;font-weight:500;color:var(--ink);white-space:nowrap}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:#000}
+.ibtn{width:36px;height:36px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;color:var(--ink);border:1px solid var(--hairline)}
+.ibtn.on{background:var(--accent);border-color:var(--accent);color:#000}
+.tog{width:40px;height:24px;border-radius:12px;border:1px solid var(--line);position:relative;flex:none}
+.tog span{position:absolute;left:3px;top:3px;width:16px;height:16px;border-radius:50%;background:var(--ink-2)}
+.tog.on{background:var(--accent);border-color:var(--accent)}.tog.on span{left:19px;background:#000}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;flex:none}
+.seg span{padding:0 12px;height:30px;display:flex;align-items:center;font-size:12px;font-weight:500;color:var(--ink-2);border-left:1px solid var(--hairline)}
+.seg span:first-child{border-left:0}.seg span.on{background:var(--accent);color:#000}
+.tag{display:inline-flex;align-items:center;height:22px;padding:0 8px;border-radius:4px;background:var(--sunken);font-size:11px;font-weight:500;color:var(--ink)}
+.row{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:52px;border-top:1px solid var(--hairline)}
+.row:first-child{border-top:0}
+.row .t{display:flex;flex-direction:column;gap:2px;min-width:0}
+.row .t b{font-weight:500;font-size:13px}
+.row .t i{font-style:normal;font-size:12px;line-height:16px;color:var(--ink-2)}
+.num{font-variant-numeric:tabular-nums}
+.bgx{position:absolute;inset:0;z-index:-3;overflow:hidden;border-radius:20px;pointer-events:none}
+.bgx b{position:absolute;border-radius:50%;filter:blur(90px)}
+.glassx{position:absolute;inset:0;z-index:-2;border-radius:20px;pointer-events:none;background:linear-gradient(115deg,rgba(22,23,27,0.62) 0%,rgba(18,19,23,0.55) 50%,rgba(22,23,27,0.48) 100%);-webkit-backdrop-filter:blur(40px) saturate(150%);backdrop-filter:blur(40px) saturate(150%);box-shadow:inset 0 1px 0 rgba(255,255,255,0.10),inset 0 0 0 1px rgba(255,255,255,0.07),inset 0 -1px 0 rgba(255,102,51,0.18)}
+.glassx svg{position:absolute;inset:0;width:100%;height:100%;opacity:.06;mix-blend-mode:overlay;border-radius:20px}
+.glow,.grain{position:absolute;left:6%;right:-3%;top:35%;bottom:-34px;z-index:-1;pointer-events:none;border-radius:28px}
+.glow{background:radial-gradient(60% 70% at 62% 72%,rgba(255,102,51,0.30),rgba(255,102,51,0.10) 55%,transparent 78%);filter:blur(22px);opacity:.85;transition:opacity .3s ease}
+.grain{opacity:.10;mix-blend-mode:overlay;-webkit-mask-image:radial-gradient(60% 70% at 62% 72%,#000,transparent 78%);mask-image:radial-gradient(60% 70% at 62% 72%,#000,transparent 78%)}
+.grain svg{width:100%;height:100%;display:block}
+
+/* Crispy V2 */
+.panel{position:relative;border:1px solid transparent;background:linear-gradient(115deg,rgba(10,11,14,0.94) 0%,rgba(18,19,24,0.94) 45%,rgba(22,23,27,0.92) 75%,rgba(30,32,40,0.9) 100%) padding-box,linear-gradient(115deg,rgba(255,255,255,0.10) 0%,rgba(255,140,100,0.18) 35%,rgba(255,102,51,0.55) 70%,#FF8A5C 100%) border-box;border-radius:16px}
+.lbl{text-transform:uppercase;letter-spacing:0.12em;font-size:11px;opacity:.8}
+.key{border-color:#3A3A40;background:rgba(255,255,255,0.04)}
+.seg{border-color:#2A2A2E;border-radius:999px;background:rgba(7,7,9,0.6)}
+.seg span{border-left-color:transparent}
+.seg span.on{border-radius:999px;box-shadow:0 0 6px rgba(255,102,51,0.9),0 0 18px rgba(255,102,51,0.5)}
+.sunken{background:rgba(255,255,255,0.04);box-shadow:inset 0 0 0 1px rgba(255,255,255,0.06);border-radius:10px;transition:background-color .2s ease,color .2s ease,box-shadow .2s ease}
+.sunken:hover{background:rgba(255,102,51,0.14);color:#FF6633;box-shadow:inset 0 0 0 1px rgba(255,102,51,0.5),0 0 12px rgba(255,102,51,0.3)}
+.ring-wedge{filter:drop-shadow(0 0 6px rgba(255,102,51,0.9)) drop-shadow(0 0 16px rgba(255,102,51,0.45))}
+</style>
+</helmet>
+<div class="vz" style="isolation: isolate; border-radius: 20px; background: #08080A; width: 1100px; height: 640px; --bg: {{t.bg}}; --surface: {{t.surface}}; --sunken: {{t.sunken}}; --ink: {{t.ink}}; --ink-2: {{t.ink2}}; --ink-3: {{t.ink3}}; --line: {{t.line}}; --hairline: {{t.hairline}}; --accent: #FF6633; --focus: {{t.focus}}">
+<svg width="0" height="0" style="position: absolute" aria-hidden="true"><filter id="vzgrain" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/></filter></svg>
+  <div class="bgx" aria-hidden="true"><b style="width: 720px; height: 720px; left: -220px; top: -260px; background: rgba(255,102,51,0.35)"></b><b style="width: 640px; height: 640px; right: -200px; top: 420px; background: rgba(70,80,120,0.40)"></b><b style="width: 760px; height: 760px; left: 280px; bottom: -320px; background: rgba(255,90,40,0.30)"></b></div>
+  <div class="glassx" aria-hidden="true"><svg><rect width="100%" height="100%" filter="url(#vzgrain)"/></svg></div>
+  
+<div style="position: absolute; left: 48px; top: 40px; right: 48px; display: flex; align-items: center; justify-content: space-between">
+  <div style="display: flex; align-items: center; gap: 16px"><svg viewBox="0 0 1080 1080" width="32" height="32"><rect width="1080" height="1080" rx="125.85" fill="#000"/><ellipse cx="540" cy="548" rx="221" ry="178" fill="#FF6633"/><path d="M119.34,254.11h191l219,487.8,219-487.8h191l-298,634.5h-224L119.34,254.11Z" fill="#fff"/></svg><div style="display: flex; flex-direction: column"><span class="title">Converter</span><span class="cap">Selecione arquivos no Explorer e segure Alt</span></div></div>
+  <span class="lbl">Vizu Crispy V2 · by CrispyPixel</span>
+</div>
+<div style="position: absolute; left: 48px; top: 128px; display: flex; gap: 48px; align-items: flex-start">
+  <div style="display: flex; flex-direction: column; gap: 16px; align-items: center"><svg viewBox="0 0 360 360" width="340" height="340" role="img" aria-label="Menu circular">
+<defs>
+<linearGradient id="ndisc" x1="0.15" y1="0.05" x2="0.85" y2="0.95"><stop offset="0" stop-color="{{n.discA}}"></stop><stop offset="1" stop-color="{{n.discB}}"></stop></linearGradient>
+<linearGradient id="nrim" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="{{n.rimA}}"></stop><stop offset="1" stop-color="{{n.rimB}}"></stop></linearGradient>
+<radialGradient id="nhot" gradientUnits="userSpaceOnUse" cx="180" cy="180" r="162"><stop offset="0.432" stop-color="{{n.hotA}}"></stop><stop offset="0.62" stop-color="{{n.hotB}}"></stop><stop offset="1" stop-color="{{n.hotC}}"></stop></radialGradient>
+<radialGradient id="nwell" cx="0.5" cy="0.38" r="0.65"><stop offset="0" stop-color="{{n.wellA}}"></stop><stop offset="1" stop-color="{{n.wellB}}"></stop></radialGradient>
+<filter id="nblur" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="7"></feGaussianBlur></filter>
+<filter id="nshadowBlur" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="{{n.sblur}}"></feGaussianBlur></filter>
+<filter id="nsoft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2.2"></feGaussianBlur></filter>
+<filter id="ncrease" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="2.4"></feGaussianBlur></filter>
+</defs>
+<circle cx="180" cy="186" r="174" fill="{{n.shadow}}" filter="url(#nshadowBlur)"></circle>
+<circle cx="180" cy="180" r="170" fill="url(#ndisc)" stroke="url(#nrim)" stroke-width="1.2"></circle>
+<path d="M99.50 40.57L101.50 44.03M111.96 34.08L110.27 30.46M124.93 28.71L123.57 24.95M138.33 24.49L137.29 20.62M152.04 21.45L151.35 17.51M165.97 19.61L165.62 15.63M180.00 19.00L180.00 15.00M194.03 19.61L194.38 15.63M207.96 21.45L208.65 17.51M221.67 24.49L220.63 28.35M235.07 28.71L236.43 24.95M248.04 34.08L249.73 30.46M260.50 40.57L262.50 37.11M272.35 48.12L274.64 44.84M283.49 56.67L286.06 53.60M293.84 66.16L296.67 63.33M303.33 76.51L306.40 73.94M311.88 87.65L315.16 85.36M319.43 99.50L315.97 101.50M325.92 111.96L329.54 110.27M331.29 124.93L335.05 123.57M335.51 138.33L339.38 137.29M338.55 152.04L342.49 151.35M340.39 165.97L344.37 165.62M341.00 180.00L345.00 180.00M340.39 194.03L344.37 194.38M338.55 207.96L342.49 208.65M335.51 221.67L331.65 220.63M331.29 235.07L335.05 236.43M325.92 248.04L329.54 249.73M319.43 260.50L322.89 262.50M311.88 272.35L315.16 274.64M303.33 283.49L306.40 286.06M293.84 293.84L296.67 296.67M283.49 303.33L286.06 306.40M272.35 311.88L274.64 315.16M260.50 319.43L258.50 315.97M248.04 325.92L249.73 329.54M235.07 331.29L236.43 335.05M221.67 335.51L222.71 339.38M207.96 338.55L208.65 342.49M194.03 340.39L194.38 344.37M180.00 341.00L180.00 345.00M165.97 340.39L165.62 344.37M152.04 338.55L151.35 342.49M138.33 335.51L139.37 331.65M124.93 331.29L123.57 335.05M111.96 325.92L110.27 329.54M99.50 319.43L97.50 322.89M87.65 311.88L85.36 315.16M76.51 303.33L73.94 306.40M66.16 293.84L63.33 296.67M56.67 283.49L53.60 286.06M48.12 272.35L44.84 274.64M40.57 260.50L44.03 258.50M34.08 248.04L30.46 249.73M28.71 235.07L24.95 236.43M24.49 221.67L20.62 222.71M21.45 207.96L17.51 208.65M19.61 194.03L15.63 194.38M19.00 180.00L15.00 180.00M19.61 165.97L15.63 165.62M21.45 152.04L17.51 151.35M24.49 138.33L28.35 139.37M28.71 124.93L24.95 123.57M34.08 111.96L30.46 110.27M40.57 99.50L37.11 97.50M48.12 87.65L44.84 85.36M56.67 76.51L53.60 73.94M66.16 66.16L63.33 63.33M76.51 56.67L73.94 53.60M87.65 48.12L85.36 44.84" stroke="{{n.tick}}" stroke-width="1" stroke-linecap="round" fill="none"></path>
+<path d="M265.70 41.35A163 163 0 0 1 342.93 175.11" stroke="{{n.arc}}" stroke-width="3" stroke-linecap="round" fill="none" filter="url(#nsoft)" opacity=".9"></path>
+<path d="M265.70 41.35A163 163 0 0 1 342.93 175.11" stroke="{{n.arc}}" stroke-width="1.6" stroke-linecap="round" fill="none"></path>
+<path d="M141.96 123.63L115.20 67.76L150.20 118.88ZM209.80 118.88L244.80 67.76L218.04 123.63ZM247.83 175.24L309.60 180.00L247.83 184.76ZM218.04 236.37L244.80 292.24L209.80 241.12ZM150.20 241.12L115.20 292.24L141.96 236.37ZM112.17 184.76L50.40 180.00L112.17 175.24Z" fill="{{n.crease}}" filter="url(#ncrease)"></path>
+<linearGradient id="nln0" gradientUnits="userSpaceOnUse" x1="145.0" y1="119.4" x2="102.0" y2="44.9"><stop offset="0" stop-color="{{n.line}}"></stop><stop offset="1" stop-color="{{n.line}}" stop-opacity="0"></stop></linearGradient>
+<line x1="145.0" y1="119.4" x2="102.0" y2="44.9" stroke="url(#nln0)" stroke-width="1" stroke-linecap="round"></line>
+<linearGradient id="nln3" gradientUnits="userSpaceOnUse" x1="215.0" y1="240.6" x2="258.0" y2="315.1"><stop offset="0" stop-color="{{n.line}}"></stop><stop offset="1" stop-color="{{n.line}}" stop-opacity="0"></stop></linearGradient>
+<line x1="215.0" y1="240.6" x2="258.0" y2="315.1" stroke="url(#nln3)" stroke-width="1" stroke-linecap="round"></line>
+<linearGradient id="nln4" gradientUnits="userSpaceOnUse" x1="145.0" y1="240.6" x2="102.0" y2="315.1"><stop offset="0" stop-color="{{n.line}}"></stop><stop offset="1" stop-color="{{n.line}}" stop-opacity="0"></stop></linearGradient>
+<line x1="145.0" y1="240.6" x2="102.0" y2="315.1" stroke="url(#nln4)" stroke-width="1" stroke-linecap="round"></line>
+<linearGradient id="nln5" gradientUnits="userSpaceOnUse" x1="110.0" y1="180.0" x2="24.0" y2="180.0"><stop offset="0" stop-color="{{n.line}}"></stop><stop offset="1" stop-color="{{n.line}}" stop-opacity="0"></stop></linearGradient>
+<line x1="110.0" y1="180.0" x2="24.0" y2="180.0" stroke="url(#nln5)" stroke-width="1" stroke-linecap="round"></line>
+<path d="M269.72 57.30A152 152 0 0 1 331.12 163.65Q331.90 174.62 320.91 175.01L264.95 176.99Q253.95 177.38 252.75 166.46A74 74 0 0 0 228.10 123.77Q219.24 117.26 225.08 107.94L254.78 60.46Q260.61 51.14 269.72 57.30Z" fill="{{n.halo}}" filter="url(#nblur)"></path>
+<path d="M269.72 57.30A152 152 0 0 1 331.12 163.65Q331.90 174.62 320.91 175.01L264.95 176.99Q253.95 177.38 252.75 166.46A74 74 0 0 0 228.10 123.77Q219.24 117.26 225.08 107.94L254.78 60.46Q260.61 51.14 269.72 57.30Z" fill="url(#nhot)"></path>
+<ellipse cx="280.5" cy="124.0" rx="34" ry="22" fill="{{n.labelGlow}}" filter="url(#nblur)"></ellipse>
+<path d="M269.72 57.30A152 152 0 0 1 331.12 163.65Q331.90 174.62 320.91 175.01L264.95 176.99Q253.95 177.38 252.75 166.46A74 74 0 0 0 228.10 123.77Q219.24 117.26 225.08 107.94L254.78 60.46Q260.61 51.14 269.72 57.30Z" fill="none" stroke="{{n.sheen}}" stroke-width="1" transform="translate(0 0.6)" opacity=".7"></path>
+<path d="M269.72 57.30A152 152 0 0 1 331.12 163.65Q331.90 174.62 320.91 175.01L264.95 176.99Q253.95 177.38 252.75 166.46A74 74 0 0 0 228.10 123.77Q219.24 117.26 225.08 107.94L254.78 60.46Q260.61 51.14 269.72 57.30Z" fill="none" stroke="{{n.edge}}" stroke-width="1.4"></path>
+<circle cx="180" cy="180" r="70" fill="none" stroke="{{n.wellShadow}}" stroke-width="10" filter="url(#nsoft)"></circle>
+<circle cx="180" cy="180" r="64" fill="{{n.plate}}" stroke="{{n.plateRim}}" stroke-width="1"></circle>
+<circle cx="180" cy="180" r="56" fill="url(#nwell)" stroke="{{n.wellRim}}" stroke-width="1"></circle>
+<path d="M195.81 128.37A54 54 0 0 1 232.62 192.12" stroke="{{n.wellLight}}" stroke-width="4" stroke-linecap="round" fill="none" filter="url(#nsoft)" opacity=".85"></path>
+<text x="180.0" y="64.0" text-anchor="middle" dominant-baseline="middle" font-size="13" font-weight="600" letter-spacing="0.1em" fill="{{n.label}}">PNG</text>
+<text x="280.5" y="122.0" text-anchor="middle" dominant-baseline="middle" font-size="15.5" font-weight="700" letter-spacing="0.1em" fill="{{n.hotText}}">JPG</text>
+<text x="280.5" y="238.0" text-anchor="middle" dominant-baseline="middle" font-size="13" font-weight="600" letter-spacing="0.1em" fill="{{n.label}}">PDF</text>
+<text x="180.0" y="296.0" text-anchor="middle" dominant-baseline="middle" font-size="13" font-weight="600" letter-spacing="0.1em" fill="{{n.label}}">WEBP</text>
+<text x="79.5" y="238.0" text-anchor="middle" dominant-baseline="middle" font-size="13" font-weight="600" letter-spacing="0.1em" fill="{{n.label}}">TIFF</text>
+<text x="79.5" y="122.0" text-anchor="middle" dominant-baseline="middle" font-size="13" font-weight="600" letter-spacing="0.1em" fill="{{n.label}}">ZIP</text>
+<text x="180" y="166" text-anchor="middle" font-size="8.5" font-weight="600" letter-spacing="0.16em" fill="{{n.muted}}">2 ARQUIVOS</text>
+<text x="180" y="185" text-anchor="middle" font-size="16" font-weight="700" letter-spacing="0.04em" fill="{{n.title}}">Converter</text>
+<text x="180" y="201" text-anchor="middle" font-size="8.5" font-weight="600" letter-spacing="0.06em" fill="{{n.muted}}">‹ Extras · Ferram. ›</text>
+<rect x="158" y="210" width="14" height="3" rx="1.5" fill="{{n.acc}}"></rect>
+<rect x="177" y="210" width="6" height="3" rx="1.5" fill="{{n.dot}}"></rect>
+<rect x="188" y="210" width="6" height="3" rx="1.5" fill="{{n.dot}}"></rect>
+<rect x="199" y="210" width="6" height="3" rx="1.5" fill="{{n.dot}}"></rect>
+<rect x="210" y="210" width="6" height="3" rx="1.5" fill="{{n.dot}}"></rect>
+</svg>
+    <span class="cap" style="display: flex; gap: 8px; align-items: center"><span class="key">Alt</span> segure · roda do mouse troca de lado</span></div>
+  <div style="display: flex; flex-direction: column; gap: 24px; width: 520px">
+    <div class="panel" style="display: flex; flex-direction: column; gap: 16px"><i class="glow" aria-hidden="true"></i><i class="grain" aria-hidden="true"><svg><rect width="100%" height="100%" filter="url(#vzgrain)"/></svg></i>
+      <span class="lbl">LADOS DO MENU</span>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap"><span class="seg"><span class="on">Converter</span><span class="">Ferramentas</span><span class="">PDF</span><span class="">Extras</span></span></div>
+      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px"><span class="sunken" style="display: flex; align-items: center; gap: 8px; padding: 12px; font-size: 13px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>Redimensionar</span><span class="sunken" style="display: flex; align-items: center; gap: 8px; padding: 12px; font-size: 13px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2"/></svg>Recortar</span><span class="sunken" style="display: flex; align-items: center; gap: 8px; padding: 12px; font-size: 13px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>Girar 90°</span><span class="sunken" style="display: flex; align-items: center; gap: 8px; padding: 12px; font-size: 13px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Espelhar</span><span class="sunken" style="display: flex; align-items: center; gap: 8px; padding: 12px; font-size: 13px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>Tons de cinza</span><span class="sunken" style="display: flex; align-items: center; gap: 8px; padding: 12px; font-size: 13px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>Sem metadados</span></div>
+      <span class="cap">Ferramentas, para imagens. PDF: juntar na ordem do clique, dividir, extrair páginas, compactar. Extras: camadas do PSD, folha de cores, HEX/CSS, ASE e ACO, amostra de fonte.</span>
+    </div>
+    <div class="panel" style="display: flex; flex-direction: column; gap: 12px"><i class="glow" aria-hidden="true"></i><i class="grain" aria-hidden="true"><svg><rect width="100%" height="100%" filter="url(#vzgrain)"/></svg></i>
+      <span class="lbl">ZIP</span>
+      <span style="font-size: 14px">Compacta qualquer seleção na mesma pasta. Um item leva o nome dele; vários, o nome da pasta.</span>
+    </div>
+  </div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"neon":{"editor":"enum","options":["Laranja","Rosa","Ciano","Lima","Roxo","Amarelo"],"default":"Laranja"},"tema":{"editor":"enum","options":["Escuro","Claro"],"default":"Escuro"},"$preview":{"width":1100,"height":640}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const neons = { "Laranja": "#ff6633", "Rosa": "#ff2d95", "Ciano": "#00e5ff", "Lima": "#b6ff3b", "Roxo": "#a855f7", "Amarelo": "#ffd400" };
+    const n = neons[this.props.neon] || "#ff6633";
+    const a = (hex, al) => { const v = parseInt(hex.slice(1), 16); return `rgba(${v >> 16 & 255},${v >> 8 & 255},${v & 255},${al})`; };
+    const crispyOld = { stage: "#16161a", discA: "#1d1d20", discB: "#050506", rimA: "rgba(140,140,150,0.6)", rimB: "rgba(60,60,66,0.4)", shadow: "rgba(0,0,0,0.7)",
+      crease: "rgba(0,0,0,0.85)", hotA: n, hotB: a(n, 0.45), hotC: "rgba(14,10,8,0.9)", halo: a(n, 0.45), edge: n, sheen: "transparent", labelGlow: "transparent",
+      wellShadow: "rgba(0,0,0,0.8)", plate: "#141416", plateRim: "rgba(255,255,255,0.08)", wellA: "#1a1a1c", wellB: "#020203", wellRim: "rgba(255,255,255,0.12)",
+      acc: n, arc: n, wellLight: n, line: "transparent", sblur: "7", label: "#8e8e95", hotText: "#ffffff", hotSub: n, title: n, muted: "#8e8e95", dot: "rgba(255,255,255,0.18)", tick: "transparent" };
+    const crispy = { ...crispyOld, stage: "#121215", hotA: a(n, 0.95), hotB: a(n, 0.28), hotC: "rgba(12,10,10,0.85)", halo: a(n, 0.38), crease: "rgba(0,0,0,0.6)",
+      sheen: "rgba(255,255,255,0.35)", labelGlow: "rgba(0,0,0,0.35)", tick: "transparent", arc: "transparent", wellLight: "transparent", label: "#6c6c73", hotSub: "#ffffff", hotText: "#ffffff" };
+    const dark = { ...crispy, stage: "#121214", rimA: "rgba(160,160,168,0.45)", rimB: "rgba(50,50,56,0.35)", hotA: "rgba(74,79,87,0.95)", hotB: "rgba(74,79,87,0.7)", hotC: "rgba(74,79,87,0.45)",
+      halo: "transparent", edge: "rgba(154,161,173,0.35)", sheen: "rgba(255,255,255,0.10)", labelGlow: "transparent", acc: "#9AA1AD", arc: "transparent", wellLight: "transparent",
+      hotSub: "#8d8d93", title: "#ffffff", tick: "transparent", label: "#66666c" };
+    const light = { stage: "#e7e8ec", discA: "#fbfbfc", discB: "#dcdee3", rimA: "rgba(255,255,255,1)", rimB: "rgba(0,0,0,0.10)", shadow: "rgba(30,34,50,0.11)", sblur: "18",
+      crease: "transparent", line: "rgba(40,44,60,0.22)", hotA: "rgba(255,255,255,1)", hotB: "rgba(255,255,255,0.85)", hotC: "rgba(255,255,255,0.55)", halo: "rgba(30,34,50,0.11)",
+      edge: "transparent", sheen: "transparent", labelGlow: "rgba(255,255,255,0.6)", wellShadow: "rgba(30,34,50,0.06)", plate: "#eceef1",
+      plateRim: "rgba(255,255,255,0.9)", wellA: "#ffffff", wellB: "#e3e5ea", wellRim: "rgba(0,0,0,0.06)", acc: "#1d1d1f", arc: "transparent", wellLight: "transparent", label: "#bdbdc3",
+      hotText: "#1d1d1f", hotSub: "#6b6b72", title: "#1d1d1f", muted: "#7a7a82", dot: "rgba(0,0,0,0.14)", tick: "transparent" };
+    const themes = {
+  "Escuro": { bg: "#0E0E10", surface: "#1A1A1D", sunken: "#070708", ink: "#F2F2F2", ink2: "#A8A8AF", ink3: "#9A9AA1", line: "#8A8A92", hairline: "#3A2B25", focus: "#F2F2F2" },
+  "Claro": { bg: "#F2F2F2", surface: "#F2F3F5", sunken: "#E6E8EC", ink: "#000000", ink2: "#1A1A1D", ink3: "#3A2B25", line: "#8A919E", hairline: "#D5D9DF", focus: "#000000" }
+};
+return { t: themes[this.props.tema] || themes["Escuro"], n: crispy };
+  }
+}
+</script>
+</body>
+</html>

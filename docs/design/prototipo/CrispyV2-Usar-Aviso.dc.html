@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Vizu Crispy V2 · Aviso e bandeja</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+.mi{display:flex;align-items:center;gap:12px;height:36px;padding:0 12px;border:0;border-radius:6px;background:transparent;color:#F2F2F2;font:inherit;font-size:13px;text-align:left;cursor:pointer;width:100%}
+.bgx{position:absolute;inset:0;z-index:-3;overflow:hidden;border-radius:20px;pointer-events:none}
+.bgx b{position:absolute;border-radius:50%;filter:blur(90px)}
+.glassx{position:absolute;inset:0;z-index:-2;border-radius:20px;pointer-events:none;background:linear-gradient(115deg,rgba(22,23,27,0.62) 0%,rgba(18,19,23,0.55) 50%,rgba(22,23,27,0.48) 100%);-webkit-backdrop-filter:blur(40px) saturate(150%);backdrop-filter:blur(40px) saturate(150%);box-shadow:inset 0 1px 0 rgba(255,255,255,0.10),inset 0 0 0 1px rgba(255,255,255,0.07),inset 0 -1px 0 rgba(255,102,51,0.18)}
+.glassx svg{position:absolute;inset:0;width:100%;height:100%;opacity:.06;mix-blend-mode:overlay;border-radius:20px}
+.glow,.grain{position:absolute;left:6%;right:-3%;top:35%;bottom:-34px;z-index:-1;pointer-events:none;border-radius:28px}
+.glow{background:radial-gradient(60% 70% at 62% 72%,rgba(255,102,51,0.30),rgba(255,102,51,0.10) 55%,transparent 78%);filter:blur(22px);opacity:.85;transition:opacity .3s ease}
+.grain{opacity:.10;mix-blend-mode:overlay;-webkit-mask-image:radial-gradient(60% 70% at 62% 72%,#000,transparent 78%);mask-image:radial-gradient(60% 70% at 62% 72%,#000,transparent 78%)}
+.grain svg{width:100%;height:100%;display:block}
+
+.gc{position:relative;border:1px solid transparent!important;background:linear-gradient(115deg,rgba(10,11,14,0.94) 0%,rgba(18,19,24,0.94) 45%,rgba(22,23,27,0.92) 75%,rgba(30,32,40,0.9) 100%) padding-box,linear-gradient(115deg,rgba(255,255,255,0.10) 0%,rgba(255,140,100,0.18) 35%,rgba(255,102,51,0.55) 70%,#FF8A5C 100%) border-box!important}
+.lb2{text-transform:uppercase;letter-spacing:0.12em;font-size:11px!important;opacity:.8}
+</style>
+</helmet>
+<div style="isolation: isolate; position: relative; border-radius: 20px; width: 760px; height: 460px; box-sizing: border-box; padding: 40px; background: #08080A; color: #F2F2F2; font-family: Inter, system-ui, sans-serif; font-size: 14px; line-height: 20px; display: flex; gap: 40px">
+  <svg width="0" height="0" style="position: absolute" aria-hidden="true"><filter id="vzgrain" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/></filter></svg>
+  <div class="bgx" aria-hidden="true"><b style="width: 720px; height: 720px; left: -220px; top: -260px; background: rgba(255,102,51,0.35)"></b><b style="width: 640px; height: 640px; right: -200px; top: 420px; background: rgba(70,80,120,0.40)"></b><b style="width: 760px; height: 760px; left: 280px; bottom: -320px; background: rgba(255,90,40,0.30)"></b></div>
+  <div class="glassx" aria-hidden="true"><svg><rect width="100%" height="100%" filter="url(#vzgrain)"/></svg></div>
+  
+
+  <div style="flex: 1; display: flex; flex-direction: column; gap: 16px">
+    <span style="font-size: 12px; line-height: 16px; font-weight: 500; color: #9A9AA1" class="lb2">Aviso</span>
+    <div class="gc" role="status" style="display: flex; align-items: flex-start; gap: 12px; padding: 16px; border-radius: 16px"><i class="glow" aria-hidden="true"></i><i class="grain" aria-hidden="true"><svg><rect width="100%" height="100%" filter="url(#vzgrain)"/></svg></i>
+      <span style="width: 28px; height: 28px; flex: none; border-radius: 50%; background: rgba(255,102,51,0.14); box-shadow: inset 0 0 0 1px rgba(255,102,51,0.5); color: #FF6633; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+      <div style="display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0">
+        <span style="font-weight: 500">3 arquivos convertidos</span>
+        <span style="font-size: 12px; line-height: 16px; color: #A8A8AF">1 com erro: banner_final.psd</span>
+        <div style="display: flex; gap: 8px; margin-top: 12px">
+          <button type="button" style="height: 32px; padding: 0 12px; border: 0; border-radius: 999px; background: #FF6633; color: #000000; box-shadow: 0 0 6px rgba(255,102,51,0.9), 0 0 18px rgba(255,102,51,0.45); font: inherit; font-size: 13px; font-weight: 500">Abrir pasta</button>
+          <button type="button" style="height: 32px; padding: 0 12px; border: 1px solid #3A3A40; border-radius: 999px; background: rgba(255,255,255,0.04); color: #F2F2F2; font: inherit; font-size: 13px; font-weight: 500">Ver erro</button>
+        </div>
+      </div>
+      <button type="button" aria-label="Fechar aviso" style="width: 28px; height: 28px; border: 0; border-radius: 6px; background: transparent; color: #A8A8AF; display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+    </div>
+    <span style="font-size: 12px; line-height: 16px; color: #9A9AA1">Some sozinho em 6 s. Sem erro, mostra só o título e Abrir pasta.</span>
+  </div>
+
+  <div style="width: 240px; display: flex; flex-direction: column; gap: 16px">
+    <span style="font-size: 12px; line-height: 16px; font-weight: 500; color: #9A9AA1" class="lb2">Bandeja</span>
+    <nav aria-label="Menu da bandeja" style="width: 200px; padding: 6px 4px; border-radius: 8px; background: #2C2C2C; box-shadow: 0 0 0 1px #3D3D3D, 0 8px 24px rgba(0,0,0,0.4); display: flex; flex-direction: column; font-family: 'Segoe UI', system-ui, sans-serif; font-size: 13px">
+      <span style="padding: 6px 14px; color: #8C8C8C">Vizu 9.12</span>
+      <span style="height: 1px; background: #3D3D3D; margin: 4px 0"></span>
+      <button type="button" style="text-align: left; padding: 6px 14px; border: 0; border-radius: 4px; background: #3A3A3A; color: #F0F0F0; font: inherit">Limpeza</button>
+      <button type="button" style="text-align: left; padding: 6px 14px; border: 0; background: transparent; color: #F0F0F0; font: inherit">Configurações</button>
+      <button type="button" style="text-align: left; padding: 6px 14px; border: 0; background: transparent; color: #F0F0F0; font: inherit">Atualizações</button>
+      <button type="button" style="text-align: left; padding: 6px 14px; border: 0; background: transparent; color: #F0F0F0; font: inherit">Reiniciar</button>
+      <button type="button" style="text-align: left; padding: 6px 14px; border: 0; background: transparent; color: #F0F0F0; font: inherit">Encerrar</button>
+    </nav>
+    <span style="font-size: 12px; line-height: 16px; opacity: 0.7">Menu nativo do Windows: igual em todos os temas.</span>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":760,"height":460}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

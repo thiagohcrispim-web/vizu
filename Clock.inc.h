@@ -381,7 +381,7 @@ static void ClockRender() {
         th.icon = th.text;
     }
     g_clock.s = s;
-    float H = 64 * s, M = docked ? 0 : 14 * s, fpx = (float)g_clock.fontPx;
+    float H = 64 * s, M = docked ? 0 : (th.neon ? 26 : 14) * s, fpx = (float)g_clock.fontPx;
     bool pomo = g_clock.phase != 0;
     UINT pc = kPomoPairs[min(2ul, (unsigned long)g_clock.pomoColors)][g_clock.phase == 1 ? 0 : 1];
 
@@ -409,10 +409,11 @@ static void ClockRender() {
     ui::Painter p(rt, g_dw, th, s);
     D2D1_RECT_F card = D2D1::RectF(M, M, M + Wc, M + H);
     float rad = 22 * s;
-    if (!docked) p.Shadow(card, rad);
+    if (!docked && !th.neon) p.Shadow(card, rad);
     D2D1_COLOR_F base = docked ? ui::Rgba(0x000000, 0.006f) // quase invisível: a barra de tarefas aparece por trás (e o clique funciona)
                        : th.classic ? ui::Rgba(0x4A4F57) : th.neon ? ui::Rgba(0x0E0E10, 0.94f) : th.dark ? ui::Rgba(0x161618, 0.94f) : ui::Rgba(0xFAFAFC, 0.95f);
-    p.Fill(card, rad, base);
+    if (th.neon && !docked) p.Card(card, rad, 0, !pomo); // Crispy V2: borda em degradê e brilho (Foco/Pausa sem brilho laranja)
+    else p.Fill(card, rad, base);
     if (pomo) {
         p.Fill(card, rad, ui::Rgba(pc, 0.15f));
         if (g_clock.phase == 1 && !g_clock.paused)
@@ -431,16 +432,16 @@ static void ClockRender() {
             clip->Release();
         }
         fac->Release();
-    } else if (!docked) p.Stroke(card, rad, th.neon ? ui::Rgba(ui::NeonColor(), 0.42f) : th.stroke, 1 * s);
+    } else if (!docked && !th.neon) p.Stroke(card, rad, th.stroke, 1 * s);
 
     float x = card.left + 14 * s, cy = (card.top + card.bottom) / 2;
-    D2D1_COLOR_F hotBg = th.dark ? ui::Rgba(0xFFFFFF, 0.14f) : ui::Rgba(0x000000, 0.09f), chipBg = th.classic ? ui::Rgba(0x23272E) : th.dark ? ui::Rgba(0xFFFFFF, 0.07f) : ui::Rgba(0x000000, 0.05f);
+    D2D1_COLOR_F hotBg = th.neon ? ui::Rgba(ui::NeonColor(), 0.18f) : th.dark ? ui::Rgba(0xFFFFFF, 0.14f) : ui::Rgba(0x000000, 0.09f), chipBg = th.classic ? ui::Rgba(0x23272E) : th.neon ? ui::Rgba(0xFFFFFF, 0.05f) : th.dark ? ui::Rgba(0xFFFFFF, 0.07f) : ui::Rgba(0x000000, 0.05f);
     if (th.classic) hotBg = ui::Rgba(0x5C6472);
     // 1) ícone da esquerda: agenda (triângulo) ou fase do Pomodoro
     g_clock.rTri = D2D1::RectF(0, 0, 0, 0);
     if (showTri) {
         g_clock.rTri = D2D1::RectF(x - 6 * s, cy - 16 * s, x + 26 * s, cy + 16 * s);
-        if (g_clock.hot == kClkTri) p.Fill(g_clock.rTri, 10 * s, hotBg);
+        if (g_clock.hot == kClkTri) { if (th.neon) p.Neon(g_clock.rTri, 10 * s, 0.7f); p.Fill(g_clock.rTri, 10 * s, hotBg); }
         if (pomo) p.FeatherIcon(g_clock.phase == 1 ? "target" : "coffee", D2D1::RectF(x, cy - 10 * s, x + 20 * s, cy + 10 * s), 19 * s, ui::Rgba(pc));
         else p.FeatherIcon("alert-triangle", D2D1::RectF(x, cy - 10 * s, x + 20 * s, cy + 10 * s), 19 * s, AgendaSoon(nullptr) ? ui::Rgba(0xFF3B30) : th.text2);
         x += 20 * s + 12 * s;
@@ -493,7 +494,7 @@ static void ClockRender() {
         wchar_t tb[16]; if (sec >= 3600) swprintf(tb, 16, L"%d:%02d:%02d", sec / 3600, sec / 60 % 60, sec % 60); else swprintf(tb, 16, L"%02d:%02d", sec / 60, sec % 60);
         p.Text(tb, D2D1::RectF(r.left + 30 * s, r.top, r.right - 10 * s, r.bottom), 13, ui::Rgba(0xFF7A8F), DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
     } else {
-        p.Fill(g_clock.rChip[0], chip / 2, g_clock.hot == kClkChip0 ? hotBg : chipBg);
+        { bool hv_ = g_clock.hot == kClkChip0; if (th.neon && hv_) p.Neon(g_clock.rChip[0], chip / 2, 0.7f); p.Fill(g_clock.rChip[0], chip / 2, hv_ ? hotBg : chipBg); if (th.neon) p.Stroke(g_clock.rChip[0], chip / 2, hv_ ? th.accent : ui::Rgba(0xFFFFFF, 0.10f)); }
         p.FilledIcon("skull", g_clock.rChip[0], 20 * s, th.icon);
     }
     if (g_clock.pomoOn) g_clock.rChip[1] = chipRect(chip);
@@ -502,23 +503,23 @@ static void ClockRender() {
         p.Fill(g_clock.rChip[1], chip / 2, ui::Rgba(pc, g_clock.hot == kClkChip1 ? 0.8f : 1.0f));
         UINT on = (pc >> 16 & 255) * 3 + (pc >> 8 & 255) * 6 + (pc & 255) > 1700 ? 0x0B0B0C : 0xFFFFFF; // texto legível sobre a cor
         p.FeatherIcon(g_clock.paused ? "play" : "pause", g_clock.rChip[1], 16 * s, ui::Rgba(on));
-        p.Fill(g_clock.rChip[2], chip / 2, g_clock.hot == kClkChip2 ? hotBg : chipBg);
+        { bool hv_ = g_clock.hot == kClkChip2; if (th.neon && hv_) p.Neon(g_clock.rChip[2], chip / 2, 0.7f); p.Fill(g_clock.rChip[2], chip / 2, hv_ ? hotBg : chipBg); if (th.neon) p.Stroke(g_clock.rChip[2], chip / 2, hv_ ? th.accent : ui::Rgba(0xFFFFFF, 0.10f)); }
         p.FeatherIcon("square", g_clock.rChip[2], 16 * s, th.icon);
     } else {
-        if (g_clock.pomoOn) { p.Fill(g_clock.rChip[1], chip / 2, g_clock.hot == kClkChip1 ? hotBg : chipBg); p.FilledIcon("timer", g_clock.rChip[1], 20 * s, th.icon); }
+        if (g_clock.pomoOn) { { bool hv_ = g_clock.hot == kClkChip1; if (th.neon && hv_) p.Neon(g_clock.rChip[1], chip / 2, 0.7f); p.Fill(g_clock.rChip[1], chip / 2, hv_ ? hotBg : chipBg); if (th.neon) p.Stroke(g_clock.rChip[1], chip / 2, hv_ ? th.accent : ui::Rgba(0xFFFFFF, 0.10f)); } p.FilledIcon("timer", g_clock.rChip[1], 20 * s, th.icon); }
         if (g_clock.chat) {
-        p.Fill(g_clock.rChip[2], chip / 2, g_clock.hot == kClkChip2 ? hotBg : chipBg);
+        { bool hv_ = g_clock.hot == kClkChip2; if (th.neon && hv_) p.Neon(g_clock.rChip[2], chip / 2, 0.7f); p.Fill(g_clock.rChip[2], chip / 2, hv_ ? hotBg : chipBg); if (th.neon) p.Stroke(g_clock.rChip[2], chip / 2, hv_ ? th.accent : ui::Rgba(0xFFFFFF, 0.10f)); }
         p.FilledIcon("chat-ai", g_clock.rChip[2], 20 * s, th.icon);
         }
     }
     if (g_clock.clean) { // Limpeza (vem antes do OCR)
         g_clock.rChip[4] = chipRect(chip);
-        p.Fill(g_clock.rChip[4], chip / 2, g_clock.hot == kClkChip4 ? hotBg : chipBg);
+        { bool hv_ = g_clock.hot == kClkChip4; if (th.neon && hv_) p.Neon(g_clock.rChip[4], chip / 2, 0.7f); p.Fill(g_clock.rChip[4], chip / 2, hv_ ? hotBg : chipBg); if (th.neon) p.Stroke(g_clock.rChip[4], chip / 2, hv_ ? th.accent : ui::Rgba(0xFFFFFF, 0.10f)); }
         p.FilledIcon("broom", g_clock.rChip[4], 20 * s, th.icon);
     }
     if (g_clock.ocr && g_clock.ocrBtn) { // ler texto da tela (OCR)
         g_clock.rChip[3] = chipRect(chip);
-        p.Fill(g_clock.rChip[3], chip / 2, g_clock.hot == kClkChip3 ? hotBg : chipBg);
+        { bool hv_ = g_clock.hot == kClkChip3; if (th.neon && hv_) p.Neon(g_clock.rChip[3], chip / 2, 0.7f); p.Fill(g_clock.rChip[3], chip / 2, hv_ ? hotBg : chipBg); if (th.neon) p.Stroke(g_clock.rChip[3], chip / 2, hv_ ? th.accent : ui::Rgba(0xFFFFFF, 0.10f)); }
         p.FilledIcon("scan-text", g_clock.rChip[3], 19 * s, th.icon);
     }
 

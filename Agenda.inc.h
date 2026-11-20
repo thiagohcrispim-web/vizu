@@ -74,8 +74,14 @@ static void PaintAgenda(HWND h) {
     rt->Clear(th.tint);
     ui::Backdrop(rt, th, W, H);
     ui::Painter p(rt, g_dw, th, s);
+    static ui::Anim an; static HWND last; an.Frame(); p.an = &an;
+    if (last != h) { last = h; an.m.clear(); an.Start(1, 0, 1, 220); } // janela nova: fade + escala 0,98 -> 1
+    float openK = an.Get(1, 1, 220), openSc = an.reduced ? 1.0f : 0.98f + 0.02f * openK;
+    rt->SetTransform(D2D1::Matrix3x2F::Scale(openSc, openSc, D2D1::Point2F(W / 2, H / 2)));
+    bool openLayer = openK < 0.999f;
+    if (openLayer) rt->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), nullptr, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE, D2D1::IdentityMatrix(), openK), nullptr);
     D2D1_COLOR_F acc = AccentOf(th), onAcc = OnAccentOf(th);
-    D2D1_COLOR_F sep = th.neon ? ui::Rgba(ui::NeonColor(), 0.14f) : th.dark ? ui::Rgba(0xFFFFFF, 0.07f) : ui::Rgba(0x000000, 0.07f);
+    D2D1_COLOR_F sep = th.neon ? ui::Rgba(0x232326) : th.dark ? ui::Rgba(0xFFFFFF, 0.07f) : ui::Rgba(0x000000, 0.07f);
     D2D1_COLOR_F field = th.dark ? ui::Rgba(0xFFFFFF, 0.06f) : ui::Rgba(0x000000, 0.045f);
     D2D1_COLOR_F hov = th.dark ? ui::Rgba(0xFFFFFF, 0.08f) : ui::Rgba(0x000000, 0.05f);
     g_ag.hits.clear();
@@ -268,7 +274,11 @@ static void PaintAgenda(HWND h) {
     if (!g_ag.msg.empty()) { p.Text(g_ag.msg, D2D1::RectF(fx0, fy, fx1, fy + 18 * s), 11.5f, ui::Rgba(0xFF453A), DWRITE_FONT_WEIGHT_SEMI_BOLD); fy += 22 * s; }
     p.Paragraph(T(L"Clique num evento para editar ou excluir. Tab passa de campo, Enter salva.", L"Click an event to edit or delete it. Tab moves between fields, Enter saves.",
                   L"Haz clic en un evento para editarlo o eliminarlo. Tab cambia de campo, Enter guarda."), fx0, fy, fx1 - fx0, 11.5f, th.text2);
+    if (th.neon) p.WindowFrame(D2D1::RectF(0, 0, W, H), th.glass ? 8 * s : 20 * s); // Crispy V2: contorno, filete e granulado
+    if (openLayer) rt->PopLayer();
+    rt->SetTransform(D2D1::IdentityMatrix());
     g_ag.surf.End();
+    an.Pump(h, ui::kAnimTick);
 }
 
 static void AgSave() {
@@ -383,7 +393,7 @@ static LRESULT CALLBACK AgendaProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     case WM_KEYDOWN:
         if (wp == VK_ESCAPE) { if (g_ag.editIdx >= 0) { AgResetForm(); InvalidateRect(h, nullptr, FALSE); } else DestroyWindow(h); }
         return 0;
-    case WM_TIMER: InvalidateRect(h, nullptr, FALSE); return 0; // cursor piscando e "agora"
+    case WM_TIMER: if (wp == ui::kAnimTick) KillTimer(h, wp); InvalidateRect(h, nullptr, FALSE); return 0; // cursor piscando e "agora"
     case WM_SIZE: g_ag.surf.Resize(LOWORD(lp), HIWORD(lp)); return 0;
     case WM_ERASEBKGND: return 1;
     case WM_PAINT: { PAINTSTRUCT ps; BeginPaint(h, &ps); PaintAgenda(h); EndPaint(h, &ps); return 0; }

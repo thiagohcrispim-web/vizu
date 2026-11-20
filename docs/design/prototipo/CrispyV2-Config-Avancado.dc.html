@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Vizu Crispy V2 · Configurações · Avançado</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+.sec{display:grid;grid-template-columns:150px minmax(0,1fr);column-gap:24px}
+.sec>h2{margin:0;padding-top:14px;font-size:13px;line-height:20px;font-weight:500}
+.rows{display:flex;flex-direction:column}
+.row{display:flex;align-items:center;justify-content:space-between;gap:24px;min-height:52px;padding:6px 0;border-top:1px solid #3A2B25;box-sizing:border-box}
+.rows>.row:first-child{border-top:0}
+.t{display:flex;flex-direction:column;gap:2px;min-width:0}
+.t b{font-weight:500;font-size:13px;line-height:18px}
+.t i{font-style:normal;font-size:11px;line-height:15px;color:#A8A8AF}
+.adv{display:flex;align-items:center;justify-content:space-between;min-height:44px;border-top:1px solid #3A2B25;padding:0;background:transparent;border-left:0;border-right:0;border-bottom:0;color:#F2F2F2;font:inherit;font-size:13px;font-weight:500;cursor:pointer;width:100%;text-align:left}
+.oo{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:500;flex:none}
+.oo .off{color:#3A2B25}.oo .on{color:#F2F2F2}
+.oo.isoff .off{color:#F2F2F2}.oo.isoff .on{color:#3A2B25}
+.sw{width:40px;height:22px;border-radius:11px;border:0;background:#3A2B25;position:relative;flex:none;padding:0;cursor:pointer}
+.sw span{position:absolute;left:3px;top:3px;width:16px;height:16px;border-radius:50%;background:#F2F2F2;box-shadow:0 1px 2px rgba(0,0,0,0.3)}
+.sw.on{background:#FF6633}.sw.on span{left:21px}
+.b{height:30px;padding:0 14px;border:0;border-radius:999px;box-shadow:inset 0 0 0 1px #3A2B25;background:transparent;color:#F2F2F2;font:inherit;font-size:11px;font-weight:500;flex:none;cursor:pointer}
+.b.ghost{background:#070708;box-shadow:none;color:#9A9AA1;padding:0 28px;height:34px}
+.ps{display:inline-flex;padding:3px;border-radius:999px;background:#070708}
+.ps button{height:30px;padding:0 30px;border:0;border-radius:999px;background:transparent;color:#F2F2F2;font:inherit;font-size:12px;font-weight:500;cursor:pointer}
+.ps button.on{background:#F2F2F2;color:#0E0E10}
+.tp{display:flex;flex-direction:column;align-items:center;gap:8px;padding:0;border:0;background:transparent;color:#F2F2F2;font:inherit;font-size:12px;cursor:pointer}
+.tp.on{font-weight:500}
+.tp i{display:flex;flex-direction:column;gap:6px;width:100%;height:64px;border-radius:10px;padding:10px;box-sizing:border-box;position:relative}
+.tp u{display:block;height:6px;border-radius:3px;text-decoration:none}
+.tp s{position:absolute;right:10px;bottom:10px;width:26px;height:10px;border-radius:5px}
+.lk{border:0;background:transparent;color:#F2F2F2;font:inherit;font-size:13px;font-weight:500;padding:0;cursor:pointer}
+.fb{height:40px;border:0;border-radius:999px;box-shadow:inset 0 0 0 1px #3A2B25;background:transparent;color:#F2F2F2;font:inherit;font-size:12px;cursor:pointer}
+
+/* Crispy V2 */
+.sec{grid-template-columns:170px minmax(0,1fr);column-gap:32px}
+.sec>h2{font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:#9A9AA1;padding-top:22px}
+.sec .rows{background:#141416;border-radius:16px;padding:6px 22px;box-shadow:inset 0 1px 0 rgba(255,255,255,0.06),12px 16px 44px -12px rgba(255,102,51,0.55),4px 6px 18px -8px rgba(255,102,51,0.35)}
+.sec .rows:hover{box-shadow:inset 0 1px 0 rgba(255,255,255,0.08),14px 20px 56px -10px rgba(255,102,51,0.7),4px 6px 22px -6px rgba(255,102,51,0.45)}
+.row{min-height:58px;border-top-color:#232326}
+.adv{border-top-color:#232326;color:#A8A8AF;font-weight:500}
+.adv .cnt{margin-left:10px;font-size:11px;font-weight:400;color:#6E6E76}
+.sw{background:#2A2A2E}
+.sw.on{background:#FF6633;box-shadow:0 0 14px rgba(255,102,51,0.55)}
+.sw.on span{background:#0E0E10}
+.oo .off{color:#4A4A50}
+.ps{background:#141416;box-shadow:0 0 0 1px #232326}
+.ps button.on{background:#FF6633;color:#000000;box-shadow:0 0 16px rgba(255,102,51,0.5)}
+.b{box-shadow:inset 0 0 0 1px #3A3A40}
+.b.ghost{background:#1A1A1D;color:#A8A8AF}
+.tp i{box-shadow:inset 0 0 0 1px #232326}
+.tp.on i{box-shadow:0 0 0 2px #FF6633,0 0 22px rgba(255,102,51,0.45)!important}
+.tp.on{color:#FF6633}
+.lk{color:#F2F2F2;text-decoration:underline;text-decoration-color:#FF6633;text-underline-offset:5px}
+.fb{box-shadow:inset 0 0 0 1px #2A2A2E;background:#141416}
+.fb.danger{color:#FF6633;box-shadow:inset 0 0 0 1px rgba(255,102,51,0.45)}
+
+/* Crispy V2 · rodada 2 */
+.sec .rows{border:1px solid transparent;background:linear-gradient(115deg,rgba(10,11,14,0.94) 0%,rgba(18,19,24,0.94) 45%,rgba(22,23,27,0.92) 75%,rgba(30,32,40,0.9) 100%) padding-box,linear-gradient(115deg,rgba(255,255,255,0.10) 0%,rgba(255,140,100,0.18) 35%,rgba(255,102,51,0.55) 70%,#FF8A5C 100%) border-box;box-shadow:inset 0 1px 0 rgba(255,255,255,0.06);position:relative}
+.sec .rows:hover .glow{opacity:1}
+.swl{position:relative;display:inline-flex;cursor:pointer}
+.swl input{position:absolute;inset:0;opacity:0;margin:0;cursor:pointer}
+.swl .sw{display:block;transition:background-color .22s ease,box-shadow .22s ease}
+.swl .sw span{transition:left .22s cubic-bezier(.23,1,.32,1),background-color .22s ease}
+.swl input:checked+.sw{background:#FF6633;box-shadow:0 0 6px rgba(255,102,51,0.9),0 0 18px rgba(255,102,51,0.5)}
+.swl input:checked+.sw span{left:21px;background:#0E0E10}
+.swl input:focus-visible+.sw{outline:2px solid #F2F2F2;outline-offset:2px}
+.oo .off,.oo .on{transition:color .22s ease,text-shadow .22s ease}
+.oo .off{color:#F2F2F2}.oo .on{color:#4A4A50}
+.oo:has(input:checked) .off{color:#4A4A50}
+.oo:has(input:checked) .on{color:#FF6633;text-shadow:0 0 8px rgba(255,102,51,0.8)}
+.ps button.on{box-shadow:0 0 6px rgba(255,102,51,0.9),0 0 22px rgba(255,102,51,0.5)}
+.tp.on{text-shadow:0 0 10px rgba(255,102,51,0.8)}
+.tp.on i{box-shadow:0 0 0 2px #FF6633,0 0 8px rgba(255,102,51,0.9),0 0 28px rgba(255,102,51,0.45)!important}
+.tp s{box-shadow:0 0 8px rgba(255,102,51,0.7)}
+.fb.danger{text-shadow:0 0 8px rgba(255,102,51,0.7);box-shadow:inset 0 0 0 1px rgba(255,102,51,0.6),0 0 14px rgba(255,102,51,0.25)}
+.lk{text-decoration:none;box-shadow:0 2px 0 #FF6633,0 6px 10px -4px rgba(255,102,51,0.8)}
+@media (prefers-reduced-motion: reduce){.swl .sw,.swl .sw span,.oo .off,.oo .on{transition:none}}
+
+.vz-scroll::-webkit-scrollbar{width:8px}
+.vz-scroll::-webkit-scrollbar-track{background:#141416;border-radius:4px}
+.vz-scroll::-webkit-scrollbar-thumb{background:#FF6633;border-radius:4px;box-shadow:0 0 8px rgba(255,102,51,0.8)}
+.vz-scroll{scrollbar-color:#FF6633 #141416;scrollbar-width:thin}
+
+.glow,.grain{position:absolute;left:6%;right:-3%;top:35%;bottom:-34px;z-index:-1;pointer-events:none;border-radius:28px}
+.glow{background:radial-gradient(60% 70% at 62% 72%,rgba(255,102,51,0.30),rgba(255,102,51,0.10) 55%,transparent 78%);filter:blur(22px);opacity:.85;transition:opacity .3s ease}
+.grain{opacity:.10;mix-blend-mode:overlay;-webkit-mask-image:radial-gradient(60% 70% at 62% 72%,#000,transparent 78%);mask-image:radial-gradient(60% 70% at 62% 72%,#000,transparent 78%)}
+.grain svg{width:100%;height:100%;display:block}
+
+.bgx{position:absolute;inset:0;z-index:-3;overflow:hidden;border-radius:20px;pointer-events:none}
+.bgx b{position:absolute;border-radius:50%;filter:blur(90px)}
+.glassx{position:absolute;inset:0;z-index:-2;border-radius:20px;pointer-events:none;background:linear-gradient(115deg,rgba(22,23,27,0.62) 0%,rgba(18,19,23,0.55) 50%,rgba(22,23,27,0.48) 100%);-webkit-backdrop-filter:blur(40px) saturate(150%);backdrop-filter:blur(40px) saturate(150%);box-shadow:inset 0 1px 0 rgba(255,255,255,0.10),inset 0 0 0 1px rgba(255,255,255,0.07),inset 0 -1px 0 rgba(255,102,51,0.18)}
+.glassx svg{position:absolute;inset:0;width:100%;height:100%;opacity:.06;mix-blend-mode:overlay;border-radius:20px}
+
+.rows>.grain+.row,.rows>.grain+.adv{border-top:0}
+.sec>h2:not([style]){opacity:.8}
+
+.advo{display:flex;align-items:center;min-height:44px;border-top:1px solid #232326;font-size:13px;font-weight:500;color:#A8A8AF;gap:10px}
+.advo .cnt{font-size:11px;font-weight:400;color:#6E6E76}
+.sub{margin:0 0 12px;padding:4px 16px;border-radius:12px;background:rgba(7,7,9,0.6);box-shadow:inset 0 0 0 1px #232326;display:flex;flex-direction:column}
+.sub>.row:first-child{border-top:0}
+.seg{display:inline-flex;padding:2px;border-radius:999px;box-shadow:inset 0 0 0 1px #2A2A2E;flex:none}
+.seg button{height:24px;padding:0 10px;border:0;border-radius:999px;background:transparent;color:#F2F2F2;font:inherit;font-size:11px;font-weight:500}
+.seg button.on{background:#FF6633;color:#000000;box-shadow:0 0 6px rgba(255,102,51,0.8),0 0 14px rgba(255,102,51,0.4)}
+.stp{display:inline-flex;align-items:center;height:28px;border-radius:999px;box-shadow:inset 0 0 0 1px #2A2A2E;flex:none;font-size:11px;font-weight:500}
+.stp button{width:28px;height:28px;border:0;background:transparent;color:#FF6633;font:inherit;font-size:13px}
+.stp span{min-width:48px;text-align:center}
+.pair{display:inline-flex;gap:2px;padding:2px;border-radius:5px;border:0;background:transparent}
+.pair i{display:block;width:10px;height:14px;border-radius:2px}
+</style>
+</helmet>
+<div class="vz-scroll" style="isolation: isolate; position: relative; width: 1300px; height: 3200px; box-sizing: border-box; padding: 40px 56px; background: #08080A; border-radius: 20px; color: #F2F2F2; font-family: Inter, system-ui, sans-serif; font-size: 14px; line-height: 20px; display: flex; flex-direction: column; gap: 40px">
+  <svg width="0" height="0" style="position: absolute" aria-hidden="true"><filter id="vzgrain" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/></filter></svg>
+  <div class="bgx" aria-hidden="true"><b style="width: 720px; height: 720px; left: -220px; top: -260px; background: rgba(255,102,51,0.35)"></b><b style="width: 640px; height: 640px; right: -200px; top: 420px; background: rgba(70,80,120,0.40)"></b><b style="width: 760px; height: 760px; left: 280px; bottom: -320px; background: rgba(255,90,40,0.30)"></b></div>
+  <div class="glassx" aria-hidden="true"><svg><rect width="100%" height="100%" filter="url(#vzgrain)"/></svg></div>
+  <header style="display: grid; grid-template-columns: 170px auto auto 1fr auto auto; column-gap: 32px; align-items: center">
+    <div style="display: flex; flex-direction: column; gap: 4px"><img src="/_blob/a81b966bf2f457f4e4c0abf4a921b868" alt="Vizu." style="height: 26px; width: auto; display: block; align-self: flex-start"><span style="font-size: 12px; color: #A8A8AF">Configurações</span></div>
+    <span style="font-size: 12px; font-weight: 500; margin-left: 2px">Aplicar presets:</span>
+    <div class="ps" role="group" aria-label="Presets"><button type="button">Minimal</button><button type="button" class="on" aria-pressed="true">Design</button><button type="button">Custom</button></div>
+    <span></span>
+    <span style="height: 30px; padding: 0 22px; display: inline-flex; align-items: center; border-radius: 999px; background: #070708; color: #9A9AA1; font-size: 12px; font-variant-numeric: tabular-nums">v 9.12</span>
+    <button type="button" aria-label="Fechar" style="width: 32px; height: 32px; border: 0; border-radius: 50%; background: transparent; box-shadow: inset 0 0 0 1px #FF6633, 0 0 6px rgba(255,102,51,0.8), 0 0 16px rgba(255,102,51,0.35); color: #FF6633; filter: drop-shadow(0 0 3px rgba(255,102,51,0.8)); display: flex; align-items: center; justify-content: center"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
+  </header>
+
+  <section class="sec"><h2>Ver</h2><div class="rows">
+<i class="glow" aria-hidden="true"></i><i class="grain" aria-hidden="true"><svg><rect width="100%" height="100%" filter="url(#vzgrain)"/></svg></i>
+    <div class="row"><span class="t"><b>Ver com a barra de espaço</b><i>Selecione um arquivo e aperte Espaço</i></span><span class="oo"><span class="off">OFF</span><label class="swl"><input type="checkbox" checked="" aria-label="Ver com a barra de espaço"><span class="sw"><span></span></span></label><span class="on">ON</span></span></div>
+    <div class="row"><span class="t"><b>Conta-gotas</b><i>HEX, CMYK e PANTONE sugeridos; clique copia o HEX</i></span><span class="oo"><span class="off">OFF</span><label class="swl"><input type="checkbox" checked="" aria-label="Conta-gotas"><span class="sw"><span></span></span></label><span class="on">ON</span></span></div>
+  </div></section>
+
+  <section class="sec"><h2>Converter</h2><div class="rows">
+<i class="glow" aria-hidden="true"></i><i class="grain" aria-hidden="true"><svg><rect width="100%" height="100%" filter="url(#vzgrain)"/></svg></i>
+    <div class="row"><span class="t"><b>Menu circular ao segurar Alt</b><i>Roda do mouse ou clique no centro troca de lado</i></span><span class="oo"><span class="off">OFF</span><label class="swl"><input type="checkbox" checked="" aria-label="Menu circular ao segurar Alt"><span class="sw"><span></span></span></label><span class="on">ON</span></span></div>
+    <div class="advo">Avançado<span class="cnt">aberto</span><span style="flex: 1"></span><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#A8A8AF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg></div>
+    <div class="sub">
+      <div class="row"><span class="t"><b>Tempo segurando</b><i>Quanto tempo Alt precisa ficar pressionado</i></span><span class="stp"><button type="button" aria-label="Diminuir">−</button><span>500 ms</span><button type="button" aria-label="Aumentar">+</button></span></div>
+      <div class="row"><span class="t"><b>Resolução</b><i>Para os formatos de imagem</i></span><span class="seg"><button type="button">72 dpi</button><button type="button" class="on">300 dpi</button></span></div>
+      <div class="row"><span class="t"><b>PDF</b><i>Compacto ou sem compressão</i></span><span class="seg"><button type="button">Compactado</button><button type="button" class="on">Sem compressão</button></span></div>
+      <div class="row"><span class="t"><b>Texto em SVG e EPS</b><i>Texto editável ou convertido em curvas</i></span><span class="seg"><button type="button" class="on">Editável</button><button type="button">Em curvas</button></span></div>
+      <div class="row"><span class="t"><b>Qualidade JPG e PDF</b></span><span class="stp"><button type="button" aria-label="Diminuir">−</button><span>100%</span><button type="button" aria-label="Aumentar">+</button></span></div>
+      <div class="row"><span class="t"><b>Qualidade WEBP</b><i>Menor = arquivo menor (75 é o ponto ideal)</i></span><span class="stp"><button type="button" aria-label="Diminuir">−</button><span>75%</span><button type="button" aria-label="Aumentar">+</button></span></div>
+    </div>
+  </div></section>
+
+  <section class="sec"><h2>Tempo</h2><div class="rows">
+<i class="glow" aria-hidden="true"></i><i class="grain" aria-hidden="true"><svg><rect width="100%" height="100%" filter="url(#vzgrain)"/></svg></i>
+    <div class="row"><span class="t"><b>Relógio na área de trabalho</b><i>Mostra hora e data no fundo do Windows</i></span><span class="oo"><span class="off">OFF</span><label class="swl"><input type="checkbox" checked="" aria-label="Relógio na área de trabalho"><span class="sw"><span></span></span></label><span class="on">ON</span></span></div>
+    <div class="row"><span class="t"><b>Ativar Agenda</b><i>Mostra seus próximos compromissos</i></span><span class="oo"><span class="off">OFF</span><label class="swl"><input type="checkbox" checked="" aria-label="Ativar Agenda"><span class="sw"><span></span></span></label><span class="on">ON</span></span></div>
+    <div class="advo">Avançado<span class="cnt">aberto</span><span style="flex: 1"></span><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#A8A8AF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg></div>
+    <div class="sub">
+      <div class="row"><span class="t"><b>Tamanho do relógio</b></span><span class="seg"><button type="button">100%</button><button type="button">90%</button><button type="button" class="on">70%</button></span></div>
+      <div class="row"><span class="t"><b>Fonte do relógio</b><i>Qualquer fonte instalada no Windows</i></span><button type="button" class="b">Bahnschrift · 38 px</button></div>
+      <div class="row"><span class="t"><b>Anexar à barra de tarefas</b><i>O relógio do Windows some enquanto estiver anexado</i></span><span class="oo"><span class="off">OFF</span><label class="swl"><input type="checkbox" aria-label="Anexar à barra de tarefas"><span class="sw"><span></span></span></label><span class="on">ON</span></span></div>
+      <div class="row"><span class="t"><b>Ativar Roubo de tempo</b><i>Caveira: conta quem te interrompeu</i></span><span class="oo"><span class="off">OFF</span><label class="swl"><input type="checkbox" checked="" aria-label="Ativar Roubo de tempo"><span class="sw"><span></span></span></label><span class="on">ON</span></span></div>
+      <div class="row"><span class="t"><b>Histórico do roubo de tempo</b><i>Hoje e últimos 7 dias</i></span><button type="button" class="b">Abrir</button></div>
+      <div class="row"><span class="t"><b>Ativar Foco · Pomodoro</b><i>Foco e pausa por cores</i></span><span class="oo"><span class="off">OFF</span><label class="swl"><input type="checkbox" checked="" aria-label="Ativar Foco Pomodoro"><span class="sw"><span></span></span></label><span class="on">ON</span></span></div>
+      <div class="row"><span class="t"><b>Tempos</b><i>Foco · pausa · pausa longa, em minutos</i></span><span class="seg"><button type="button" class="on">25 · 5 · 15</button><button type="button">50 · 10 · 20</button><button type="button">15 · 3 · 10</button></span></div>
+      <div class="row"><span class="t"><b>Cores do Pomodoro</b><i>Foco / pausa</i></span><span style="display: flex; gap: 6px"><button type="button" class="pair" aria-label="Verde e vermelho" aria-pressed="true" style="box-shadow: 0 0 0 1px #FF6633"><i style="background: #34C759"></i><i style="background: #E0245E"></i></button><button type="button" class="pair" aria-label="Azul e cinza" aria-pressed="false"><i style="background: #0A84FF"></i><i style="background: #8E8E93"></i></button><button type="button" class="pair" aria-label="Lima e roxo" aria-pressed="false"><i style="background: #B6FF3B"></i><i style="background: #A855F7"></i></button></span></div>
+    </div>
+  </div></section>
+
+  <section class="sec"><h2>Limpeza</h2><div class="rows">
+<i class="glow" aria-hidden="true"></i><i class="grain" aria-hidden="true"><svg><rect width="100%" height="100%" filter="url(#vzgrain)"/></svg></i>
+    <div class="row"><span class="t"><b>Abrir a Limpeza</b><i>Também no botão direito do fundo da pasta e na bandeja</i></span><button type="button" class="b">Abrir</button></div>
+    <div class="row"><span class="t"><b>Botão no relógio</b><i>A vassoura antes do OCR abre a Limpeza</i></span><span class="oo"><span class="off">OFF</span><label class="swl"><input type="checkbox" checked="" aria-label="Botão da Limpeza no relógio"><span class="sw"><span></span></span></label><span class="on">ON</span></span></div>
+    <div class="row"><span class="t"><b>Definir atalho do teclado</b><i>Clique para definir o atalho da Limpeza</i></span><button type="button" class="b ghost">Definir</button></div>
+    <div class="advo">Avançado<span class="cnt">aberto</span><span style="flex: 1"></span><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#A8A8AF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg></div>
+    <div class="sub">
+      <div class="row"><span class="t"><b>Excluir direto</b><i>Revisar também sai de vez, sem passar pela Lixeira</i></span><span class="oo"><span class="off">OFF</span><label class="swl"><input type="checkbox" aria-label="Excluir direto"><span class="sw"><span></span></span></label><span class="on">ON</span></span></div>
+      <div class="row"><span class="t"><b>Idade dos temporários</b><i>Só sai o que não foi mexido há mais tempo que isso</i></span><span class="seg"><button type="button">1 dia</button><button type="button" class="on">7 dias</button><button type="button">30 dias</button></span></div>
+      <div class="row"><span class="t"><b>Lixeira</b><i>Incluir a Lixeira na análise</i></span><span class="oo"><span class="off">OFF</span><label class="swl"><input type="checkbox" aria-label="Lixeira"><span class="sw"><span></span></span></label><span class="on">ON</span></span></div>
+      <div class="row"><span class="t"><b>Widget de disco</b><i>Espaço livre sempre visível na área de trabalho</i></span><span class="oo"><span class="off">OFF</span><label class="swl"><input type="checkbox" aria-label="Widget de disco"><span class="sw"><span></span></span></label><span class="on">ON</span></span></div>
+      <div class="row"><span class="t"><b>Widget de desempenho</b><i>Mostra se o PC está lento e o que está pesando</i></span><span class="oo"><span class="off">OFF</span><label class="swl"><input type="checkbox" aria-label="Widget de desempenho"><span class="sw"><span></span></span></label><span class="on">ON</span></span></div>
+    </div>
+  </div></section>
+
+  <section class="sec"><h2>Outros</h2><div class="rows">
+<i class="glow" aria-hidden="true"></i><i class="grain" aria-hidden="true"><svg><rect width="100%" height="100%" filter="url(#vzgrain)"/></svg></i>
+    <div class="row"><span class="t"><b>OCR</b><i>Lê o texto de qualquer área da tela · Ctrl+Alt+T</i></span><span class="oo"><span class="off">OFF</span><label class="swl"><input type="checkbox" checked="" aria-label="OCR"><span class="sw"><span></span></span></label><span class="on">ON</span></span></div>
+    <div class="row"><span class="t"><b>Botão no relógio</b><i>O botão de ler texto no relógio abre o OCR</i></span><span class="oo"><span class="off">OFF</span><label class="swl"><input type="checkbox" checked="" aria-label="Botão do OCR no relógio"><span class="sw"><span></span></span></label><span class="on">ON</span></span></div>
+    <div class="row"><span class="t"><b>Definir atalho do teclado</b><i>Clique para definir o atalho do OCR</i></span><button type="button" class="b ghost">Definir</button></div>
+    <div class="advo">Avançado<span class="cnt">aberto</span><span style="flex: 1"></span><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#A8A8AF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg></div>
+    <div class="sub">
+      <div class="row"><span class="t"><b>Quebras de linha</b><i>Ao copiar o texto lido</i></span><span class="seg"><button type="button">Manter</button><button type="button" class="on">Juntar</button></span></div>
+      <div class="row"><span class="t"><b>Idiomas de leitura</b><i>Instalados: Português (Brasil)</i></span><button type="button" class="b">Adicionar idioma…</button></div>
+      <div class="row"><span class="t"><b>Pastas padrão Vizu</b><i>Edit, Links, Preview · cada uma com _Morto</i></span><button type="button" class="b">Editar</button></div>
+    </div>
+  </div></section>
+
+  <section class="sec"><h2>Sistema</h2><div class="rows">
+<i class="glow" aria-hidden="true"></i><i class="grain" aria-hidden="true"><svg><rect width="100%" height="100%" filter="url(#vzgrain)"/></svg></i>
+    <div class="advo">Avançado<span class="cnt">aberto</span><span style="flex: 1"></span><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#A8A8AF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg></div>
+    <div class="sub">
+      <div class="row"><span class="t"><b>Fonte da interface</b><i>Qualquer fonte instalada no Windows</i></span><button type="button" class="b">Segoe UI</button></div>
+      <div class="row"><span class="t"><b>Iniciar com o Windows</b></span><span class="oo"><span class="off">OFF</span><label class="swl"><input type="checkbox" checked="" aria-label="Iniciar com o Windows"><span class="sw"><span></span></span></label><span class="on">ON</span></span></div>
+      <div class="row"><span class="t"><b>Ícone na área de notificação</b><i>Reiniciar ou encerrar com um clique</i></span><span class="oo"><span class="off">OFF</span><label class="swl"><input type="checkbox" checked="" aria-label="Ícone na área de notificação"><span class="sw"><span></span></span></label><span class="on">ON</span></span></div>
+      <div class="row"><span class="t"><b>Idioma</b></span><span class="seg"><button type="button" class="on">Português</button><button type="button">English</button><button type="button">Español</button></span></div>
+      <div class="row"><span class="t"><b>Atualizar automaticamente</b><i>Versão 9.12</i></span><span class="oo"><span class="off">OFF</span><label class="swl"><input type="checkbox" checked="" aria-label="Atualizar automaticamente"><span class="sw"><span></span></span></label><span class="on">ON</span></span></div>
+    </div>
+  </div></section>
+
+  <section class="sec"><h2>Temas</h2><div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; padding-top: 10px"><button type="button" class="tp" aria-pressed="false"><i style="background: #F2F3F5;"><u style="width: 60%; background: #FDFDFD"></u><u style="width: 40%; background: #FDFDFD"></u><s style="background: #1B1B1F"></s></i>Claro</button><button type="button" class="tp" aria-pressed="false"><i style="background: #161618;"><u style="width: 60%; background: #2A2A2E"></u><u style="width: 40%; background: #2A2A2E"></u><s style="background: #55555B"></s></i>Escuro</button><button type="button" class="tp" aria-pressed="false"><i style="background: #E4E9F1;"><u style="width: 60%; background: #FDFDFD"></u><u style="width: 40%; background: #FDFDFD"></u><s style="background: #FF6633"></s></i>Windows</button><button type="button" class="tp" aria-pressed="false"><i style="background: #1A1A1D;"><u style="width: 60%; background: #3A2B25"></u><u style="width: 40%; background: #3A2B25"></u><s style="background: #FF6633"></s></i>Vizu Classic</button><button type="button" class="tp on" aria-pressed="true"><i style="background: #0E0E10;"><u style="width: 60%; background: #1A1A1D"></u><u style="width: 40%; background: #1A1A1D"></u><s style="background: #FF6633"></s></i>Vizu Crispy</button></div></section>
+
+  <section class="sec"><h2 style="font-weight: 400; color: #A8A8AF">Clique para ver</h2><div style="display: flex; gap: 40px; padding-top: 14px"><button type="button" class="lk">Sobre o programa</button><button type="button" class="lk">Agradecimentos</button></div></section>
+
+  <footer style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 16px"><button type="button" class="fb">Atualizações</button><button type="button" class="fb">Desinstalar</button><button type="button" class="fb">Pasta do programa</button><button type="button" class="fb danger">Encerrar processo</button></footer>
+
+  <div aria-hidden="true" style="position: absolute; right: 10px; top: 110px; bottom: 24px; width: 6px; border-radius: 3px; background: #141416; box-shadow: inset 0 0 0 1px #232326"><div style="position: absolute; left: 0; right: 0; top: 0; height: 34%; border-radius: 3px; background: #FF6633; box-shadow: 0 0 6px rgba(255,102,51,0.9), 0 0 16px rgba(255,102,51,0.45)"></div></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1300,"height":3200}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
