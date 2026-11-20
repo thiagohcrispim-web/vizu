@@ -34,6 +34,7 @@
 #include <deque>
 #include <mutex>
 #include <set>
+#include <map>
 #include <thread>
 #include <atomic>
 
@@ -1653,7 +1654,7 @@ static UINT SelectionKinds(const std::vector<std::wstring>& files) {
 
 // ---------- menu circular (segurar Alt) ----------
 
-struct Slice { std::wstring label; const wchar_t* icon; std::function<void()> act; };
+struct Slice { std::wstring label; const wchar_t* icon; std::function<void()> act; std::wstring exe; int slot = -1; }; // exe/slot: atalho de programa
 struct Side { std::wstring name; std::vector<Slice> items; };
 static std::vector<Side> g_sides;
 static int g_side, g_ringHot = -2;   // -1 = centro (troca de lado), -2 = nada
@@ -1662,6 +1663,79 @@ static double g_ringShownAt; // abertura: escala 0,92 -> 1 e fade (~180 ms)
 static double g_ringHotAt;   // a fatia ativa acende em ~150 ms quando troca
 static double g_ringCloseAt; static bool g_ringClosing; // fechar: fade + escala 1 -> 0,96 (~120 ms)
 static float g_ringScale = 1;
+static void ShowToast(const std::wstring& title, const std::wstring& text, DWORD hideAfterMs, int state);
+
+// ---------- atalhos de programas (Alt sem nada selecionado) ----------
+// 8 espaços; cada um guarda o caminho de um .exe em RingApp0..RingApp7 (HKCU\Software\DesignThumbs).
+static const int kRingApps = 8;
+static bool g_ringLaunch; // o menu aberto é o de atalhos
+static std::wstring RingAppName(int i) { return L"RingApp" + std::to_wstring(i); }
+static std::wstring ReadStr(const wchar_t* name, const wchar_t* def);
+static void WriteStr(const wchar_t* name, const std::wstring& v);
+static void DefineRingApp(int slot) {
+    wchar_t file[MAX_PATH] = {};
+    std::wstring filter = std::wstring(T(L"Programas (*.exe)", L"Programs (*.exe)", L"Programas (*.exe)")) + L'\0' + L"*.exe" + L'\0' + L'\0';
+    OPENFILENAMEW of = {sizeof(of)};
+    of.hwndOwner = g_wnd; of.lpstrFilter = filter.c_str(); of.lpstrFile = file; of.nMaxFile = MAX_PATH;
+    of.lpstrTitle = T(L"Escolha o programa do atalho", L"Choose the program for the shortcut", L"Elige el programa del acceso");
+    of.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR | OFN_HIDEREADONLY | OFN_DONTADDTORECENT;
+    wchar_t pf[MAX_PATH]; if (GetEnvironmentVariableW(L"ProgramFiles", pf, MAX_PATH)) of.lpstrInitialDir = pf;
+    SetForegroundWindow(g_wnd);
+    if (GetOpenFileNameW(&of)) WriteStr(RingAppName(slot).c_str(), file);
+}
+static void LaunchRingApp(const std::wstring& exe) {
+    std::wstring dir = exe.substr(0, exe.find_last_of(L"\\/"));
+    if ((INT_PTR)ShellExecuteW(nullptr, L"open", exe.c_str(), nullptr, dir.c_str(), SW_SHOWNORMAL) <= 32)
+        ShowToast(T(L"Não deu para abrir o programa", L"Couldn't open the program", L"No se pudo abrir el programa"), exe, 6000, 2);
+}
+static void BuildLauncher() {
+    g_sides.clear();
+    Side s{T(L"Atalhos", L"Shortcuts", L"Accesos"), {}};
+    for (int i = 0; i < kRingApps; ++i) {
+        std::wstring exe = ReadStr(RingAppName(i).c_str(), L"");
+        if (!exe.empty() && GetFileAttributesW(exe.c_str()) == INVALID_FILE_ATTRIBUTES) exe.clear(); // programa removido: volta a ficar livre
+        Slice sl;
+        sl.slot = i; sl.exe = exe; sl.icon = L"";
+        if (exe.empty()) { sl.label = T(L"Clique para definir o atalho", L"Click to set the shortcut", L"Haz clic para definir el acceso"); sl.act = [i] { DefineRingApp(i); }; }
+        else {
+            size_t a = exe.find_last_of(L"\\/") + 1, b = exe.find_last_of(L'.');
+            sl.label = exe.substr(a, b > a ? b - a : std::wstring::npos);
+            sl.act = [exe] { LaunchRingApp(exe); };
+        }
+        s.items.push_back(sl);
+    }
+    g_sides.push_back(s);
+}
+// Ícone do programa como bitmap do Direct2D. O ícone extraído fica guardado (o menu redesenha a cada quadro da animação).
+static ID2D1Bitmap* ExeIconBitmap(ID2D1RenderTarget* rt, const std::wstring& exe, int px) {
+    static std::map<std::wstring, IWICBitmap*> cache; // por caminho + tamanho
+    std::wstring key = exe + L"|" + std::to_wstring(px);
+    IWICBitmap*& wb = cache[key];
+    if (!wb) {
+        HICON hi = nullptr;
+        if (FAILED(SHDefExtractIconW(exe.c_str(), 0, 0, &hi, nullptr, (UINT)px)) || !hi) {
+            SHFILEINFOW fi = {}; if (SHGetFileInfoW(exe.c_str(), 0, &fi, sizeof(fi), SHGFI_ICON | SHGFI_LARGEICON)) hi = fi.hIcon;
+        }
+        if (!hi) { cache.erase(key); return nullptr; }
+        IWICImagingFactory* wic = nullptr; IWICBitmap* raw = nullptr; IWICFormatConverter* cv = nullptr;
+        IWICBitmap* made = nullptr;
+        if (SUCCEEDED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&wic))) &&
+            SUCCEEDED(wic->CreateBitmapFromHICON(hi, &raw)) && SUCCEEDED(wic->CreateFormatConverter(&cv)) &&
+            SUCCEEDED(cv->Initialize(raw, GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0, WICBitmapPaletteTypeCustom)))
+            wic->CreateBitmapFromSource(cv, WICBitmapCacheOnLoad, &made);
+        if (cv) cv->Release();
+        if (raw) raw->Release();
+        if (wic) wic->Release();
+        DestroyIcon(hi);
+        if (!made) { cache.erase(key); return nullptr; }
+        cache[key] = made;
+        return ExeIconBitmap(rt, exe, px);
+    }
+    ID2D1Bitmap* out = nullptr;
+    rt->CreateBitmapFromWicBitmap(wb, nullptr, &out);
+    return out;
+}
+
 
 static void OpenResizeDialog();
 static void OpenPagesDialog();
@@ -1952,13 +2026,35 @@ static void RenderRing() {
             D2D1_RECT_F lr = D2D1::RectF(cx - bw / 2, cy - 11 * s, cx + bw / 2, cy + 11 * s);
             p.TextSpaced(lab, lr, hot && !classic ? 15.5f : 13, col, classic ? DWRITE_FONT_WEIGHT_MEDIUM : hot ? DWRITE_FONT_WEIGHT_BOLD : DWRITE_FONT_WEIGHT_SEMI_BOLD, 0.08f); // letras espaçadas
         } else {
+            if (side.items[i].slot >= 0) { // atalho de programa: ícone do .exe, ou o convite para definir
+                const Slice& sl = side.items[i];
+                if (sl.exe.empty()) {
+                    p.Feather("M12 5v14M5 12h14", D2D1::RectF(cx - 10 * s, cy - 28 * s, cx + 10 * s, cy - 12 * s), 14 * s, col, 2); // +
+                    IDWriteTextFormat* tf = p.Format(10, hot ? DWRITE_FONT_WEIGHT_SEMI_BOLD : DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER, nullptr, true);
+                    ID2D1SolidColorBrush* tb = nullptr;
+                    if (tf && SUCCEEDED(rt->CreateSolidColorBrush(col, &tb))) {
+                        rt->DrawText(sl.label.c_str(), (UINT32)sl.label.size(), tf, D2D1::RectF(cx - bw / 2, cy - 8 * s, cx + bw / 2, cy + 28 * s), tb);
+                        tb->Release();
+                    }
+                    if (tf) tf->Release();
+                } else {
+                    float ip = (hot ? 34.0f : 30.0f) * s;
+                    if (ID2D1Bitmap* ib = ExeIconBitmap(rt, sl.exe, (int)(48 * s))) {
+                        rt->DrawBitmap(ib, D2D1::RectF(cx - ip / 2, cy - ip / 2 - 8 * s, cx + ip / 2, cy + ip / 2 - 8 * s), 1.0f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
+                        ib->Release();
+                    }
+                    p.Text(sl.label, D2D1::RectF(cx - bw / 2, cy + 10 * s, cx + bw / 2, cy + 26 * s), 10.5f, col, hot ? DWRITE_FONT_WEIGHT_SEMI_BOLD : DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER);
+                }
+                continue;
+            }
             p.Icon(side.items[i].icon, D2D1::RectF(cx - 20 * s, cy - 23 * s, cx + 20 * s, cy - 3 * s), 14, col);
             p.Text(side.items[i].label, D2D1::RectF(cx - bw / 2, cy, cx + bw / 2, cy + 18 * s), 11, col, hot ? DWRITE_FONT_WEIGHT_SEMI_BOLD : DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER);
         }
     }
     // centro: lente de vidro com o nome do lado
     D2D1_ELLIPSE lens = D2D1::Ellipse(C, rIn - 8 * s, rIn - 8 * s);
-    std::wstring cnt = std::to_wstring(g_convFiles.size()) + (g_convFiles.size() == 1 ? T(L" arquivo", L" file", L" archivo") : T(L" arquivos", L" files", L" archivos"));
+    std::wstring cnt = g_ringLaunch ? std::wstring(T(L"Programas", L"Programs", L"Programas"))
+                                    : std::to_wstring(g_convFiles.size()) + (g_convFiles.size() == 1 ? T(L" arquivo", L" file", L" archivo") : T(L" arquivos", L" files", L" archivos"));
     {
         D2D1_COLOR_F titleCol = crispy ? orange : th.dark ? ui::Rgba(0xFFFFFF) : ui::Rgba(0x1D1D1F), muted = classic ? ui::Rgba(0xBCC2CC) : th.dark ? ui::Rgba(0x8E8E95) : ui::Rgba(0x7A7A82);
         if (g_ringHot == -1 && !classic) {
@@ -2022,8 +2118,9 @@ static void HideAltPopup() {
 static void ShowAltPopup() {
     SyncSelectionOrder(g_defView);
     g_convFiles = g_selOrder;
-    if (g_convFiles.empty()) return;
-    BuildSides();
+    g_ringLaunch = g_convFiles.empty(); // nada selecionado: atalhos de programas
+    if (g_ringLaunch) { g_side = 0; BuildLauncher(); }
+    else BuildSides();
     if (g_sides.empty()) return;
     POINT pt; GetCursorPos(&pt);
     g_ringScale = GetDpiForWindow(g_defView) / 96.0f;
@@ -2091,7 +2188,14 @@ static LRESULT CALLBACK AltProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         }
         return 0;
     }
-    case WM_RBUTTONUP: HideAltPopup(); return 0;
+    case WM_RBUTTONUP: { // atalhos: botão direito num espaço já definido troca o programa
+        POINT p = {GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
+        int hit = RingHit(p);
+        bool redefine = g_ringLaunch && hit >= 0 && !g_sides.empty() && hit < (int)g_sides[0].items.size();
+        HideAltPopup();
+        if (redefine) DefineRingApp(hit);
+        return 0;
+    }
     }
     return DefWindowProcW(h, msg, wp, lp);
 }
@@ -2610,7 +2714,7 @@ enum { kTogSpace = 1, kTogAlt, kDelayMinus, kDelayPlus, kDpi72, kDpi300, kPdfSma
        kTogPicker, kBtnFolders, kLangPt, kLangEn, kLangEs, kTogUpdate, kBtnUpdate, kTheme0, kTheme1, kTheme2, kTheme3, kWebpMinus, kWebpPlus, kTogTray, kTogTempDel, kNeon0, kNeon1, kNeon2, kNeon3, kNeon4, kNeon5, kNeonRgb,
        kClockOn, kClockFont, kPomoT0, kPomoT1, kPomoT2, kPomoC0, kPomoC1, kPomoC2, kPomoC3, kTheftHist, kUiFont, kOcrOn, kOcrKeep, kOcrJoin, kOcrLang, kClk100, kClk90, kClk70, kClockDock, kSte, kTheme4, kTheftOn, kFocoOn, kAgendaOn, kVecText, kVecCurves, kSysToggle,
        kClOpen, kAge1, kAge7, kAge30, kTogCleanBin, kTogDiskW, kTogDiskWarn, kDiskLimMinus, kDiskLimPlus, kDiskAll0, kDiskAll1, kTogPerfW, kTogClockClean, kPrimao,
-       kPreset0, kPreset1, kPreset2, kTogOcrBtn, kHkOcr, kHkClean, kAdv0, kAdv1, kAdv2, kAdv3, kAdv4, kAdv5, kLinkAbout, kLinkThanks, kBack, kBtnUninstall, kBtnLiteUpgrade, kTogChat, kChatEdit };
+       kPreset0, kPreset1, kPreset2, kTogOcrBtn, kHkOcr, kHkClean, kAdv0, kAdv1, kAdv2, kAdv3, kAdv4, kAdv5, kLinkAbout, kLinkThanks, kBack, kBtnUninstall, kBtnLiteUpgrade, kTogChat, kChatEdit, kRingReset };
 static const UINT kNeonPresets[6] = {0xFF6633, 0xFF2D95, 0x00E5FF, 0xB6FF3B, 0xA855F7, 0xFFD400};
 
 
@@ -2955,6 +3059,14 @@ static void SettingsAction(int id) {
         return;
     }
     case kBtnClose: CloseSettings(); return;
+    case kRingReset: { // apaga os 8 atalhos de programas do menu radial (pede confirmação)
+        if (MessageBoxW(g_settingsWnd, T(L"Apagar os 8 atalhos de programas do menu radial?\nOs espaços voltam a mostrar \"Clique para definir o atalho\".",
+                                         L"Delete the 8 program shortcuts of the radial menu?\nThe slots go back to \"Click to set the shortcut\".",
+                                         L"¿Borrar los 8 accesos de programas del menú radial?\nLos espacios vuelven a mostrar \"Haz clic para definir el acceso\"."),
+                        T(L"Resetar atalhos do menu radial", L"Reset radial menu shortcuts", L"Restablecer accesos del menú radial"), MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2) != IDYES) return;
+        for (int i = 0; i < kRingApps; ++i) RegDeleteKeyValueW(HKEY_CURRENT_USER, kCfgKey, RingAppName(i).c_str());
+        return;
+    }
     default: return;
     }
     SaveConfig();
@@ -3307,6 +3419,11 @@ static void PaintSettings(HWND h) {
         {SH, 1, [&](D2D1_RECT_F r) { rlabel(r, T(L"Fonte da interface", L"Interface font", L"Fuente de la interfaz"), T(L"Qualquer fonte instalada no Windows", L"Any font installed in Windows", L"Cualquier fuente instalada en Windows")); rpill(r, kUiFont, g_uiFont.empty() ? std::wstring(DefaultUiFont()) : g_uiFont, 150 * s); }},
         {SH, 1, [&](D2D1_RECT_F r) { rlabel(r, T(L"Iniciar com o Windows", L"Start with Windows", L"Iniciar con Windows"), nullptr); rtoggle(kTogAuto, r, AutostartEnabled()); }},
         {SH, 1, [&](D2D1_RECT_F r) { rlabel(r, T(L"Ícone na área de notificação", L"Notification area icon", L"Icono en el área de notificación"), T(L"Reiniciar ou encerrar com um clique", L"Restart or quit in one click", L"Reiniciar o salir con un clic")); rtoggle(kTogTray, r, g_cfg.tray); }},
+        {SH, 1, [&](D2D1_RECT_F r) {
+            int set = 0; for (int i = 0; i < kRingApps; ++i) if (!ReadStr(RingAppName(i).c_str(), L"").empty()) ++set;
+            wchar_t sub[96]; swprintf(sub, 96, T(L"Programas do Alt sem nada selecionado · %d de %d definidos", L"Programs on Alt with nothing selected · %d of %d set", L"Programas del Alt sin nada seleccionado · %d de %d definidos"), set, kRingApps);
+            rlabel(r, T(L"Resetar atalhos do menu radial", L"Reset radial menu shortcuts", L"Restablecer accesos del menú radial"), sub);
+            rpill(r, kRingReset, T(L"Resetar", L"Reset", L"Restablecer"), 110 * s); }},
         {SH, 1, [&](D2D1_RECT_F r) { rlabel(r, T(L"Idioma", L"Language", L"Idioma"), nullptr); rseg(r, 270 * s, {L"Português", L"English", L"Español"}, i18n::Current(), kLangPt); }},
         {SH, 1, [&](D2D1_RECT_F r) {
             std::wstring ver = std::wstring(T(L"Versão ", L"Version ", L"Versión ")) + upd::kVersion;
@@ -4228,7 +4345,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmd, int) {
         if (g_convFiles.empty()) break;
         std::wstring c = cmdName;
         if (c == L"/ring ") {
-            BuildSides();
+            g_ringLaunch = false; BuildSides();
             POINT pt; GetCursorPos(&pt);
             g_ringScale = GetDpiForSystem() / 96.0f;
             int S = (int)RingS();
