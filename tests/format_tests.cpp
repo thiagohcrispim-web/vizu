@@ -13,6 +13,7 @@
 #include "../PdfEdit.h"
 #include <iostream>
 #include <stdexcept>
+#include <string>
 
 static int checks = 0;
 static void Check(bool ok, const char* message) { ++checks; if (!ok) throw std::runtime_error(message); }
@@ -36,6 +37,32 @@ static HRESULT Render(const fmt::Bytes& data, const wchar_t* ext, HBITMAP* bmp) 
     return hr;
 }
 
+// PSD 2 x 2 salvo com "Maximizar compatibilidade" desligado: composta toda branca, hasRealMergedData = 0
+// (resource 1057) e uma camada vermelha sem compressão cobrindo tudo.
+static fmt::Bytes PsdNoComposite() {
+    fmt::Bytes b = {'8', 'B', 'P', 'S', 0, 1, 0, 0, 0, 0, 0, 0};
+    Put(b, 3, 2, true); Put(b, 2, 4, true); Put(b, 2, 4, true); Put(b, 8, 2, true); Put(b, 3, 2, true);
+    Put(b, 0, 4, true); // color mode
+    fmt::Bytes res = {'8', 'B', 'I', 'M'};
+    Put(res, 1057, 2, true); Put(res, 0, 2, true); // nome vazio (pascal, par)
+    Put(res, 5, 4, true); Put(res, 1, 4, true); res.push_back(0); res.push_back(0); // versão 1, hasRealMergedData 0 + pad
+    Put(b, res.size(), 4, true); b.insert(b.end(), res.begin(), res.end());
+    fmt::Bytes li;
+    Put(li, 1, 2, true); // 1 camada
+    Put(li, 0, 4, true); Put(li, 0, 4, true); Put(li, 2, 4, true); Put(li, 2, 4, true); // topo, esquerda, baixo, direita
+    Put(li, 4, 2, true);
+    for (int id : {-1, 0, 1, 2}) { Put(li, (USHORT)(short)id, 2, true); Put(li, 2 + 4, 4, true); }
+    for (char c : std::string("8BIMnorm")) li.push_back((BYTE)c);
+    li.push_back(255); li.push_back(0); li.push_back(0); li.push_back(0); // opacidade, clipping, flags (visível), filler
+    Put(li, 4 + 4 + 4, 4, true); Put(li, 0, 4, true); Put(li, 0, 4, true); Put(li, 0, 4, true); // máscara, faixas, nome vazio (4 bytes)
+    for (int id : {-1, 0, 1, 2}) { Put(li, 0, 2, true); for (int i = 0; i < 4; ++i) li.push_back(id == -1 || id == 0 ? 255 : 0); }
+    fmt::Bytes lm; Put(lm, li.size(), 4, true); lm.insert(lm.end(), li.begin(), li.end()); Put(lm, 0, 4, true);
+    Put(b, lm.size(), 4, true); b.insert(b.end(), lm.begin(), lm.end());
+    Put(b, 0, 2, true);
+    for (int i = 0; i < 12; ++i) b.push_back(255); // composta branca
+    return b;
+}
+
 int wmain() {
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     try {
@@ -45,6 +72,14 @@ int wmain() {
         for (int i = 0; i < 12; ++i) good.push_back((BYTE)(i * 20));
         Check(SUCCEEDED(Render(good, L".psd", &bmp)) && bmp, "valid PSD renders");
         DeleteObject(bmp); bmp = nullptr;
+        { // composta em branco ("Maximizar compatibilidade" desligado): a miniatura vem das camadas, não branca
+            Check(SUCCEEDED(Render(PsdNoComposite(), L".psd", &bmp)) && bmp, "PSD without real composite renders");
+            DIBSECTION ds = {};
+            Check(GetObject(bmp, sizeof(ds), &ds) == sizeof(ds) && ds.dsBm.bmBits, "PSD bitmap is a DIB");
+            const BYTE* px = (const BYTE*)ds.dsBm.bmBits;
+            Check(px[2] > 200 && px[1] < 40 && px[0] < 40, "PSD without real composite shows the layer (red), not white");
+            DeleteObject(bmp); bmp = nullptr;
+        }
         // tamanhos absurdos: falha, sem pedir memória nem derrubar o processo
         Check(FAILED(Render(Psd(3, 0xFFFFFFFFu, 1, 0), L".psd", &bmp)), "PSD with absurd height is refused");
         Check(FAILED(Render(Psd(3, 1, 0xFFFFFFFFu, 1), L".psd", &bmp)), "PSD with absurd width is refused");

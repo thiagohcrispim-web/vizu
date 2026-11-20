@@ -128,7 +128,7 @@ static const struct { int id; UINT mod, vk; } kOpenKeys[] = {
     {kHot0, 0, '0'}, {kHotNum0, 0, VK_NUMPAD0}, {kHotPlus, 0, VK_OEM_PLUS}, {kHotMinus, 0, VK_OEM_MINUS},
     {kHotAdd, 0, VK_ADD}, {kHotSub, 0, VK_SUBTRACT}, {kHotPgUp, 0, VK_PRIOR}, {kHotPgDn, 0, VK_NEXT},
 };
-enum { kRefreshTimer = 1, kFlashTimer, kAltTimer, kToastTimer, kSelTimer, kAnimTimer, kUpdateTimer };
+enum { kRefreshTimer = 1, kFlashTimer, kAltTimer, kToastTimer, kSelTimer, kAnimTimer, kUpdateTimer, kFocusPoll };
 static const float kCaption = 56, kPad = 18;
 static ui::Theme g_theme = ui::MakeTheme(ui::kThemeDark, false);
 static std::wstring g_uiFont; // fonte da interface escolhida pelo usuário (vazio = padrão: Inter)
@@ -162,9 +162,12 @@ static HWND FocusedFileList() {
     if (!fg) return nullptr;
     GUITHREADINFO gti = {sizeof(gti)};
     if (!GetGUIThreadInfo(GetWindowThreadProcessId(fg, nullptr), &gti)) return nullptr;
-    if (gti.flags & (GUI_INMENUMODE | GUI_POPUPMENUMODE | GUI_INMOVESIZE) || gti.hwndCaret) return nullptr;
+    if (gti.flags & (GUI_INMENUMODE | GUI_POPUPMENUMODE | GUI_INMOVESIZE)) return nullptr;
     HWND f = gti.hwndFocus;
     if (!f || ClassOf(f) != L"DirectUIHWND") return nullptr;
+    // Cursor de texto em outra janela = renomeando ou digitando. Na própria lista ele aparece com
+    // acessibilidade (Lupa, Narrador, indicador do cursor) e alguns teclados/IMEs: não é digitação.
+    if (gti.hwndCaret && gti.hwndCaret != f) return nullptr;
     HWND parent = GetParent(f);
     return parent && ClassOf(parent) == L"SHELLDLL_DefView" ? parent : nullptr;
 }
@@ -802,13 +805,56 @@ static void AltTick() {
 
 // ---------- atalhos ----------
 
+// Registro do teclado para o diagnóstico (%TEMP%\Vizu-teclado.log): só quando algo muda, no máximo ~64 KB.
+static std::wstring KeyLogPath() { wchar_t t[MAX_PATH]; GetTempPathW(MAX_PATH, t); return std::wstring(t) + L"Vizu-teclado.log"; }
+static void KeyLog(const std::wstring& line) {
+    static std::wstring last;
+    if (line == last) return;
+    last = line;
+    std::wstring path = KeyLogPath();
+    WIN32_FILE_ATTRIBUTE_DATA fa;
+    if (GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &fa) && fa.nFileSizeLow > 64 * 1024) DeleteFileW(path.c_str());
+    SYSTEMTIME st; GetLocalTime(&st);
+    wchar_t ts[32]; swprintf(ts, 32, L"%02d:%02d:%02d ", st.wHour, st.wMinute, st.wSecond);
+    std::wstring w = ts + line + L"\r\n";
+    int n = WideCharToMultiByte(CP_UTF8, 0, w.c_str(), (int)w.size(), nullptr, 0, nullptr, nullptr);
+    std::string u(n, 0); WideCharToMultiByte(CP_UTF8, 0, w.c_str(), (int)w.size(), &u[0], n, nullptr, nullptr);
+    HANDLE f = CreateFileW(path.c_str(), FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_ALWAYS, 0, nullptr);
+    if (f != INVALID_HANDLE_VALUE) { DWORD wr; WriteFile(f, u.data(), (DWORD)u.size(), &wr, nullptr); CloseHandle(f); }
+}
+static void ShowToast(const std::wstring& title, const std::wstring& text, DWORD hideAfterMs, int state);
+static DWORD g_spaceErr; // última falha ao reservar o Espaço (0 = nenhuma)
+
 // Registra os atalhos só quando fazem sentido, para não atrapalhar a digitação.
 static void UpdateHotkeys() {
     HWND list = FocusedFileList();
+    { // o que o Vizu vê agora (para o diagnóstico)
+        HWND fg = GetForegroundWindow();
+        GUITHREADINFO gti = {sizeof(gti)};
+        if (fg) GetGUIThreadInfo(GetWindowThreadProcessId(fg, nullptr), &gti);
+        HWND par = gti.hwndFocus ? GetParent(gti.hwndFocus) : nullptr;
+        wchar_t b[400];
+        swprintf(b, 400, L"janela=%ls foco=%ls pai=%ls cursor=%ls menu=%d lista=%ls espaço=%ls alt=%ls",
+                 fg ? ClassOf(fg).c_str() : L"-", gti.hwndFocus ? ClassOf(gti.hwndFocus).c_str() : L"-", par ? ClassOf(par).c_str() : L"-",
+                 gti.hwndCaret ? (gti.hwndCaret == gti.hwndFocus ? L"na lista" : ClassOf(gti.hwndCaret).c_str()) : L"-",
+                 (gti.flags & (GUI_INMENUMODE | GUI_POPUPMENUMODE)) ? 1 : 0, list ? L"SIM" : L"não",
+                 g_cfg.space ? L"ligado" : L"DESLIGADO", g_cfg.alt ? L"ligado" : L"DESLIGADO");
+        KeyLog(b);
+    }
     bool space = g_open || (g_cfg.space && list);
     if (space != g_spaceKey) {
-        if (space) g_spaceKey = RegisterHotKey(g_wnd, kHotSpace, MOD_NOREPEAT, VK_SPACE);
-        else { UnregisterHotKey(g_wnd, kHotSpace); g_spaceKey = false; }
+        if (space) {
+            g_spaceKey = RegisterHotKey(g_wnd, kHotSpace, MOD_NOREPEAT, VK_SPACE);
+            if (!g_spaceKey) { // outro programa já reservou o Espaço: avisa uma vez por sessão
+                DWORD e = GetLastError();
+                wchar_t b[96]; swprintf(b, 96, L"ERRO: não deu para reservar o Espaço (código %lu)", e); KeyLog(b);
+                if (!g_spaceErr) { g_toastAction = 3; g_toastLog = KeyLogPath(); } // clicar abre o registro
+                if (!g_spaceErr) ShowToast(T(L"A barra de espaço está ocupada", L"The Space bar is taken", L"La barra espaciadora está ocupada"),
+                                           T(L"Outro programa reservou o Espaço. Feche-o para ver com o Vizu.", L"Another program reserved Space. Close it to preview with Vizu.",
+                                             L"Otro programa reservó el Espacio. Ciérralo para ver con Vizu."), 8000, 2);
+                g_spaceErr = e ? e : 1;
+            } else g_spaceErr = 0;
+        } else { UnregisterHotKey(g_wnd, kHotSpace); g_spaceKey = false; }
     }
     if (g_open != g_openKeys) {
         for (auto& k : kOpenKeys) {
@@ -1324,6 +1370,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
     case WM_TIMER:
         if (wp == kAltTimer) { AltTick(); return 0; }
+        if (wp == kFocusPoll) { UpdateHotkeys(); return 0; } // reserva: funciona mesmo se os eventos de foco não chegarem
         if (wp == kUpdateTimer) { if (g_cfg.autoUpdate) CheckForUpdates(false); SetTimer(h, kUpdateTimer, 6 * 3600 * 1000, nullptr); return 0; }
         if (wp == kAnimTimer) { InvalidateRect(h, nullptr, FALSE); if (GetTickCount() - g_animStart > 180) KillTimer(h, wp); return 0; }
         if (wp == ui::kAnimTick) { KillTimer(h, wp); InvalidateRect(h, nullptr, FALSE); return 0; }
@@ -3757,6 +3804,36 @@ static void Diagnose(const std::wstring& path) {
     MessageBoxW(nullptr, r.c_str(), L"Vizu — diagnóstico", MB_OK | MB_ICONINFORMATION);
 }
 
+// "Vizu.exe /diag" sem arquivo: por que o Espaço ou o Alt não respondem. Mostra as opções, se o Vizu
+// está rodando e as últimas linhas do registro do teclado (o que a instância em execução viu).
+static void DiagnoseKeys() {
+    std::wstring r;
+    wchar_t t[512];
+    auto line = [&](const wchar_t* fmtStr, ...) { va_list ap; va_start(ap, fmtStr); vswprintf(t, 512, fmtStr, ap); va_end(ap); r += t; r += L"\r\n"; };
+    line(L"Vizu %ls  ·  edição: %ls", upd::kVersion, vec::Edition() == vec::kLite ? L"Lite" : L"Vizu/Ultra");
+    HWND running = FindWindowW(L"VizuWnd", nullptr);
+    line(L"Vizu rodando agora: %ls", running ? L"sim" : L"NÃO (abra o Vizu ou reinicie o computador)");
+    line(L"Ver com a barra de espaço: %ls  ·  Menu do Alt: %ls", ReadDword(L"SpacePreview", 1) ? L"ligado" : L"DESLIGADO", ReadDword(L"AltButtons", 1) ? L"ligado" : L"DESLIGADO");
+    line(L"Iniciar com o Windows: %ls", AutostartEnabled() ? L"sim" : L"não");
+    HANDLE tok = nullptr; TOKEN_ELEVATION el = {}; DWORD n = 0;
+    if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &tok)) { GetTokenInformation(tok, TokenElevation, &el, sizeof(el), &n); CloseHandle(tok); }
+    line(L"Este processo como administrador: %ls", el.TokenIsElevated ? L"sim" : L"não");
+    line(L"");
+    line(L"Últimas linhas do registro do teclado (%ls):", KeyLogPath().c_str());
+    std::string raw;
+    HANDLE f = CreateFileW(KeyLogPath().c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, 0, nullptr);
+    if (f != INVALID_HANDLE_VALUE) { DWORD sz = GetFileSize(f, nullptr), rd = 0; raw.resize(sz); ReadFile(f, &raw[0], sz, &rd, nullptr); raw.resize(rd); CloseHandle(f); }
+    int wn = MultiByteToWideChar(CP_UTF8, 0, raw.data(), (int)raw.size(), nullptr, 0);
+    std::wstring w(wn, 0); MultiByteToWideChar(CP_UTF8, 0, raw.data(), (int)raw.size(), &w[0], wn);
+    size_t cut = w.size(); for (int k = 0; k < 13 && cut != std::wstring::npos && cut > 0; ++k) cut = w.rfind(L'\n', cut - 1);
+    r += w.empty() ? L"(vazio: o Vizu ainda não registrou nada)\r\n" : w.substr(cut == std::wstring::npos ? 0 : cut + 1);
+    line(L"");
+    line(L"Para testar: abra uma pasta, clique num arquivo, aperte Espaço e segure Alt; depois rode o diagnóstico de novo.");
+    line(L"\"lista=SIM\" e \"espaço=ligado\" com o arquivo selecionado = o Vizu viu a lista. \"ERRO\" = outro programa usa o Espaço.");
+    line(L"Ctrl+C copia este texto.");
+    MessageBoxW(nullptr, r.c_str(), L"Vizu — diagnóstico do teclado", MB_OK | MB_ICONINFORMATION);
+}
+
 // ---------- instalação (o próprio Vizu.exe é o instalador; a DLL vai embutida) ----------
 // Sem derrubar o Explorer: DLL/EXE em uso são renomeados para *.old e apagados depois.
 
@@ -4055,7 +4132,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmd, int) {
         std::wstring f = args.substr(dg + 5);
         f.erase(0, f.find_first_not_of(L" \"")); f.erase(f.find_last_not_of(L" \"") + 1);
         CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-        Diagnose(f);
+        if (f.empty()) DiagnoseKeys(); else Diagnose(f);
         CoUninitialize();
         return 0;
     }
@@ -4132,7 +4209,9 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmd, int) {
     g_focusHook = SetWinEventHook(EVENT_OBJECT_FOCUS, EVENT_OBJECT_FOCUS, nullptr, FocusEvent, 0, 0, WINEVENT_OUTOFCONTEXT);
     g_selHook = SetWinEventHook(EVENT_OBJECT_SELECTION, EVENT_OBJECT_SELECTIONWITHIN, nullptr, FocusEvent, 0, 0, WINEVENT_OUTOFCONTEXT);
     g_fgHook = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, nullptr, FocusEvent, 0, 0, WINEVENT_OUTOFCONTEXT);
+    KeyLog(std::wstring(L"Vizu ") + upd::kVersion + L" iniciado · eventos de foco: " + (g_focusHook && g_fgHook ? L"OK" : L"FALHOU"));
     UpdateHotkeys();
+    SetTimer(g_wnd, kFocusPoll, 300, nullptr); // checa o foco também por tempo (leve: só lê o estado da janela)
     if (args.find(L"/settings") != std::wstring::npos) OpenSettings();
     WidgetsStart();
     if (openClean) OpenCleanWindow();
