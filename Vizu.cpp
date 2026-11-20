@@ -34,6 +34,7 @@
 #include <deque>
 #include <mutex>
 #include <set>
+#include <map>
 #include <thread>
 #include <atomic>
 
@@ -128,7 +129,7 @@ static const struct { int id; UINT mod, vk; } kOpenKeys[] = {
     {kHot0, 0, '0'}, {kHotNum0, 0, VK_NUMPAD0}, {kHotPlus, 0, VK_OEM_PLUS}, {kHotMinus, 0, VK_OEM_MINUS},
     {kHotAdd, 0, VK_ADD}, {kHotSub, 0, VK_SUBTRACT}, {kHotPgUp, 0, VK_PRIOR}, {kHotPgDn, 0, VK_NEXT},
 };
-enum { kRefreshTimer = 1, kFlashTimer, kAltTimer, kToastTimer, kSelTimer, kAnimTimer, kUpdateTimer };
+enum { kRefreshTimer = 1, kFlashTimer, kAltTimer, kToastTimer, kSelTimer, kAnimTimer, kUpdateTimer, kFocusPoll };
 static const float kCaption = 56, kPad = 18;
 static ui::Theme g_theme = ui::MakeTheme(ui::kThemeDark, false);
 static std::wstring g_uiFont; // fonte da interface escolhida pelo usuário (vazio = padrão: Inter)
@@ -162,9 +163,12 @@ static HWND FocusedFileList() {
     if (!fg) return nullptr;
     GUITHREADINFO gti = {sizeof(gti)};
     if (!GetGUIThreadInfo(GetWindowThreadProcessId(fg, nullptr), &gti)) return nullptr;
-    if (gti.flags & (GUI_INMENUMODE | GUI_POPUPMENUMODE | GUI_INMOVESIZE) || gti.hwndCaret) return nullptr;
+    if (gti.flags & (GUI_INMENUMODE | GUI_POPUPMENUMODE | GUI_INMOVESIZE)) return nullptr;
     HWND f = gti.hwndFocus;
     if (!f || ClassOf(f) != L"DirectUIHWND") return nullptr;
+    // Cursor de texto em outra janela = renomeando ou digitando. Na própria lista ele aparece com
+    // acessibilidade (Lupa, Narrador, indicador do cursor) e alguns teclados/IMEs: não é digitação.
+    if (gti.hwndCaret && gti.hwndCaret != f) return nullptr;
     HWND parent = GetParent(f);
     return parent && ClassOf(parent) == L"SHELLDLL_DefView" ? parent : nullptr;
 }
@@ -714,6 +718,30 @@ static bool CursorOver(HWND h) {
 static ULONGLONG g_altDownAt;
 static bool g_altFired;          // botões já mostrados neste toque
 
+// Avisos: entram deslizando de baixo com fade (~240 ms) e saem com fade (~180 ms).
+static int g_toastX, g_toastY; static double g_toastAt; static bool g_toastHiding;
+enum : UINT_PTR { kToastAnim = 0x7A12 };
+static void ToastAnimStep(HWND h) {
+    bool red = ui::ReducedMotion();
+    float dur = g_toastHiding ? 180.0f : (red ? 150.0f : 240.0f), t = (float)((ui::NowMs() - g_toastAt) / dur);
+    if (t > 1) t = 1;
+    float k = ui::EaseOut(t);
+    if (g_toastHiding) {
+        SetLayeredWindowAttributes(h, 0, (BYTE)(255 * (1 - k)), LWA_ALPHA);
+        if (t >= 1) { KillTimer(h, kToastAnim); ShowWindow(h, SW_HIDE); g_toastHiding = false; SetLayeredWindowAttributes(h, 0, 255, LWA_ALPHA); }
+        return;
+    }
+    SetLayeredWindowAttributes(h, 0, (BYTE)(255 * k), LWA_ALPHA);
+    int dy = red ? 0 : (int)((1 - k) * 24 * GetDpiForWindow(h) / 96.0f);
+    SetWindowPos(h, HWND_TOPMOST, g_toastX, g_toastY + dy, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE);
+    if (t >= 1) KillTimer(h, kToastAnim);
+}
+static void HideToast(HWND h) {
+    if (!IsWindowVisible(h) || g_toastHiding) return;
+    g_toastHiding = true; g_toastAt = ui::NowMs();
+    SetTimer(h, kToastAnim, 16, nullptr);
+}
+
 static void ShowToast(const std::wstring& title, const std::wstring& text, DWORD hideAfterMs, int state) {
     g_toastTitle = title; g_toastText = text; g_toastState = state;
     HMONITOR mon = MonitorFromPoint({0, 0}, MONITOR_DEFAULTTOPRIMARY);
@@ -722,7 +750,14 @@ static void ShowToast(const std::wstring& title, const std::wstring& text, DWORD
     GetMonitorInfoW(mon, &mi);
     float ui = GetDpiForWindow(g_defView ? g_defView : GetDesktopWindow()) / 96.0f;
     int w = (int)(380 * ui), h = (int)(80 * ui), m = (int)(18 * ui);
-    SetWindowPos(g_toastWnd, HWND_TOPMOST, mi.rcWork.right - w - m, mi.rcWork.bottom - h - m, w, h, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    bool wasShown = IsWindowVisible(g_toastWnd) && !g_toastHiding;
+    g_toastX = mi.rcWork.right - w - m; g_toastY = mi.rcWork.bottom - h - m; g_toastHiding = false;
+    if (!wasShown) { // entra: começa 24 px abaixo e transparente
+        g_toastAt = ui::NowMs();
+        SetLayeredWindowAttributes(g_toastWnd, 0, 0, LWA_ALPHA);
+        SetWindowPos(g_toastWnd, HWND_TOPMOST, g_toastX, g_toastY + (ui::ReducedMotion() ? 0 : (int)(24 * ui)), w, h, SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        SetTimer(g_toastWnd, kToastAnim, 16, nullptr);
+    } else { KillTimer(g_toastWnd, kToastAnim); SetLayeredWindowAttributes(g_toastWnd, 0, 255, LWA_ALPHA); SetWindowPos(g_toastWnd, HWND_TOPMOST, g_toastX, g_toastY, w, h, SWP_NOACTIVATE | SWP_SHOWWINDOW); }
     InvalidateRect(g_toastWnd, nullptr, TRUE);
     KillTimer(g_toastWnd, kToastTimer);
     if (hideAfterMs) SetTimer(g_toastWnd, kToastTimer, hideAfterMs, nullptr);
@@ -771,13 +806,56 @@ static void AltTick() {
 
 // ---------- atalhos ----------
 
+// Registro do teclado para o diagnóstico (%TEMP%\Vizu-teclado.log): só quando algo muda, no máximo ~64 KB.
+static std::wstring KeyLogPath() { wchar_t t[MAX_PATH]; GetTempPathW(MAX_PATH, t); return std::wstring(t) + L"Vizu-teclado.log"; }
+static void KeyLog(const std::wstring& line) {
+    static std::wstring last;
+    if (line == last) return;
+    last = line;
+    std::wstring path = KeyLogPath();
+    WIN32_FILE_ATTRIBUTE_DATA fa;
+    if (GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &fa) && fa.nFileSizeLow > 64 * 1024) DeleteFileW(path.c_str());
+    SYSTEMTIME st; GetLocalTime(&st);
+    wchar_t ts[32]; swprintf(ts, 32, L"%02d:%02d:%02d ", st.wHour, st.wMinute, st.wSecond);
+    std::wstring w = ts + line + L"\r\n";
+    int n = WideCharToMultiByte(CP_UTF8, 0, w.c_str(), (int)w.size(), nullptr, 0, nullptr, nullptr);
+    std::string u(n, 0); WideCharToMultiByte(CP_UTF8, 0, w.c_str(), (int)w.size(), &u[0], n, nullptr, nullptr);
+    HANDLE f = CreateFileW(path.c_str(), FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_ALWAYS, 0, nullptr);
+    if (f != INVALID_HANDLE_VALUE) { DWORD wr; WriteFile(f, u.data(), (DWORD)u.size(), &wr, nullptr); CloseHandle(f); }
+}
+static void ShowToast(const std::wstring& title, const std::wstring& text, DWORD hideAfterMs, int state);
+static DWORD g_spaceErr; // última falha ao reservar o Espaço (0 = nenhuma)
+
 // Registra os atalhos só quando fazem sentido, para não atrapalhar a digitação.
 static void UpdateHotkeys() {
     HWND list = FocusedFileList();
+    { // o que o Vizu vê agora (para o diagnóstico)
+        HWND fg = GetForegroundWindow();
+        GUITHREADINFO gti = {sizeof(gti)};
+        if (fg) GetGUIThreadInfo(GetWindowThreadProcessId(fg, nullptr), &gti);
+        HWND par = gti.hwndFocus ? GetParent(gti.hwndFocus) : nullptr;
+        wchar_t b[400];
+        swprintf(b, 400, L"janela=%ls foco=%ls pai=%ls cursor=%ls menu=%d lista=%ls espaço=%ls alt=%ls",
+                 fg ? ClassOf(fg).c_str() : L"-", gti.hwndFocus ? ClassOf(gti.hwndFocus).c_str() : L"-", par ? ClassOf(par).c_str() : L"-",
+                 gti.hwndCaret ? (gti.hwndCaret == gti.hwndFocus ? L"na lista" : ClassOf(gti.hwndCaret).c_str()) : L"-",
+                 (gti.flags & (GUI_INMENUMODE | GUI_POPUPMENUMODE)) ? 1 : 0, list ? L"SIM" : L"não",
+                 g_cfg.space ? L"ligado" : L"DESLIGADO", g_cfg.alt ? L"ligado" : L"DESLIGADO");
+        KeyLog(b);
+    }
     bool space = g_open || (g_cfg.space && list);
     if (space != g_spaceKey) {
-        if (space) g_spaceKey = RegisterHotKey(g_wnd, kHotSpace, MOD_NOREPEAT, VK_SPACE);
-        else { UnregisterHotKey(g_wnd, kHotSpace); g_spaceKey = false; }
+        if (space) {
+            g_spaceKey = RegisterHotKey(g_wnd, kHotSpace, MOD_NOREPEAT, VK_SPACE);
+            if (!g_spaceKey) { // outro programa já reservou o Espaço: avisa uma vez por sessão
+                DWORD e = GetLastError();
+                wchar_t b[96]; swprintf(b, 96, L"ERRO: não deu para reservar o Espaço (código %lu)", e); KeyLog(b);
+                if (!g_spaceErr) { g_toastAction = 3; g_toastLog = KeyLogPath(); } // clicar abre o registro
+                if (!g_spaceErr) ShowToast(T(L"A barra de espaço está ocupada", L"The Space bar is taken", L"La barra espaciadora está ocupada"),
+                                           T(L"Outro programa reservou o Espaço. Feche-o para ver com o Vizu.", L"Another program reserved Space. Close it to preview with Vizu.",
+                                             L"Otro programa reservó el Espacio. Ciérralo para ver con Vizu."), 8000, 2);
+                g_spaceErr = e ? e : 1;
+            } else g_spaceErr = 0;
+        } else { UnregisterHotKey(g_wnd, kHotSpace); g_spaceKey = false; }
     }
     if (g_open != g_openKeys) {
         for (auto& k : kOpenKeys) {
@@ -879,6 +957,8 @@ static void DiscardDeviceResources() { SafeRelease(g_gpuBmp); SafeRelease(g_chec
 static D2D1_RECT_F GearRectF() { return ClassicBars() ? D2D1::RectF(16 * g_ui, 8 * g_ui, 48 * g_ui, 40 * g_ui) : D2D1::RectF(14 * g_ui, 12 * g_ui, 46 * g_ui, 44 * g_ui); }
 // Botões da barra de cima no Vizu Classic: 1 copiar imagem, 2 abrir no programa padrão, 3 fechar.
 static int g_barHot;
+static ui::Anim g_pvAnim;                       // Espiar: hover dos botões e luz do cursor nas cápsulas
+static POINT g_pvMouse = {-100000, -100000};
 static D2D1_RECT_F BarButton(int id) {
     RECT rc; GetClientRect(g_wnd, &rc);
     float right = rc.right - 16 * g_ui - (3 - id) * 44 * g_ui;
@@ -1060,6 +1140,7 @@ static void Paint() {
     g_rt->Clear(bars ? ui::Rgba(0x23272E) : th.tint);
     if (!bars) ui::Backdrop(g_rt, th, size.width, size.height);
     ui::Painter p(g_rt, g_dw, th, s);
+    g_pvAnim.Frame(); p.an = &g_pvAnim; p.mx = (float)g_pvMouse.x; p.my = (float)g_pvMouse.y;
 
     // imagem flutuando, com cantos arredondados
     D2D1_RECT_F a = ImageArea();
@@ -1094,6 +1175,15 @@ static void Paint() {
             D2D1_RECT_F r = PageArrow(d);
             bool enabled = d < 0 ? g_page > 0 : g_page < g_pages - 1;
             float rad = (r.bottom - r.top) / 2;
+            if (th.neon) { // Crispy: translúcido; acende em laranja com neon ao passar o mouse (~200 ms)
+                float k = p.A(0x20 + d, g_arrowHot == d && enabled ? 1.0f : 0.0f, 200);
+                p.Fill(r, rad, ui::Rgba(0x101013, 0.55f));
+                p.Neon(r, rad, k);
+                p.Fill(r, rad, ui::Rgba(ui::NeonColor(), 0.16f * k));
+                p.Stroke(r, rad, ui::Mix(ui::Rgba(0xFFFFFF, 0.14f), th.accent, k));
+                p.Icon(d < 0 ? L"\uE76B" : L"\uE76C", r, 14, enabled ? ui::Mix(th.text, th.accent, k) : th.text2);
+                continue;
+            }
             p.Fill(r, rad, th.dark ? ui::Rgba(0x1C1C1E, g_arrowHot == d ? 0.85f : 0.6f) : ui::Rgba(0xFFFFFF, g_arrowHot == d ? 0.95f : 0.75f));
             p.Stroke(r, rad, th.stroke);
             p.Icon(d < 0 ? L"\uE76B" : L"\uE76C", r, 14, enabled ? th.text : th.text2);
@@ -1123,7 +1213,7 @@ static void Paint() {
 
     if (bars) { PaintClassicBars(p, size, s); if (g_rt->EndDraw() == D2DERR_RECREATE_TARGET) DiscardDeviceResources(); return; }
     // barra de cima: engrenagem, nome, zoom/página
-    p.CircleButton(GearRectF(), L"", g_gearHot);
+    p.CircleButton(GearRectF(), L"", g_gearHot, 0x10);
     float side = 170 * s;
     p.Text(g_name, D2D1::RectF(side, 12 * s, size.width - side, 44 * s), 14, th.text, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
     wchar_t t[64];
@@ -1131,7 +1221,7 @@ static void Paint() {
     std::wstring zoom = t;
     float zw = p.Measure(zoom, 12, DWRITE_FONT_WEIGHT_SEMI_BOLD) + 24 * s, x = size.width - 14 * s;
     D2D1_RECT_F zr = D2D1::RectF(x - zw, 14 * s, x, 42 * s);
-    p.Glass(zr, 14 * s);
+    p.Glass(zr, 14 * s, false, 0x11);
     p.Text(zoom, zr, 12, th.text, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
     x = zr.left - 8 * s;
     if (g_pages > 1) {
@@ -1139,7 +1229,7 @@ static void Paint() {
         std::wstring pg = t;
         float pw = p.Measure(pg, 12, DWRITE_FONT_WEIGHT_SEMI_BOLD) + 24 * s;
         D2D1_RECT_F pr = D2D1::RectF(x - pw, 14 * s, x, 42 * s);
-        p.Glass(pr, 14 * s);
+        p.Glass(pr, 14 * s, false, 0x12);
         p.Text(pg, pr, 12, th.text, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
     }
     if (!g_flash.empty() || g_loading) {
@@ -1160,7 +1250,7 @@ static void Paint() {
     }
     float ob = size.height - 14 * s, oh = 36 * s;
     D2D1_RECT_F orn = D2D1::RectF((size.width - total) / 2, ob - oh, (size.width + total) / 2, ob);
-    p.Glass(orn, oh / 2);
+    p.Glass(orn, oh / 2, false, 0x13);
     float cxp = orn.left + padX;
     for (size_t i = 0; i < widths.size(); ++i) {
         if (i) { // separador fino
@@ -1174,6 +1264,7 @@ static void Paint() {
 
     PaintFontStrip(p, size.width, orn.top - 8 * s, padX, maxW, false, th.text, th.text2, th.danger);
     if (g_rt->EndDraw() == D2DERR_RECREATE_TARGET) DiscardDeviceResources();
+    g_pvAnim.Pump(g_wnd, ui::kAnimTick);
 }
 
 // Tema do Windows mudou (claro/escuro): reaplica o vidro e redesenha tudo.
@@ -1280,8 +1371,10 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
     case WM_TIMER:
         if (wp == kAltTimer) { AltTick(); return 0; }
+        if (wp == kFocusPoll) { UpdateHotkeys(); return 0; } // reserva: funciona mesmo se os eventos de foco não chegarem
         if (wp == kUpdateTimer) { if (g_cfg.autoUpdate) CheckForUpdates(false); SetTimer(h, kUpdateTimer, 6 * 3600 * 1000, nullptr); return 0; }
         if (wp == kAnimTimer) { InvalidateRect(h, nullptr, FALSE); if (GetTickCount() - g_animStart > 180) KillTimer(h, wp); return 0; }
+        if (wp == ui::kAnimTick) { KillTimer(h, wp); InvalidateRect(h, nullptr, FALSE); return 0; }
         if (wp == kSelTimer) { KillTimer(h, wp); if (HWND dv = FocusedFileList()) SyncSelectionOrder(dv); return 0; }
         KillTimer(h, wp);
         if (wp == kRefreshTimer && g_open) OpenSelection();
@@ -1324,6 +1417,11 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         RECT crc; GetClientRect(h, &crc);
         bool hotNow = gearNow || barNow || (ClassicBars() && (p.y < 48 * g_ui || p.y > crc.bottom - 52 * g_ui)); // sem conta-gotas sobre as barras
         int arrow = g_dragging ? 0 : PageArrowAt(p);
+        g_pvMouse = p;
+        if (g_theme.neon && !g_dragging && (p.y < 56 * g_ui || p.y > crc.bottom - 64 * g_ui)) { // luz do cursor nas cápsulas de cima e de baixo
+            TRACKMOUSEEVENT tme = {sizeof(tme), TME_LEAVE, h, 0}; TrackMouseEvent(&tme);
+            InvalidateRect(h, nullptr, FALSE);
+        }
         if (gearNow != g_gearHot || barNow != g_barHot || arrow != g_arrowHot) {
             g_gearHot = gearNow; g_barHot = barNow;
             g_arrowHot = arrow;
@@ -1349,7 +1447,8 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         }
         return 0;
     }
-    case WM_MOUSELEAVE: if (g_gearHot || g_barHot || g_arrowHot || g_pickOn) { g_gearHot = false; g_barHot = 0; g_arrowHot = 0; g_pickOn = false; InvalidateRect(h, nullptr, FALSE); } return 0;
+    case WM_MOUSELEAVE: g_pvMouse = {-100000, -100000}; if (g_theme.neon) InvalidateRect(h, nullptr, FALSE);
+        if (g_gearHot || g_barHot || g_arrowHot || g_pickOn) { g_gearHot = false; g_barHot = 0; g_arrowHot = 0; g_pickOn = false; InvalidateRect(h, nullptr, FALSE); } return 0;
     case WM_LBUTTONUP: {
         POINT p = {GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
         bool click = g_dragging && abs(p.x - g_downPt.x) < 4 && abs(p.y - g_downPt.y) < 4;
@@ -1555,12 +1654,88 @@ static UINT SelectionKinds(const std::vector<std::wstring>& files) {
 
 // ---------- menu circular (segurar Alt) ----------
 
-struct Slice { std::wstring label; const wchar_t* icon; std::function<void()> act; };
+struct Slice { std::wstring label; const wchar_t* icon; std::function<void()> act; std::wstring exe; int slot = -1; }; // exe/slot: atalho de programa
 struct Side { std::wstring name; std::vector<Slice> items; };
 static std::vector<Side> g_sides;
 static int g_side, g_ringHot = -2;   // -1 = centro (troca de lado), -2 = nada
 static BYTE g_ringAlpha;
+static double g_ringShownAt; // abertura: escala 0,92 -> 1 e fade (~180 ms)
+static double g_ringHotAt;   // a fatia ativa acende em ~150 ms quando troca
+static double g_ringCloseAt; static bool g_ringClosing; // fechar: fade + escala 1 -> 0,96 (~120 ms)
 static float g_ringScale = 1;
+static void ShowToast(const std::wstring& title, const std::wstring& text, DWORD hideAfterMs, int state);
+
+// ---------- atalhos de programas (Alt sem nada selecionado) ----------
+// 8 espaços; cada um guarda o caminho de um .exe em RingApp0..RingApp7 (HKCU\Software\DesignThumbs).
+static const int kRingApps = 8;
+static bool g_ringLaunch; // o menu aberto é o de atalhos
+static std::wstring RingAppName(int i) { return L"RingApp" + std::to_wstring(i); }
+static std::wstring ReadStr(const wchar_t* name, const wchar_t* def);
+static void WriteStr(const wchar_t* name, const std::wstring& v);
+static void DefineRingApp(int slot) {
+    wchar_t file[MAX_PATH] = {};
+    std::wstring filter = std::wstring(T(L"Programas (*.exe)", L"Programs (*.exe)", L"Programas (*.exe)")) + L'\0' + L"*.exe" + L'\0' + L'\0';
+    OPENFILENAMEW of = {sizeof(of)};
+    of.hwndOwner = g_wnd; of.lpstrFilter = filter.c_str(); of.lpstrFile = file; of.nMaxFile = MAX_PATH;
+    of.lpstrTitle = T(L"Escolha o programa do atalho", L"Choose the program for the shortcut", L"Elige el programa del acceso");
+    of.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR | OFN_HIDEREADONLY | OFN_DONTADDTORECENT;
+    wchar_t pf[MAX_PATH]; if (GetEnvironmentVariableW(L"ProgramFiles", pf, MAX_PATH)) of.lpstrInitialDir = pf;
+    SetForegroundWindow(g_wnd);
+    if (GetOpenFileNameW(&of)) WriteStr(RingAppName(slot).c_str(), file);
+}
+static void LaunchRingApp(const std::wstring& exe) {
+    std::wstring dir = exe.substr(0, exe.find_last_of(L"\\/"));
+    if ((INT_PTR)ShellExecuteW(nullptr, L"open", exe.c_str(), nullptr, dir.c_str(), SW_SHOWNORMAL) <= 32)
+        ShowToast(T(L"Não deu para abrir o programa", L"Couldn't open the program", L"No se pudo abrir el programa"), exe, 6000, 2);
+}
+static void BuildLauncher() {
+    g_sides.clear();
+    Side s{T(L"Atalhos", L"Shortcuts", L"Accesos"), {}};
+    for (int i = 0; i < kRingApps; ++i) {
+        std::wstring exe = ReadStr(RingAppName(i).c_str(), L"");
+        if (!exe.empty() && GetFileAttributesW(exe.c_str()) == INVALID_FILE_ATTRIBUTES) exe.clear(); // programa removido: volta a ficar livre
+        Slice sl;
+        sl.slot = i; sl.exe = exe; sl.icon = L"";
+        if (exe.empty()) { sl.label = T(L"Clique para definir o atalho", L"Click to set the shortcut", L"Haz clic para definir el acceso"); sl.act = [i] { DefineRingApp(i); }; }
+        else {
+            size_t a = exe.find_last_of(L"\\/") + 1, b = exe.find_last_of(L'.');
+            sl.label = exe.substr(a, b > a ? b - a : std::wstring::npos);
+            sl.act = [exe] { LaunchRingApp(exe); };
+        }
+        s.items.push_back(sl);
+    }
+    g_sides.push_back(s);
+}
+// Ícone do programa como bitmap do Direct2D. O ícone extraído fica guardado (o menu redesenha a cada quadro da animação).
+static ID2D1Bitmap* ExeIconBitmap(ID2D1RenderTarget* rt, const std::wstring& exe, int px) {
+    static std::map<std::wstring, IWICBitmap*> cache; // por caminho + tamanho
+    std::wstring key = exe + L"|" + std::to_wstring(px);
+    IWICBitmap*& wb = cache[key];
+    if (!wb) {
+        HICON hi = nullptr;
+        if (FAILED(SHDefExtractIconW(exe.c_str(), 0, 0, &hi, nullptr, (UINT)px)) || !hi) {
+            SHFILEINFOW fi = {}; if (SHGetFileInfoW(exe.c_str(), 0, &fi, sizeof(fi), SHGFI_ICON | SHGFI_LARGEICON)) hi = fi.hIcon;
+        }
+        if (!hi) { cache.erase(key); return nullptr; }
+        IWICImagingFactory* wic = nullptr; IWICBitmap* raw = nullptr; IWICFormatConverter* cv = nullptr;
+        IWICBitmap* made = nullptr;
+        if (SUCCEEDED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&wic))) &&
+            SUCCEEDED(wic->CreateBitmapFromHICON(hi, &raw)) && SUCCEEDED(wic->CreateFormatConverter(&cv)) &&
+            SUCCEEDED(cv->Initialize(raw, GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0, WICBitmapPaletteTypeCustom)))
+            wic->CreateBitmapFromSource(cv, WICBitmapCacheOnLoad, &made);
+        if (cv) cv->Release();
+        if (raw) raw->Release();
+        if (wic) wic->Release();
+        DestroyIcon(hi);
+        if (!made) { cache.erase(key); return nullptr; }
+        cache[key] = made;
+        return ExeIconBitmap(rt, exe, px);
+    }
+    ID2D1Bitmap* out = nullptr;
+    rt->CreateBitmapFromWicBitmap(wb, nullptr, &out);
+    return out;
+}
+
 
 static void OpenResizeDialog();
 static void OpenPagesDialog();
@@ -1676,6 +1851,10 @@ static void RenderRing() {
     const ui::Theme& th = g_theme;
     float s = g_ringScale, c = S / 2.0f, rIn = RingIn(), rOut = RingOut();
     D2D1_POINT_2F C = D2D1::Point2F(c, c);
+    { float t = (float)((ui::NowMs() - g_ringShownAt) / 180.0), k = ui::EaseOut(t > 1 ? 1 : t), sc = ui::ReducedMotion() ? 1.0f : 0.92f + 0.08f * k;
+      if (g_ringClosing) { float u = (float)((ui::NowMs() - g_ringCloseAt) / 120.0); u = u > 1 ? 1 : u; sc = ui::ReducedMotion() ? 1.0f : 1 - 0.04f * ui::EaseInOut(u); }
+      if (sc < 0.999f) rt->SetTransform(D2D1::Matrix3x2F::Scale(sc, sc, C)); }
+    float hotK; { float t = (float)((ui::NowMs() - g_ringHotAt) / 150.0); hotK = ui::EaseOut(t > 1 ? 1 : t); } // brilho que acompanha a troca de fatia
     ID2D1Factory* fac = nullptr; rt->GetFactory(&fac);
     ID2D1SolidColorBrush* br = nullptr;
     auto solid = [&](D2D1_COLOR_F col) { if (br) br->Release(); rt->CreateSolidColorBrush(col, &br); return br; };
@@ -1799,7 +1978,7 @@ static void RenderRing() {
                 else dist = min(ex, ey);
                 if (dist > 0) {
                     float tt = (r - ri) / (ro - ri);
-                    float al = st.hotOut + (st.hotIn - st.hotOut) * powf(max(0.0f, 1 - tt), 2.0f);
+                    float al = (st.hotOut + (st.hotIn - st.hotOut) * powf(max(0.0f, 1 - tt), 2.0f)) * hotK;
                     if (crispy) { R = R * (1 - al) + st.hot[0] * al; G = G * (1 - al) + st.hot[1] * al; B = B * (1 - al) + st.hot[2] * al; R *= 0.92f; G *= 0.92f; B *= 0.92f; }
                     else mixv(st.hot, al);
                     A = max(A, 0.99f);
@@ -1847,13 +2026,35 @@ static void RenderRing() {
             D2D1_RECT_F lr = D2D1::RectF(cx - bw / 2, cy - 11 * s, cx + bw / 2, cy + 11 * s);
             p.TextSpaced(lab, lr, hot && !classic ? 15.5f : 13, col, classic ? DWRITE_FONT_WEIGHT_MEDIUM : hot ? DWRITE_FONT_WEIGHT_BOLD : DWRITE_FONT_WEIGHT_SEMI_BOLD, 0.08f); // letras espaçadas
         } else {
+            if (side.items[i].slot >= 0) { // atalho de programa: ícone do .exe, ou o convite para definir
+                const Slice& sl = side.items[i];
+                if (sl.exe.empty()) {
+                    p.Feather("M12 5v14M5 12h14", D2D1::RectF(cx - 10 * s, cy - 28 * s, cx + 10 * s, cy - 12 * s), 14 * s, col, 2); // +
+                    IDWriteTextFormat* tf = p.Format(10, hot ? DWRITE_FONT_WEIGHT_SEMI_BOLD : DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER, nullptr, true);
+                    ID2D1SolidColorBrush* tb = nullptr;
+                    if (tf && SUCCEEDED(rt->CreateSolidColorBrush(col, &tb))) {
+                        rt->DrawText(sl.label.c_str(), (UINT32)sl.label.size(), tf, D2D1::RectF(cx - bw / 2, cy - 8 * s, cx + bw / 2, cy + 28 * s), tb);
+                        tb->Release();
+                    }
+                    if (tf) tf->Release();
+                } else {
+                    float ip = (hot ? 34.0f : 30.0f) * s;
+                    if (ID2D1Bitmap* ib = ExeIconBitmap(rt, sl.exe, (int)(48 * s))) {
+                        rt->DrawBitmap(ib, D2D1::RectF(cx - ip / 2, cy - ip / 2 - 8 * s, cx + ip / 2, cy + ip / 2 - 8 * s), 1.0f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
+                        ib->Release();
+                    }
+                    p.Text(sl.label, D2D1::RectF(cx - bw / 2, cy + 10 * s, cx + bw / 2, cy + 26 * s), 10.5f, col, hot ? DWRITE_FONT_WEIGHT_SEMI_BOLD : DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER);
+                }
+                continue;
+            }
             p.Icon(side.items[i].icon, D2D1::RectF(cx - 20 * s, cy - 23 * s, cx + 20 * s, cy - 3 * s), 14, col);
             p.Text(side.items[i].label, D2D1::RectF(cx - bw / 2, cy, cx + bw / 2, cy + 18 * s), 11, col, hot ? DWRITE_FONT_WEIGHT_SEMI_BOLD : DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER);
         }
     }
     // centro: lente de vidro com o nome do lado
     D2D1_ELLIPSE lens = D2D1::Ellipse(C, rIn - 8 * s, rIn - 8 * s);
-    std::wstring cnt = std::to_wstring(g_convFiles.size()) + (g_convFiles.size() == 1 ? T(L" arquivo", L" file", L" archivo") : T(L" arquivos", L" files", L" archivos"));
+    std::wstring cnt = g_ringLaunch ? std::wstring(T(L"Programas", L"Programs", L"Programas"))
+                                    : std::to_wstring(g_convFiles.size()) + (g_convFiles.size() == 1 ? T(L" arquivo", L" file", L" archivo") : T(L" arquivos", L" files", L" archivos"));
     {
         D2D1_COLOR_F titleCol = crispy ? orange : th.dark ? ui::Rgba(0xFFFFFF) : ui::Rgba(0x1D1D1F), muted = classic ? ui::Rgba(0xBCC2CC) : th.dark ? ui::Rgba(0x8E8E95) : ui::Rgba(0x7A7A82);
         if (g_ringHot == -1 && !classic) {
@@ -1906,13 +2107,20 @@ static void RenderRing() {
     DeleteObject(bmp);
 }
 
-static void HideAltPopup() { if (g_altWnd && IsWindowVisible(g_altWnd)) ShowWindow(g_altWnd, SW_HIDE); g_ringHot = -2; }
+static void HideAltPopup() {
+    g_ringHot = -2;
+    if (!g_altWnd || !IsWindowVisible(g_altWnd) || g_ringClosing) return;
+    g_ringClosing = true; g_ringCloseAt = ui::NowMs(); // some com fade + leve escala; a janela é escondida no fim
+    KillTimer(g_altWnd, 1); KillTimer(g_altWnd, 2);
+    SetTimer(g_altWnd, 3, 16, nullptr);
+}
 
 static void ShowAltPopup() {
     SyncSelectionOrder(g_defView);
     g_convFiles = g_selOrder;
-    if (g_convFiles.empty()) return;
-    BuildSides();
+    g_ringLaunch = g_convFiles.empty(); // nada selecionado: atalhos de programas
+    if (g_ringLaunch) { g_side = 0; BuildLauncher(); }
+    else BuildSides();
     if (g_sides.empty()) return;
     POINT pt; GetCursorPos(&pt);
     g_ringScale = GetDpiForWindow(g_defView) / 96.0f;
@@ -1922,7 +2130,7 @@ static void ShowAltPopup() {
     int x = max((int)mi.rcWork.left, min((int)mi.rcWork.right - S, (int)pt.x - S / 2));
     int y = max((int)mi.rcWork.top, min((int)mi.rcWork.bottom - S, (int)pt.y - S / 2));
     g_ringHot = -2;
-    g_ringAlpha = 60;
+    g_ringAlpha = 0; g_ringShownAt = ui::NowMs(); g_ringHotAt = 0; g_ringClosing = false; KillTimer(g_altWnd, 3);
     SetWindowPos(g_altWnd, HWND_TOPMOST, x, y, S, S, SWP_NOACTIVATE | SWP_SHOWWINDOW);
     RenderRing();
     SetTimer(g_altWnd, 1, 15, nullptr); // aparece suavemente
@@ -1937,14 +2145,20 @@ static LRESULT CALLBACK AltProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         return RingHit(p) == -2 ? HTTRANSPARENT : HTCLIENT;
     }
     case WM_TIMER:
-        g_ringAlpha = (BYTE)min(255, g_ringAlpha + 65);
+        if (wp == 2) { RenderRing(); if (ui::NowMs() - g_ringHotAt > 160) KillTimer(h, 2); return 0; } // troca de fatia
+        if (wp == 3) { // fechando
+            float u = (float)((ui::NowMs() - g_ringCloseAt) / 120.0);
+            if (u >= 1) { KillTimer(h, 3); g_ringClosing = false; ShowWindow(h, SW_HIDE); return 0; }
+            g_ringAlpha = (BYTE)(255 * (1 - u)); RenderRing(); return 0;
+        }
+        { float t = (float)((ui::NowMs() - g_ringShownAt) / (ui::ReducedMotion() ? 150.0 : 180.0)); g_ringAlpha = (BYTE)(255 * ui::EaseOut(t > 1 ? 1 : t)); }
         RenderRing();
         if (g_ringAlpha == 255) KillTimer(h, 1);
         return 0;
     case WM_MOUSEMOVE: {
         POINT p = {GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
         int hot = RingHit(p);
-        if (hot != g_ringHot) { g_ringHot = hot; RenderRing(); } // só redesenha quando a fatia muda
+        if (hot != g_ringHot && !g_ringClosing) { g_ringHot = hot; g_ringHotAt = ui::NowMs(); RenderRing(); SetTimer(h, 2, 16, nullptr); } // a fatia nova acende em ~150 ms
         TRACKMOUSEEVENT tme = {sizeof(tme), TME_LEAVE, h, 0};
         TrackMouseEvent(&tme);
         return 0;
@@ -1974,7 +2188,14 @@ static LRESULT CALLBACK AltProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         }
         return 0;
     }
-    case WM_RBUTTONUP: HideAltPopup(); return 0;
+    case WM_RBUTTONUP: { // atalhos: botão direito num espaço já definido troca o programa
+        POINT p = {GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
+        int hit = RingHit(p);
+        bool redefine = g_ringLaunch && hit >= 0 && !g_sides.empty() && hit < (int)g_sides[0].items.size();
+        HideAltPopup();
+        if (redefine) DefineRingApp(hit);
+        return 0;
+    }
     }
     return DefWindowProcW(h, msg, wp, lp);
 }
@@ -2391,7 +2612,7 @@ static void RevealOutputs() {
 static LRESULT CALLBACK ToastProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
     case WM_MOUSEACTIVATE: return MA_NOACTIVATE;
-    case WM_TIMER: KillTimer(h, wp); ShowWindow(h, SW_HIDE); return 0;
+    case WM_TIMER: if (wp == kToastAnim) { ToastAnimStep(h); return 0; } KillTimer(h, wp); HideToast(h); return 0;
     case WM_SETCURSOR: SetCursor(LoadCursor(nullptr, g_converting ? IDC_ARROW : IDC_HAND)); return TRUE;
     case WM_LBUTTONUP:
         if (g_converting) return 0;
@@ -2412,7 +2633,7 @@ static LRESULT CALLBACK ToastProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         } else if (g_toastAction == 0) RevealOutputs();
         else if (g_toastAction == 3) ShellExecuteW(nullptr, L"open", g_toastLog.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
         return 0;
-    case WM_RBUTTONUP: if (!g_converting) ShowWindow(h, SW_HIDE); return 0;
+    case WM_RBUTTONUP: if (!g_converting) HideToast(h); return 0;
     case WM_SIZE: g_toastSurf.Resize(LOWORD(lp), HIWORD(lp)); return 0;
     case WM_ERASEBKGND: return 1;
     case WM_PAINT: {
@@ -2493,7 +2714,7 @@ enum { kTogSpace = 1, kTogAlt, kDelayMinus, kDelayPlus, kDpi72, kDpi300, kPdfSma
        kTogPicker, kBtnFolders, kLangPt, kLangEn, kLangEs, kTogUpdate, kBtnUpdate, kTheme0, kTheme1, kTheme2, kTheme3, kWebpMinus, kWebpPlus, kTogTray, kTogTempDel, kNeon0, kNeon1, kNeon2, kNeon3, kNeon4, kNeon5, kNeonRgb,
        kClockOn, kClockFont, kPomoT0, kPomoT1, kPomoT2, kPomoC0, kPomoC1, kPomoC2, kPomoC3, kTheftHist, kUiFont, kOcrOn, kOcrKeep, kOcrJoin, kOcrLang, kClk100, kClk90, kClk70, kClockDock, kSte, kTheme4, kTheftOn, kFocoOn, kAgendaOn, kVecText, kVecCurves, kSysToggle,
        kClOpen, kAge1, kAge7, kAge30, kTogCleanBin, kTogDiskW, kTogDiskWarn, kDiskLimMinus, kDiskLimPlus, kDiskAll0, kDiskAll1, kTogPerfW, kTogClockClean, kPrimao,
-       kPreset0, kPreset1, kPreset2, kTogOcrBtn, kHkOcr, kHkClean, kAdv0, kAdv1, kAdv2, kAdv3, kAdv4, kAdv5, kLinkAbout, kLinkThanks, kBack, kBtnUninstall, kBtnLiteUpgrade, kTogChat, kChatEdit };
+       kPreset0, kPreset1, kPreset2, kTogOcrBtn, kHkOcr, kHkClean, kAdv0, kAdv1, kAdv2, kAdv3, kAdv4, kAdv5, kLinkAbout, kLinkThanks, kBack, kBtnUninstall, kBtnLiteUpgrade, kTogChat, kChatEdit, kRingReset };
 static const UINT kNeonPresets[6] = {0xFF6633, 0xFF2D95, 0x00E5FF, 0xB6FF3B, 0xA855F7, 0xFFD400};
 
 
@@ -2545,6 +2766,11 @@ static int g_setHot;
 static float g_setScroll, g_setContentH;
 enum { kSecConv, kSecTime, kSecClean, kSecOther, kSecSys, kSecCount }; // seções com "Avançado"
 static bool g_advOpen[kSecCount]; // tudo começa recolhido
+static ui::Anim g_setAnim;          // movimento das Configurações (chaves, seletores, Avançado, abrir/fechar)
+static POINT g_setMouse = {-100000, -100000};
+static bool g_setDown, g_setClosing;
+enum { kSetOpenKey = 0x40000 };
+static void CloseSettings();
 static int g_setPage; // 0 = Configurações, 1 = Sobre o programa, 2 = Agradecimentos
 static int g_capHot;  // capturando atalho: kHkOcr ou kHkClean (0 = não)
 static bool g_capFail; // o último atalho escolhido já era usado por outro programa
@@ -2832,7 +3058,15 @@ static void SettingsAction(int id) {
         i18n::Load();
         return;
     }
-    case kBtnClose: DestroyWindow(g_settingsWnd); return;
+    case kBtnClose: CloseSettings(); return;
+    case kRingReset: { // apaga os 8 atalhos de programas do menu radial (pede confirmação)
+        if (MessageBoxW(g_settingsWnd, T(L"Apagar os 8 atalhos de programas do menu radial?\nOs espaços voltam a mostrar \"Clique para definir o atalho\".",
+                                         L"Delete the 8 program shortcuts of the radial menu?\nThe slots go back to \"Click to set the shortcut\".",
+                                         L"¿Borrar los 8 accesos de programas del menú radial?\nLos espacios vuelven a mostrar \"Haz clic para definir el acceso\"."),
+                        T(L"Resetar atalhos do menu radial", L"Reset radial menu shortcuts", L"Restablecer accesos del menú radial"), MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2) != IDYES) return;
+        for (int i = 0; i < kRingApps; ++i) RegDeleteKeyValueW(HKEY_CURRENT_USER, kCfgKey, RingAppName(i).c_str());
+        return;
+    }
     default: return;
     }
     SaveConfig();
@@ -2846,8 +3080,18 @@ static void PaintSettings(HWND h) {
     ID2D1RenderTarget* rt = g_setSurf.rt;
     D2D1_SIZE_F sz = rt->GetSize();
     const ui::Theme& th = g_theme;
-    rt->Clear(th.tint);
+    g_setAnim.Frame();
+    // abrir: fade + escala 0,98 -> 1 (~220 ms); fechar: o inverso, mais rápido (~150 ms)
+    float openK = g_setAnim.Get(kSetOpenKey, g_setClosing ? 0.0f : 1.0f, g_setClosing ? 150.0f : 220.0f, g_setClosing);
+    if (g_setClosing && openK <= 0.001f) { g_setSurf.End(); PostMessage(h, WM_CLOSE, 1, 0); return; }
+    { D2D1_COLOR_F tint = th.tint; if (th.glass) tint.a *= openK; rt->Clear(tint); }
+    float sc = g_setAnim.reduced ? 1.0f : 0.98f + 0.02f * openK;
+    rt->SetTransform(D2D1::Matrix3x2F::Scale(sc, sc, D2D1::Point2F(sz.width / 2, sz.height / 2)));
+    bool openLayer = openK < 0.999f;
+    if (openLayer) rt->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), nullptr, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE, D2D1::IdentityMatrix(), openK), nullptr);
     ui::Painter p(rt, g_dw, th, s);
+    p.an = &g_setAnim; p.mx = (float)g_setMouse.x; p.my = (float)g_setMouse.y; p.down = g_setDown;
+    if (th.neon && !th.glass) ui::Backdrop(rt, th, sz.width, sz.height); // sem o vidro do DWM: #08080A com manchas desfocadas
     g_setHits.clear();
     float clipTop = 0; // depois do cabeçalho: o que rolou para baixo dele não recebe clique
     auto hit = [&](int id, D2D1_RECT_F r) { if (r.top < clipTop) return false; g_setHits.push_back({id, r}); return g_setHot == id; };
@@ -2861,7 +3105,7 @@ static void PaintSettings(HWND h) {
     ui::Brand(rt, th, x0, 26 * s, 24 * s);
     p.Text(T(L"Configurações", L"Settings", L"Configuración"), D2D1::RectF(x0, 52 * s, x0 + colW, 72 * s), 12, th.text2);
     D2D1_RECT_F close = D2D1::RectF(sz.width - pad - 32 * s, 28 * s, sz.width - pad, 60 * s);
-    p.CircleButton(close, L"", hit(kBtnClose, close));
+    p.CircleButton(close, L"", hit(kBtnClose, close), kBtnClose, th.neon); // no Crispy: X laranja com contorno e neon
     {
         std::wstring ver = (g_lite ? L"Lite · v " : L"v ") + ShortVersion();
         float vw = p.Measure(ver, 12) + 44 * s;
@@ -2871,12 +3115,13 @@ static void PaintSettings(HWND h) {
         if (!g_lite) {
             const wchar_t* lab = T(L"Aplicar presets:", L"Apply presets:", L"Aplicar presets:");
             float lw = p.Measure(lab, 12, DWRITE_FONT_WEIGHT_MEDIUM);
-            p.Text(lab, D2D1::RectF(rx, 28 * s, rx + lw + 4 * s, 60 * s), 12, th.text, DWRITE_FONT_WEIGHT_MEDIUM);
-            float segL = rx + lw + 20 * s, segR = min(segL + 330 * s, vp.left - 20 * s);
+            float lx = th.neon ? x0 + colW + colGap - 16 * s : rx; // Crispy: alinhado com o início dos cartões
+            p.Text(lab, D2D1::RectF(lx, 28 * s, lx + lw + 4 * s, 60 * s), 12, th.text, DWRITE_FONT_WEIGHT_MEDIUM);
+            float segL = lx + lw + 20 * s, segR = min(segL + 330 * s, vp.left - 20 * s);
             std::wstring names[3] = {L"Minimal", L"Design", L"Custom"};
             D2D1_RECT_F seg = D2D1::RectF(segL, 27 * s, segR, 61 * s), parts[3];
             int hot = g_setHot >= kPreset0 && g_setHot <= kPreset2 ? g_setHot - kPreset0 : -1;
-            p.Segmented(seg, names, 3, g_preset, hot, parts);
+            p.Segmented(seg, names, 3, g_preset, hot, parts, kPreset0);
             for (int i = 0; i < 3; ++i) hit(kPreset0 + i, parts[i]);
             if (g_preset == kPresetCustom)
                 p.Text(T(L"Ajustado à mão: muda sozinho para Custom quando você mexe em algo.", L"Set by hand: switches to Custom by itself when you change something.",
@@ -2892,21 +3137,31 @@ static void PaintSettings(HWND h) {
     float y = top + 8 * s - g_setScroll;
 
     // Linhas: cada uma desenha a si mesma. level 0 = linha da seção; 1 = dentro do quadro recuado do Avançado; 2 = subitem dentro dele.
-    struct SRow { float h; int level; std::function<void(D2D1_RECT_F)> draw; };
+    struct SRow { float h; int level; std::function<void(D2D1_RECT_F)> draw; float k = 1; }; // k < 1: Avançado abrindo/fechando
     D2D1_COLOR_F subBg = th.classic ? ui::Rgba(0x23272E) : th.neon ? ui::Rgba(ui::NeonColor(), 0.06f) : th.dark ? ui::Rgba(0xFFFFFF, 0.04f) : ui::Rgba(0x000000, 0.035f);
+    int secNo = 0;
     auto drawSection = [&](const wchar_t* title, std::vector<SRow>& rows, bool titleDim = false) {
-        p.Text(title, D2D1::RectF(x0, y + 14 * s, x0 + colW, y + 36 * s), 13, titleDim ? th.text2 : th.text, titleDim ? DWRITE_FONT_WEIGHT_NORMAL : DWRITE_FONT_WEIGHT_MEDIUM);
+        ++secNo;
+        if (th.neon) { // Crispy: maiúsculas espaçadas a 80%, alinhado à esquerda
+            std::wstring up = title; CharUpperBuffW(&up[0], (DWORD)up.size());
+            D2D1_COLOR_F c = th.text; c.a = 0.8f;
+            float tw = p.Measure(up, 11.5f, DWRITE_FONT_WEIGHT_SEMI_BOLD) + up.size() * 0.14f * 11.5f * s + 4 * s;
+            p.TextSpaced(up, D2D1::RectF(x0, y + 14 * s, x0 + min(tw, colW), y + 36 * s), 11.5f, c, DWRITE_FONT_WEIGHT_SEMI_BOLD, 0.14f);
+        } else p.Text(title, D2D1::RectF(x0, y + 14 * s, x0 + colW, y + 36 * s), 13, titleDim ? th.text2 : th.text, titleDim ? DWRITE_FONT_WEIGHT_NORMAL : DWRITE_FONT_WEIGHT_MEDIUM);
         size_t n = rows.size();
         std::vector<float> ys(n);
         float yy = y;
         for (size_t i = 0; i < n; ++i) { // posições: depois do quadro do Avançado vem um respiro
-            ys[i] = yy; yy += rows[i].h;
-            if (rows[i].level && (i + 1 == n || !rows[i + 1].level)) yy += 10 * s;
+            ys[i] = yy; yy += rows[i].h * rows[i].k;
+            if (rows[i].level && (i + 1 == n || !rows[i + 1].level)) yy += 10 * s * rows[i].k;
         }
+        if (th.neon && n) // Crispy: a seção inteira num cartão V2 (brilho atrás, degradê e luz do cursor)
+            p.Card(D2D1::RectF(rx - 16 * s, ys[0], rx + rw + 16 * s, yy + 4 * s), 16 * s, 0x1000 + secNo);
         for (size_t i = 0; i < n; ++i) { // quadro recuado: um bloco por sequência de linhas do Avançado
             if (!rows[i].level || (i && rows[i - 1].level)) continue;
             size_t j = i; while (j < n && rows[j].level) ++j;
-            D2D1_RECT_F box = D2D1::RectF(rx + 16 * s, ys[i] + 2 * s, rx + rw, ys[j - 1] + rows[j - 1].h + 2 * s);
+            D2D1_RECT_F box = D2D1::RectF(rx + 16 * s, ys[i] + 2 * s, rx + rw, ys[j - 1] + rows[j - 1].h * rows[j - 1].k + 2 * s);
+            if (box.bottom - box.top < 4 * s) continue;
             p.Fill(box, 12 * s, subBg);
             p.Stroke(box, 12 * s, th.stroke);
         }
@@ -2917,7 +3172,15 @@ static void PaintSettings(HWND h) {
             if (lv == 2) p.Fill(D2D1::RectF(rx + 38 * s, ys[i] + 8 * s, rx + 40 * s, ys[i] + rows[i].h - 8 * s), 1 * s, th.stroke); // fio do subitem
             // level 0 encosta nas bordas (rlabel/rbox já recuam 16 px); dentro do quadro, recua mais
             float l = lv == 0 ? rx - 16 * s : lv == 1 ? rx + 16 * s : rx + 40 * s, r = lv == 0 ? rx + rw + 16 * s : rx + rw;
-            rows[i].draw(D2D1::RectF(l, ys[i], r, ys[i] + rows[i].h));
+            float k = rows[i].k;
+            if (k < 0.999f) { // Avançado: altura animada, conteúdo em fade + leve subida
+                if (k < 0.01f) continue;
+                rt->PushAxisAlignedClip(D2D1::RectF(l, ys[i], r, ys[i] + rows[i].h * k + 1 * s), D2D1_ANTIALIAS_MODE_ALIASED);
+                rt->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), nullptr, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE, D2D1::IdentityMatrix(), k), nullptr);
+                float dy = g_setAnim.reduced ? 0 : (1 - k) * 8 * s;
+                rows[i].draw(D2D1::RectF(l, ys[i] + dy, r, ys[i] + dy + rows[i].h));
+                rt->PopLayer(); rt->PopAxisAlignedClip();
+            } else rows[i].draw(D2D1::RectF(l, ys[i], r, ys[i] + rows[i].h));
         }
         y = max(yy, y + 50 * s) + 34 * s; // mais respiro entre as seções
     };
@@ -2934,9 +3197,14 @@ static void PaintSettings(HWND h) {
         D2D1_RECT_F onR = D2D1::RectF(rr - onW, cy - 10 * s, rr, cy + 10 * s), tg = D2D1::RectF(onR.left - 8 * s - tw, cy - 12 * s, onR.left - 8 * s, cy + 12 * s);
         D2D1_RECT_F offR = D2D1::RectF(tg.left - 8 * s - offW, cy - 10 * s, tg.left - 8 * s, cy + 10 * s);
         bool hh = hit(id, D2D1::RectF(offR.left, cy - 16 * s, onR.right, cy + 16 * s));
-        p.Text(L"OFF", offR, 10.5f, on ? dim : th.text, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_TRAILING);
-        p.Toggle(tg, on, hh);
-        p.Text(L"ON", onR, 10.5f, on ? th.text : dim, DWRITE_FONT_WEIGHT_SEMI_BOLD);
+        if (!th.neon) p.Text(L"OFF", offR, 10.5f, on ? dim : th.text, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_TRAILING);
+        p.Toggle(tg, on, hh, id);
+        if (th.neon) { // Crispy: o lado inativo fica #4A4A50; o ON ativo acende em laranja com neon junto com a chave
+            float k = p.A(id * 4 + 2, on ? 1.0f : 0.0f, 220, true);
+            p.Text(L"OFF", offR, 10.5f, ui::Mix(th.text, ui::Rgba(0x4A4A50), k), DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_TRAILING);
+            p.NeonText(L"ON", onR, 10.5f, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_LEADING, k);
+            if (k < 1) p.Text(L"ON", onR, 10.5f, ui::Rgba(0x4A4A50, 1 - k), DWRITE_FONT_WEIGHT_SEMI_BOLD);
+        } else p.Text(L"ON", onR, 10.5f, on ? th.text : dim, DWRITE_FONT_WEIGHT_SEMI_BOLD);
     };
     auto rstep = [&](D2D1_RECT_F r, int idMinus, int idPlus, const std::wstring& v) {
         D2D1_RECT_F b = rbox(r, 150 * s), mi, pl;
@@ -2946,12 +3214,13 @@ static void PaintSettings(HWND h) {
     auto rseg = [&](D2D1_RECT_F r, float bw, std::vector<std::wstring> l, int sel, int id0) {
         D2D1_RECT_F b = rbox(r, bw), parts[6];
         int hot = g_setHot >= id0 && g_setHot < id0 + (int)l.size() ? g_setHot - id0 : -1;
-        p.Segmented(b, l.data(), (int)l.size(), sel, hot, parts);
+        p.Segmented(b, l.data(), (int)l.size(), sel, hot, parts, id0);
         for (size_t i = 0; i < l.size(); ++i) hit(id0 + (int)i, parts[i]);
     };
-    auto rpill = [&](D2D1_RECT_F r, int id, const std::wstring& t, float bw) { D2D1_RECT_F b = rbox(r, bw); p.Pill(b, t, hit(id, b)); };
+    auto rpill = [&](D2D1_RECT_F r, int id, const std::wstring& t, float bw) { D2D1_RECT_F b = rbox(r, bw); p.Pill(b, t, hit(id, b), false, id); };
     auto rghost = [&](D2D1_RECT_F r, int id, const std::wstring& t, float bw, bool active) { // botão "Definir": preenchido, sem contorno
         D2D1_RECT_F b = rbox(r, bw, 34); bool hh = hit(id, b);
+        if (active) p.Neon(b, 17 * s);
         p.Fill(b, 17 * s, active ? th.accent : th.track);
         if (hh && !active) p.Fill(b, 17 * s, ui::Rgba(th.dark ? 0xFFFFFF : 0x000000, 0.06f));
         p.Text(t, b, 11.5f, active ? th.onAccent : th.text2, DWRITE_FONT_WEIGHT_MEDIUM, DWRITE_TEXT_ALIGNMENT_CENTER);
@@ -2959,12 +3228,26 @@ static void PaintSettings(HWND h) {
     const float RH = 60 * s, SH = 52 * s, AH = 48 * s;
     // "Avançado": recolhível, seta para baixo; aberto, as linhas vêm num quadro recuado logo abaixo
     auto advanced = [&](std::vector<SRow>& rows, int sec, std::vector<SRow> extra) {
-        rows.push_back({AH, 0, [&, sec](D2D1_RECT_F r) {
+        int count = (int)extra.size();
+        rows.push_back({AH, 0, [&, sec, count](D2D1_RECT_F r) {
             bool hh = hit(kAdv0 + sec, D2D1::RectF(r.left + 16 * s, r.top, r.right - 16 * s, r.bottom));
-            p.Text(T(L"Avançado", L"Advanced", L"Avanzado"), D2D1::RectF(r.left + 16 * s, r.top, r.right - 60 * s, r.bottom), 13, th.text, DWRITE_FONT_WEIGHT_MEDIUM);
-            p.Feather(g_advOpen[sec] ? "m18 15-6-6-6 6" : "m6 9 6 6 6-6", D2D1::RectF(r.right - 44 * s, r.top, r.right - 16 * s, r.bottom), 16 * s, hh ? th.text : th.text2, 1.6f);
+            const wchar_t* adv = T(L"Avançado", L"Advanced", L"Avanzado");
+            p.Text(adv, D2D1::RectF(r.left + 16 * s, r.top, r.right - 60 * s, r.bottom), 13, th.neon ? th.text2 : th.text, DWRITE_FONT_WEIGHT_MEDIUM);
+            if (th.neon && count) { // Crispy V2: quantos ajustes há dentro
+                wchar_t n[48];
+                swprintf(n, 48, count == 1 ? T(L"%d ajuste", L"%d setting", L"%d ajuste") : T(L"%d ajustes", L"%d settings", L"%d ajustes"), count);
+                float ax = r.left + 16 * s + p.Measure(adv, 13, DWRITE_FONT_WEIGHT_MEDIUM) + 10 * s;
+                p.Text(n, D2D1::RectF(ax, r.top, r.right - 60 * s, r.bottom), 11, ui::Rgba(0x6E6E76));
+            }
+            D2D1_RECT_F ar = D2D1::RectF(r.right - 44 * s, r.top, r.right - 16 * s, r.bottom);
+            float rot = g_setAnim.m.count(kAdv0 + sec) ? g_setAnim.m[kAdv0 + sec].cur : (g_advOpen[sec] ? 1.0f : 0.0f);
+            D2D1_MATRIX_3X2_F old; rt->GetTransform(&old);
+            rt->SetTransform(D2D1::Matrix3x2F::Rotation(rot * 180, D2D1::Point2F((ar.left + ar.right) / 2, (ar.top + ar.bottom) / 2)) * old); // a seta gira 180°
+            p.Feather("m6 9 6 6 6-6", ar, 16 * s, hh ? th.text : th.text2, 1.6f);
+            rt->SetTransform(old);
         }});
-        if (g_advOpen[sec]) for (auto& e : extra) rows.push_back(std::move(e));
+        float k = g_setAnim.Get(kAdv0 + sec, g_advOpen[sec] ? 1.0f : 0.0f, 240, true, true);
+        if (k > 0.001f) for (auto& e : extra) { e.k = k; rows.push_back(std::move(e)); }
     };
     auto hotkeyRow = [&](int id, DWORD key, const wchar_t* who) {
         return SRow{RH, 0, [&, id, key, who](D2D1_RECT_F r) {
@@ -2984,7 +3267,7 @@ static void PaintSettings(HWND h) {
 
     if (g_setPage) { // ---------- Sobre o programa / Agradecimentos: fora do corpo da página ----------
         D2D1_RECT_F back = D2D1::RectF(x0, y, x0 + 110 * s, y + 34 * s);
-        p.Pill(back, T(L"‹  Voltar", L"‹  Back", L"‹  Volver"), hit(kBack, back));
+        p.Pill(back, T(L"‹  Voltar", L"‹  Back", L"‹  Volver"), hit(kBack, back), false, kBack);
         y = back.bottom + 26 * s;
         const wchar_t* title = g_setPage == 1 ? T(L"Sobre o programa", L"About", L"Acerca del programa") : T(L"Agradecimentos", L"Thanks", L"Agradecimientos");
         p.Text(title, D2D1::RectF(x0, y, sz.width - pad, y + 28 * s), 18, th.text, DWRITE_FONT_WEIGHT_MEDIUM);
@@ -3136,6 +3419,11 @@ static void PaintSettings(HWND h) {
         {SH, 1, [&](D2D1_RECT_F r) { rlabel(r, T(L"Fonte da interface", L"Interface font", L"Fuente de la interfaz"), T(L"Qualquer fonte instalada no Windows", L"Any font installed in Windows", L"Cualquier fuente instalada en Windows")); rpill(r, kUiFont, g_uiFont.empty() ? std::wstring(DefaultUiFont()) : g_uiFont, 150 * s); }},
         {SH, 1, [&](D2D1_RECT_F r) { rlabel(r, T(L"Iniciar com o Windows", L"Start with Windows", L"Iniciar con Windows"), nullptr); rtoggle(kTogAuto, r, AutostartEnabled()); }},
         {SH, 1, [&](D2D1_RECT_F r) { rlabel(r, T(L"Ícone na área de notificação", L"Notification area icon", L"Icono en el área de notificación"), T(L"Reiniciar ou encerrar com um clique", L"Restart or quit in one click", L"Reiniciar o salir con un clic")); rtoggle(kTogTray, r, g_cfg.tray); }},
+        {SH, 1, [&](D2D1_RECT_F r) {
+            int set = 0; for (int i = 0; i < kRingApps; ++i) if (!ReadStr(RingAppName(i).c_str(), L"").empty()) ++set;
+            wchar_t sub[96]; swprintf(sub, 96, T(L"Programas do Alt sem nada selecionado · %d de %d definidos", L"Programs on Alt with nothing selected · %d of %d set", L"Programas del Alt sin nada seleccionado · %d de %d definidos"), set, kRingApps);
+            rlabel(r, T(L"Resetar atalhos do menu radial", L"Reset radial menu shortcuts", L"Restablecer accesos del menú radial"), sub);
+            rpill(r, kRingReset, T(L"Resetar", L"Reset", L"Restablecer"), 110 * s); }},
         {SH, 1, [&](D2D1_RECT_F r) { rlabel(r, T(L"Idioma", L"Language", L"Idioma"), nullptr); rseg(r, 270 * s, {L"Português", L"English", L"Español"}, i18n::Current(), kLangPt); }},
         {SH, 1, [&](D2D1_RECT_F r) {
             std::wstring ver = std::wstring(T(L"Versão ", L"Version ", L"Versión ")) + upd::kVersion;
@@ -3156,6 +3444,7 @@ static void PaintSettings(HWND h) {
             D2D1_RECT_F b = D2D1::RectF(cx, cy, cx + cw, cy + chh);
             int id = tc[i].mode == ui::kThemeClassic ? kTheme4 : kTheme0 + tc[i].mode;
             bool sel = (int)g_cfg.themeMode == tc[i].mode, hh = hit(id, D2D1::RectF(b.left - 4 * s, b.top - 4 * s, b.right + 4 * s, b.bottom + 28 * s));
+            if (sel && th.neon) p.Neon(D2D1::RectF(b.left - 3 * s, b.top - 3 * s, b.right + 3 * s, b.bottom + 3 * s), 12 * s); // tema selecionado com neon
             if (sel) p.Stroke(D2D1::RectF(b.left - 3 * s, b.top - 3 * s, b.right + 3 * s, b.bottom + 3 * s), 12 * s, th.classic || th.neon ? th.accent : th.text, 2 * s);
             else if (hh) p.Stroke(D2D1::RectF(b.left - 3 * s, b.top - 3 * s, b.right + 3 * s, b.bottom + 3 * s), 12 * s, th.text2, 1 * s);
             p.Fill(b, 10 * s, ui::Rgba(tc[i].bg));
@@ -3163,7 +3452,8 @@ static void PaintSettings(HWND h) {
             p.Fill(D2D1::RectF(b.left + 10 * s, b.top + 10 * s, b.left + 10 * s + (cw - 20 * s) * 0.6f, b.top + 16 * s), 3 * s, ui::Rgba(tc[i].panel));
             p.Fill(D2D1::RectF(b.left + 10 * s, b.top + 22 * s, b.left + 10 * s + (cw - 20 * s) * 0.4f, b.top + 28 * s), 3 * s, ui::Rgba(tc[i].panel));
             p.Fill(D2D1::RectF(b.right - 36 * s, b.bottom - 20 * s, b.right - 10 * s, b.bottom - 10 * s), 5 * s, ui::Rgba(tc[i].acc));
-            p.Text(tc[i].name, D2D1::RectF(b.left - 10 * s, b.bottom + 8 * s, b.right + 10 * s, b.bottom + 26 * s), 12, sel ? th.text : th.text2, sel ? DWRITE_FONT_WEIGHT_MEDIUM : DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER);
+            if (sel && th.neon) p.NeonText(tc[i].name, D2D1::RectF(b.left - 10 * s, b.bottom + 8 * s, b.right + 10 * s, b.bottom + 26 * s), 12, DWRITE_FONT_WEIGHT_MEDIUM, DWRITE_TEXT_ALIGNMENT_CENTER);
+            else p.Text(tc[i].name, D2D1::RectF(b.left - 10 * s, b.bottom + 8 * s, b.right + 10 * s, b.bottom + 26 * s), 12, sel ? th.text : th.text2, sel ? DWRITE_FONT_WEIGHT_MEDIUM : DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER);
         }
     }});
     if (g_cfg.themeMode == ui::kThemeCrispy)
@@ -3209,7 +3499,8 @@ static void PaintSettings(HWND h) {
             float tw = p.Measure(t, 13, DWRITE_FONT_WEIGHT_MEDIUM);
             D2D1_RECT_F lr = D2D1::RectF(lx, y, lx + tw + 2 * s, y + 22 * s);
             bool hh = hit(i ? kLinkThanks : kLinkAbout, D2D1::RectF(lr.left - 4 * s, lr.top - 4 * s, lr.right + 4 * s, lr.bottom + 4 * s));
-            p.Text(t, lr, 13, hh && (th.classic || th.neon) ? th.accent : th.text, DWRITE_FONT_WEIGHT_MEDIUM);
+            if (th.neon) p.NeonText(t, lr, 13, DWRITE_FONT_WEIGHT_MEDIUM, DWRITE_TEXT_ALIGNMENT_LEADING, p.A(kLinkAbout * 64 + i, hh ? 1.0f : 0.35f, 200)); // links com neon
+            else p.Text(t, lr, 13, hh && th.classic ? th.accent : th.text, DWRITE_FONT_WEIGHT_MEDIUM);
             if (hh) p.Fill(D2D1::RectF(lr.left, lr.bottom - 1 * s, lr.right - 2 * s, lr.bottom), 0, hh && (th.classic || th.neon) ? th.accent : th.text);
             lx = lr.right + 40 * s;
         }
@@ -3225,14 +3516,25 @@ static void PaintSettings(HWND h) {
                                  T(L"Pasta do programa", L"Program folder", L"Carpeta del programa"), T(L"Encerrar processo", L"Quit process", L"Cerrar proceso")};
         for (int i = 0; i < 4; ++i) {
             D2D1_RECT_F b = D2D1::RectF(x0 + i * (bw + gap), y, x0 + i * (bw + gap) + bw, y + 40 * s);
-            p.Pill(b, lab[i], hit(ids[i], b));
+            bool hh = hit(ids[i], b);
+            if (th.neon && ids[i] == kBtnQuit) { // "Encerrar processo": neon no laranja
+                p.Pill(b, L"", hh, false, ids[i]);
+                p.NeonText(lab[i], p.Press(b, ids[i], hh), 12.5f, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
+            } else p.Pill(b, lab[i], hh, false, ids[i]);
         }
         y += 40 * s + 32 * s;
     }
     g_setContentH = y + g_setScroll - top;
     rt->PopAxisAlignedClip();
-    p.Stroke(D2D1::RectF(0, 0, sz.width, sz.height), 8 * s, th.stroke);
+    if (th.neon) { // barra de rolagem Crispy: trilho grafite fino e botão laranja com neon
+        float viewH = sz.height - top, maxS = g_setContentH - viewH;
+        if (maxS > 1) p.ScrollBar(D2D1::RectF(sz.width - 9 * s, top + 6 * s, sz.width - 5 * s, sz.height - 14 * s), g_setScroll / maxS, viewH / g_setContentH);
+    }
+    p.WindowFrame(D2D1::RectF(0, 0, sz.width, sz.height), th.neon && !th.glass ? 20 * s : 8 * s);
+    if (openLayer) rt->PopLayer();
+    rt->SetTransform(D2D1::IdentityMatrix());
     g_setSurf.End();
+    g_setAnim.Pump(h, ui::kAnimTick);
 }
 
 static LRESULT CALLBACK SettingsProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
@@ -3249,14 +3551,18 @@ static LRESULT CALLBACK SettingsProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         POINT pt = {GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
         int hot = 0;
         for (auto& e : g_setHits) if (ui::Hit(e.second, pt)) hot = e.first;
-        if (hot != g_setHot) { g_setHot = hot; InvalidateRect(h, nullptr, FALSE); }
+        g_setMouse = pt;
+        if (hot != g_setHot || g_theme.neon) { g_setHot = hot; InvalidateRect(h, nullptr, FALSE); } // Crispy: a luz segue o cursor
         TRACKMOUSEEVENT tme = {sizeof(tme), TME_LEAVE, h, 0};
         TrackMouseEvent(&tme);
         return 0;
     }
     case WM_SETCURSOR: if (LOWORD(lp) == HTCLIENT) { SetCursor(LoadCursor(nullptr, g_setHot && g_setHot != kPrimao ? IDC_HAND : IDC_ARROW)); return TRUE; } break; // o segredo não muda o cursor
-    case WM_MOUSELEAVE: if (g_setHot) { g_setHot = 0; InvalidateRect(h, nullptr, FALSE); } return 0;
+    case WM_MOUSELEAVE: g_setMouse = {-100000, -100000}; g_setDown = false; g_setHot = 0; InvalidateRect(h, nullptr, FALSE); return 0;
+    case WM_TIMER: if (wp == ui::kAnimTick) { KillTimer(h, wp); InvalidateRect(h, nullptr, FALSE); return 0; } break;
+    case WM_LBUTTONDOWN: g_setDown = true; InvalidateRect(h, nullptr, FALSE); return 0;
     case WM_LBUTTONUP: {
+        g_setDown = false;
         POINT pt = {GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
         for (auto& e : g_setHits) if (ui::Hit(e.second, pt)) { int id = e.first; SettingsAction(id); break; }
         if (g_settingsWnd) InvalidateRect(h, nullptr, FALSE);
@@ -3271,7 +3577,7 @@ static LRESULT CALLBACK SettingsProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     }
     case WM_KEYDOWN: case WM_SYSKEYDOWN: // capturando atalho: a tecla vira o atalho (Alt incluído)
         if (CaptureKey((UINT)wp)) { InvalidateRect(h, nullptr, FALSE); return 0; }
-        if (msg == WM_KEYDOWN && wp == VK_ESCAPE) { if (g_setPage) { g_setPage = 0; g_setScroll = 0; InvalidateRect(h, nullptr, FALSE); } else DestroyWindow(h); return 0; }
+        if (msg == WM_KEYDOWN && wp == VK_ESCAPE) { if (g_setPage) { g_setPage = 0; g_setScroll = 0; InvalidateRect(h, nullptr, FALSE); } else CloseSettings(); return 0; }
         break;
     case WM_SYSCHAR: if (g_capHot) return 0; break; // sem bipe com Alt+tecla durante a captura
     case WM_ACTIVATE: if (LOWORD(wp) == WA_INACTIVE && g_capHot) { CaptureHotkey(g_capHot); InvalidateRect(h, nullptr, FALSE); } break;
@@ -3286,15 +3592,15 @@ static LRESULT CALLBACK SettingsProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         EndPaint(h, &ps);
         return 0;
     }
-    case WM_CLOSE: DestroyWindow(h); return 0;
-    case WM_DESTROY: if (g_capHot) CaptureHotkey(g_capHot); g_setPage = 0; g_setSurf.Release(); g_setHits.clear(); g_settingsWnd = nullptr; if (g_dimWnd) { DestroyWindow(g_dimWnd); g_dimWnd = nullptr; } return 0;
+    case WM_CLOSE: if (wp == 1 || !IsWindowVisible(h) || IsIconic(h)) DestroyWindow(h); else CloseSettings(); return 0; // wp = 1: fim da animação de fechar
+    case WM_DESTROY: g_setClosing = false; g_setAnim.m.clear(); KillTimer(h, ui::kAnimTick); if (g_capHot) CaptureHotkey(g_capHot); g_setPage = 0; g_setSurf.Release(); g_setHits.clear(); g_settingsWnd = nullptr; if (g_dimWnd) { DestroyWindow(g_dimWnd); g_dimWnd = nullptr; } return 0;
     }
     return DefWindowProcW(h, msg, wp, lp);
 }
 
 // Fundo das Configurações: a tela esmaece para o preto (70%) com desfoque, destacando a janela.
 static LRESULT CALLBACK DimProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
-    if (msg == WM_LBUTTONDOWN) { if (g_settingsWnd) DestroyWindow(g_settingsWnd); return 0; } // clicar fora fecha
+    if (msg == WM_LBUTTONDOWN) { if (g_settingsWnd) CloseSettings(); return 0; } // clicar fora fecha
     if (msg == WM_ERASEBKGND) { RECT r; GetClientRect(h, &r); FillRect((HDC)wp, &r, (HBRUSH)GetStockObject(BLACK_BRUSH)); return 1; }
     return DefWindowProcW(h, msg, wp, lp);
 }
@@ -3337,8 +3643,18 @@ static void OpenSettings() {
                                     mi.rcWork.left + (mi.rcWork.right - mi.rcWork.left - w) / 2, mi.rcWork.top + (mi.rcWork.bottom - mi.rcWork.top - h) / 2,
                                     w, h, g_dimWnd, nullptr, g_inst, nullptr); // o fundo escuro é o dono: a janela fica sempre por cima dele
     ui::EnableGlass(g_settingsWnd, g_theme.dark);
+    g_setClosing = false; g_setAnim.m.clear();
+    g_setAnim.Start(kSetOpenKey, 0, 1, 220); // entra com fade + escala 0,98 -> 1
     ShowWindow(g_settingsWnd, SW_SHOW);
     SetForegroundWindow(g_settingsWnd);
+}
+
+// Fecha as Configurações com fade + escala (~150 ms); a janela some de verdade no fim (WM_CLOSE com wp = 1).
+static void CloseSettings() {
+    if (!g_settingsWnd || g_setClosing) return;
+    if (!IsWindowVisible(g_settingsWnd) || IsIconic(g_settingsWnd)) { DestroyWindow(g_settingsWnd); return; }
+    g_setClosing = true;
+    InvalidateRect(g_settingsWnd, nullptr, FALSE);
 }
 
 // Atalho na pasta Inicializar (em vez de chave Run no registro).
@@ -3603,6 +3919,36 @@ static void Diagnose(const std::wstring& path) {
     line(L"");
     line(L"Ctrl+C copia este texto.");
     MessageBoxW(nullptr, r.c_str(), L"Vizu — diagnóstico", MB_OK | MB_ICONINFORMATION);
+}
+
+// "Vizu.exe /diag" sem arquivo: por que o Espaço ou o Alt não respondem. Mostra as opções, se o Vizu
+// está rodando e as últimas linhas do registro do teclado (o que a instância em execução viu).
+static void DiagnoseKeys() {
+    std::wstring r;
+    wchar_t t[512];
+    auto line = [&](const wchar_t* fmtStr, ...) { va_list ap; va_start(ap, fmtStr); vswprintf(t, 512, fmtStr, ap); va_end(ap); r += t; r += L"\r\n"; };
+    line(L"Vizu %ls  ·  edição: %ls", upd::kVersion, vec::Edition() == vec::kLite ? L"Lite" : L"Vizu/Ultra");
+    HWND running = FindWindowW(L"VizuWnd", nullptr);
+    line(L"Vizu rodando agora: %ls", running ? L"sim" : L"NÃO (abra o Vizu ou reinicie o computador)");
+    line(L"Ver com a barra de espaço: %ls  ·  Menu do Alt: %ls", ReadDword(L"SpacePreview", 1) ? L"ligado" : L"DESLIGADO", ReadDword(L"AltButtons", 1) ? L"ligado" : L"DESLIGADO");
+    line(L"Iniciar com o Windows: %ls", AutostartEnabled() ? L"sim" : L"não");
+    HANDLE tok = nullptr; TOKEN_ELEVATION el = {}; DWORD n = 0;
+    if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &tok)) { GetTokenInformation(tok, TokenElevation, &el, sizeof(el), &n); CloseHandle(tok); }
+    line(L"Este processo como administrador: %ls", el.TokenIsElevated ? L"sim" : L"não");
+    line(L"");
+    line(L"Últimas linhas do registro do teclado (%ls):", KeyLogPath().c_str());
+    std::string raw;
+    HANDLE f = CreateFileW(KeyLogPath().c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, 0, nullptr);
+    if (f != INVALID_HANDLE_VALUE) { DWORD sz = GetFileSize(f, nullptr), rd = 0; raw.resize(sz); ReadFile(f, &raw[0], sz, &rd, nullptr); raw.resize(rd); CloseHandle(f); }
+    int wn = MultiByteToWideChar(CP_UTF8, 0, raw.data(), (int)raw.size(), nullptr, 0);
+    std::wstring w(wn, 0); MultiByteToWideChar(CP_UTF8, 0, raw.data(), (int)raw.size(), &w[0], wn);
+    size_t cut = w.size(); for (int k = 0; k < 13 && cut != std::wstring::npos && cut > 0; ++k) cut = w.rfind(L'\n', cut - 1);
+    r += w.empty() ? L"(vazio: o Vizu ainda não registrou nada)\r\n" : w.substr(cut == std::wstring::npos ? 0 : cut + 1);
+    line(L"");
+    line(L"Para testar: abra uma pasta, clique num arquivo, aperte Espaço e segure Alt; depois rode o diagnóstico de novo.");
+    line(L"\"lista=SIM\" e \"espaço=ligado\" com o arquivo selecionado = o Vizu viu a lista. \"ERRO\" = outro programa usa o Espaço.");
+    line(L"Ctrl+C copia este texto.");
+    MessageBoxW(nullptr, r.c_str(), L"Vizu — diagnóstico do teclado", MB_OK | MB_ICONINFORMATION);
 }
 
 // ---------- instalação (o próprio Vizu.exe é o instalador; a DLL vai embutida) ----------
@@ -3903,7 +4249,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmd, int) {
         std::wstring f = args.substr(dg + 5);
         f.erase(0, f.find_first_not_of(L" \"")); f.erase(f.find_last_not_of(L" \"") + 1);
         CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-        Diagnose(f);
+        if (f.empty()) DiagnoseKeys(); else Diagnose(f);
         CoUninitialize();
         return 0;
     }
@@ -3961,7 +4307,8 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmd, int) {
     DWORD exStyle = WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE;
     g_wnd = CreateWindowExW(exStyle, L"VizuWnd", L"Vizu", WS_POPUP, 0, 0, 100, 100, nullptr, nullptr, inst, nullptr);
     g_altWnd = CreateWindowExW(exStyle | WS_EX_LAYERED, L"VizuAlt", L"Vizu", WS_POPUP, 0, 0, 100, 100, nullptr, nullptr, inst, nullptr);
-    g_toastWnd = CreateWindowExW(exStyle, L"VizuToast", L"Vizu", WS_POPUP, 0, 0, 100, 100, nullptr, nullptr, inst, nullptr);
+    g_toastWnd = CreateWindowExW(exStyle | WS_EX_LAYERED, L"VizuToast", L"Vizu", WS_POPUP, 0, 0, 100, 100, nullptr, nullptr, inst, nullptr);
+    SetLayeredWindowAttributes(g_toastWnd, 0, 255, LWA_ALPHA);
     g_uiFont = ReadStr(L"UiFont", L"");
     if (!ReadDword(L"UiFontMigrated", 0)) { // uma vez: a fonte padrão das versões antigas (Bahnschrift, Segoe UI) volta para a atual (Inter)
         std::wstring low = g_uiFont; for (auto& ch : low) ch = (wchar_t)towlower(ch);
@@ -3979,7 +4326,9 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmd, int) {
     g_focusHook = SetWinEventHook(EVENT_OBJECT_FOCUS, EVENT_OBJECT_FOCUS, nullptr, FocusEvent, 0, 0, WINEVENT_OUTOFCONTEXT);
     g_selHook = SetWinEventHook(EVENT_OBJECT_SELECTION, EVENT_OBJECT_SELECTIONWITHIN, nullptr, FocusEvent, 0, 0, WINEVENT_OUTOFCONTEXT);
     g_fgHook = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, nullptr, FocusEvent, 0, 0, WINEVENT_OUTOFCONTEXT);
+    KeyLog(std::wstring(L"Vizu ") + upd::kVersion + L" iniciado · eventos de foco: " + (g_focusHook && g_fgHook ? L"OK" : L"FALHOU"));
     UpdateHotkeys();
+    SetTimer(g_wnd, kFocusPoll, 300, nullptr); // checa o foco também por tempo (leve: só lê o estado da janela)
     if (args.find(L"/settings") != std::wstring::npos) OpenSettings();
     WidgetsStart();
     if (openClean) OpenCleanWindow();
@@ -3996,7 +4345,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmd, int) {
         if (g_convFiles.empty()) break;
         std::wstring c = cmdName;
         if (c == L"/ring ") {
-            BuildSides();
+            g_ringLaunch = false; BuildSides();
             POINT pt; GetCursorPos(&pt);
             g_ringScale = GetDpiForSystem() / 96.0f;
             int S = (int)RingS();

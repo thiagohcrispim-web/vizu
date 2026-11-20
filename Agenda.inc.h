@@ -63,6 +63,14 @@ static void AgResetForm() {
     g_ag.f[0].clear(); g_ag.dur = 30; g_ag.alerts = kAlert10 | kAlert5; g_ag.field = 0;
 }
 
+static bool g_agClosing, g_agDown;           // fechando (animação) / botão do mouse apertado
+static POINT g_agMouse = {-100000, -100000};
+static void AgClose(HWND h) { // fade + escala (~150 ms); some de verdade no fim (WM_CLOSE com wp = 1)
+    if (g_agClosing) return;
+    if (!IsWindowVisible(h) || IsIconic(h)) { DestroyWindow(h); return; }
+    g_agClosing = true; InvalidateRect(h, nullptr, FALSE);
+}
+
 static void PaintAgenda(HWND h) {
     g_ag.surf.hwnd = h;
     if (!g_ag.surf.Begin(g_d2d)) return;
@@ -74,8 +82,17 @@ static void PaintAgenda(HWND h) {
     rt->Clear(th.tint);
     ui::Backdrop(rt, th, W, H);
     ui::Painter p(rt, g_dw, th, s);
+    static ui::Anim an; static HWND last; an.Frame(); p.an = &an;
+    if (last != h) { last = h; an.m.clear(); an.Start(1, 0, 1, 220); } // janela nova: fade + escala 0,98 -> 1
+    p.mx = (float)g_agMouse.x; p.my = (float)g_agMouse.y; p.down = g_agDown;
+    float openK = an.Get(1, g_agClosing ? 0.0f : 1.0f, g_agClosing ? 150.0f : 220.0f, g_agClosing);
+    if (g_agClosing && openK <= 0.001f) { g_ag.surf.End(); PostMessage(h, WM_CLOSE, 1, 0); return; }
+    float openSc = an.reduced ? 1.0f : 0.98f + 0.02f * openK;
+    rt->SetTransform(D2D1::Matrix3x2F::Scale(openSc, openSc, D2D1::Point2F(W / 2, H / 2)));
+    bool openLayer = openK < 0.999f;
+    if (openLayer) rt->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), nullptr, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE, D2D1::IdentityMatrix(), openK), nullptr);
     D2D1_COLOR_F acc = AccentOf(th), onAcc = OnAccentOf(th);
-    D2D1_COLOR_F sep = th.neon ? ui::Rgba(ui::NeonColor(), 0.14f) : th.dark ? ui::Rgba(0xFFFFFF, 0.07f) : ui::Rgba(0x000000, 0.07f);
+    D2D1_COLOR_F sep = th.neon ? ui::Rgba(0x232326) : th.dark ? ui::Rgba(0xFFFFFF, 0.07f) : ui::Rgba(0x000000, 0.07f);
     D2D1_COLOR_F field = th.dark ? ui::Rgba(0xFFFFFF, 0.06f) : ui::Rgba(0x000000, 0.045f);
     D2D1_COLOR_F hov = th.dark ? ui::Rgba(0xFFFFFF, 0.08f) : ui::Rgba(0x000000, 0.05f);
     g_ag.hits.clear();
@@ -97,11 +114,11 @@ static void PaintAgenda(HWND h) {
         p.FeatherIcon("x", r, 16 * s, th.text2);
         bx -= 48 * s;
         r = D2D1::RectF(bx - 34 * s, y + 10 * s, bx, y + 44 * s);
-        p.CircleButton(r, L"", hit(kAgNext, r)); bx -= 42 * s;
+        p.CircleButton(r, L"", hit(kAgNext, r), kAgNext); bx -= 42 * s;
         r = D2D1::RectF(bx - 66 * s, y + 10 * s, bx, y + 44 * s);
-        p.Pill(r, T(L"Hoje", L"Today", L"Hoy"), hit(kAgToday, r)); bx -= 74 * s;
+        p.Pill(r, T(L"Hoje", L"Today", L"Hoy"), hit(kAgToday, r), false, kAgToday); bx -= 74 * s;
         r = D2D1::RectF(bx - 34 * s, y + 10 * s, bx, y + 44 * s);
-        p.CircleButton(r, L"", hit(kAgPrev, r));
+        p.CircleButton(r, L"", hit(kAgPrev, r), kAgPrev);
     }
     y += 64 * s;
 
@@ -233,7 +250,7 @@ static void PaintAgenda(HWND h) {
         std::wstring l[3] = {L"15 min", L"30 min", L"1 h"};
         int sel = g_ag.dur == 15 ? 0 : g_ag.dur == 60 ? 2 : 1;
         int hv = g_ag.hot >= kAgDur0 && g_ag.hot <= kAgDur0 + 2 ? g_ag.hot - kAgDur0 : -1;
-        p.Segmented(r, l, 3, sel, hv, parts);
+        p.Segmented(r, l, 3, sel, hv, parts, 0x6000 + (int)(r.top / 8)); // o indicador desliza até a nova opção
         for (int i = 0; i < 3; ++i) hit(kAgDur0 + i, parts[i]);
     }
     fy += 34 * s + 30 * s;
@@ -255,20 +272,31 @@ static void PaintAgenda(HWND h) {
     fy += 30 * s + 22 * s;
     {
         D2D1_RECT_F r = D2D1::RectF(fx0, fy, fx1, fy + 40 * s);
-        p.Pill(r, g_ag.editIdx >= 0 ? T(L"Salvar alterações", L"Save changes", L"Guardar cambios") : T(L"Adicionar à agenda", L"Add to agenda", L"Añadir a la agenda"), hit(kAgSave, r), true);
+        p.Pill(r, g_ag.editIdx >= 0 ? T(L"Salvar alterações", L"Save changes", L"Guardar cambios") : T(L"Adicionar à agenda", L"Add to agenda", L"Añadir a la agenda"), hit(kAgSave, r), true, kAgSave);
         fy += 48 * s;
         if (g_ag.editIdx >= 0) {
             float hw = (fx1 - fx0 - 8 * s) / 2;
             D2D1_RECT_F d = D2D1::RectF(fx0, fy, fx0 + hw, fy + 34 * s), c = D2D1::RectF(fx0 + hw + 8 * s, fy, fx1, fy + 34 * s);
-            p.Pill(d, T(L"Excluir", L"Delete", L"Eliminar"), hit(kAgDelete, d));
-            p.Pill(c, T(L"Cancelar", L"Cancel", L"Cancelar"), hit(kAgCancel, c));
+            p.Pill(d, T(L"Excluir", L"Delete", L"Eliminar"), hit(kAgDelete, d), false, kAgDelete);
+            p.Pill(c, T(L"Cancelar", L"Cancel", L"Cancelar"), hit(kAgCancel, c), false, kAgCancel);
             fy += 42 * s;
         }
     }
     if (!g_ag.msg.empty()) { p.Text(g_ag.msg, D2D1::RectF(fx0, fy, fx1, fy + 18 * s), 11.5f, ui::Rgba(0xFF453A), DWRITE_FONT_WEIGHT_SEMI_BOLD); fy += 22 * s; }
     p.Paragraph(T(L"Clique num evento para editar ou excluir. Tab passa de campo, Enter salva.", L"Click an event to edit or delete it. Tab moves between fields, Enter saves.",
                   L"Haz clic en un evento para editarlo o eliminarlo. Tab cambia de campo, Enter guarda."), fx0, fy, fx1 - fx0, 11.5f, th.text2);
+    if (th.neon) { // a janela é o cartão: luz suave que segue o cursor (apaga em ~250 ms ao sair)
+        D2D1_RECT_F all = D2D1::RectF(0, 0, W, H);
+        bool over = p.Over(all);
+        float k = an.Get(2, over ? 1.0f : 0.0f, over ? 300.0f : 250.0f);
+        static float lx, ly; if (over) { lx = p.mx; ly = p.my; }
+        if (k > 0.01f) p.CursorLight(all, th.glass ? 8 * s : 20 * s, lx, ly, k);
+        p.WindowFrame(all, th.glass ? 8 * s : 20 * s);
+    } // Crispy V2: contorno, filete e granulado
+    if (openLayer) rt->PopLayer();
+    rt->SetTransform(D2D1::IdentityMatrix());
     g_ag.surf.End();
+    an.Pump(h, ui::kAnimTick);
 }
 
 static void AgSave() {
@@ -296,7 +324,7 @@ static void AgSave() {
 
 static void AgAction(int id) {
     SYSTEMTIME today; GetLocalTime(&today);
-    if (id == kAgClose) { DestroyWindow(g_ag.wnd); return; }
+    if (id == kAgClose) { AgClose(g_ag.wnd); return; }
     if (id == kAgPrev) g_ag.day = AddDays(g_ag.day, -1);
     else if (id == kAgNext) g_ag.day = AddDays(g_ag.day, 1);
     else if (id == kAgToday) g_ag.day = today;
@@ -363,15 +391,18 @@ static LRESULT CALLBACK AgendaProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         POINT pt = {GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
         int hot = 0;
         for (auto& e : g_ag.hits) if (ui::Hit(e.second, pt)) hot = e.first;
-        if (hot != g_ag.hot) { g_ag.hot = hot; InvalidateRect(h, nullptr, FALSE); }
+        g_agMouse = pt;
+        if (hot != g_ag.hot || g_theme.neon) { g_ag.hot = hot; InvalidateRect(h, nullptr, FALSE); }
         TRACKMOUSEEVENT tme = {sizeof(tme), TME_LEAVE, h, 0}; TrackMouseEvent(&tme);
         return 0;
     }
     case WM_SETCURSOR:
         if (LOWORD(lp) == HTCLIENT) { bool txt = g_ag.hot >= kAgField0 && g_ag.hot <= kAgField0 + 2; SetCursor(LoadCursor(nullptr, txt ? IDC_IBEAM : g_ag.hot ? IDC_HAND : IDC_ARROW)); return TRUE; }
         break;
-    case WM_MOUSELEAVE: if (g_ag.hot) { g_ag.hot = 0; InvalidateRect(h, nullptr, FALSE); } return 0;
+    case WM_MOUSELEAVE: g_ag.hot = 0; g_agMouse = {-100000, -100000}; g_agDown = false; InvalidateRect(h, nullptr, FALSE); return 0;
+    case WM_LBUTTONUP: if (g_agDown) { g_agDown = false; InvalidateRect(h, nullptr, FALSE); } return 0;
     case WM_LBUTTONDOWN: {
+        g_agDown = true;
         POINT pt = {GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
         int id = 0;
         for (auto& e : g_ag.hits) if (ui::Hit(e.second, pt)) id = e.first;
@@ -381,14 +412,14 @@ static LRESULT CALLBACK AgendaProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     }
     case WM_CHAR: AgChar((wchar_t)wp); InvalidateRect(h, nullptr, FALSE); return 0;
     case WM_KEYDOWN:
-        if (wp == VK_ESCAPE) { if (g_ag.editIdx >= 0) { AgResetForm(); InvalidateRect(h, nullptr, FALSE); } else DestroyWindow(h); }
+        if (wp == VK_ESCAPE) { if (g_ag.editIdx >= 0) { AgResetForm(); InvalidateRect(h, nullptr, FALSE); } else AgClose(h); }
         return 0;
-    case WM_TIMER: InvalidateRect(h, nullptr, FALSE); return 0; // cursor piscando e "agora"
+    case WM_TIMER: if (wp == ui::kAnimTick) KillTimer(h, wp); InvalidateRect(h, nullptr, FALSE); return 0; // cursor piscando e "agora"
     case WM_SIZE: g_ag.surf.Resize(LOWORD(lp), HIWORD(lp)); return 0;
     case WM_ERASEBKGND: return 1;
     case WM_PAINT: { PAINTSTRUCT ps; BeginPaint(h, &ps); PaintAgenda(h); EndPaint(h, &ps); return 0; }
-    case WM_CLOSE: DestroyWindow(h); return 0;
-    case WM_DESTROY: g_ag.surf.Release(); g_ag.hits.clear(); g_ag.wnd = nullptr; return 0;
+    case WM_CLOSE: if (wp == 1) DestroyWindow(h); else AgClose(h); return 0;
+    case WM_DESTROY: g_agClosing = false; g_agDown = false; KillTimer(h, ui::kAnimTick); g_ag.surf.Release(); g_ag.hits.clear(); g_ag.wnd = nullptr; return 0;
     }
     return DefWindowProcW(h, msg, wp, lp);
 }

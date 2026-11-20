@@ -708,6 +708,190 @@ inline const BYTE* PsdResource(const Bytes& res, UINT wanted, size_t* outLen) {
     return nullptr;
 }
 
+// "Maximizar compatibilidade" desligado: o Photoshop grava a composta toda branca e marca
+// hasRealMergedData = 0 no resource 1057 (Version Info). Sem o resource, a composta vale.
+inline bool PsdHasRealComposite(IStream* s) {
+    Bytes res;
+    if (!PsdResources(s, res)) return true;
+    size_t len;
+    const BYTE* p = PsdResource(res, 1057, &len);
+    return !p || len < 5 || p[4] != 0;
+}
+
+// Sem composta: junta as camadas visíveis (modo normal, opacidade, grupos ocultos), em 8/16 bits,
+// RGB, Gray ou CMYK, com RLE, sem compressão ou ZIP. Efeitos e modos de mesclagem ficam de fora.
+inline HRESULT PsdLayers(IStream* s, UINT cx, HBITMAP* out) {
+    PsdHeader ph;
+    if (!ReadPsdHeader(s, &ph)) return E_FAIL;
+    UINT W = ph.w, H = ph.h, bpc = ph.depth / 8, mode = ph.mode;
+    if ((bpc != 1 && bpc != 2) || !W || !H || W > 300000 || H > 300000) return E_FAIL;
+    if (mode != 1 && mode != 3 && mode != 4) return E_FAIL;
+    UINT need = mode == 3 ? 3 : mode == 4 ? 4 : 1;
+    int L = ph.psb ? 8 : 4;
+    UINT64 pos = 26, len;
+    for (int sec = 0; sec < 2; ++sec) { if (!ReadBE(s, pos, 4, &len)) return E_FAIL; pos += 4 + len; }
+    UINT64 lmLen, liLen, cnt;
+    if (!ReadBE(s, pos, L, &lmLen) || !lmLen) return E_FAIL;
+    pos += L;
+    if (!ReadBE(s, pos, L, &liLen) || !liLen) return E_FAIL;
+    UINT64 liEnd = pos + L + liLen;
+    pos += L;
+    if (!ReadBE(s, pos, 2, &cnt)) return E_FAIL;
+    pos += 2;
+    int n = (short)(USHORT)cnt; if (n < 0) n = -n;
+    if (n == 0 || n > 20000) return E_FAIL;
+    struct Ch { int id; UINT64 len, off; };
+    struct Lay { int t, l, b, r; std::vector<Ch> ch; BYTE opacity, flags; bool norm; int sect; bool hidden; };
+    std::vector<Lay> ls(n);
+    for (int i = 0; i < n; ++i) {
+        Lay& y = ls[i];
+        BYTE hd[18];
+        if (!ReadAt(s, pos, hd, 18)) return E_FAIL;
+        y.t = (int)(INT32)BE(hd, 4); y.l = (int)(INT32)BE(hd + 4, 4); y.b = (int)(INT32)BE(hd + 8, 4); y.r = (int)(INT32)BE(hd + 12, 4);
+        UINT nch = (UINT)BE(hd + 16, 2);
+        if (nch > 56) return E_FAIL;
+        pos += 18;
+        for (UINT c = 0; c < nch; ++c) {
+            BYTE cb[10]; if (!ReadAt(s, pos, cb, 2 + L)) return E_FAIL;
+            y.ch.push_back({(int)(short)(USHORT)BE(cb, 2), BE(cb + 2, L), 0});
+            pos += 2 + L;
+        }
+        BYTE bl[16]; if (!ReadAt(s, pos, bl, 16)) return E_FAIL;
+        y.norm = memcmp(bl + 4, "norm", 4) == 0;
+        y.opacity = bl[8]; y.flags = bl[10]; y.sect = 0;
+        UINT64 extra = BE(bl + 12, 4), ePos = pos + 16, eEnd = ePos + extra;
+        pos = eEnd;
+        UINT64 v; // máscara, faixas de mesclagem, nome; depois os blocos de informação adicional
+        if (!ReadBE(s, ePos, 4, &v)) return E_FAIL; ePos += 4 + v;
+        if (!ReadBE(s, ePos, 4, &v)) return E_FAIL; ePos += 4 + v;
+        BYTE nl; if (!ReadAt(s, ePos, &nl, 1)) return E_FAIL; ePos += (nl + 4) & ~3u;
+        while (ePos + 12 <= eEnd) {
+            BYTE ab[12]; if (!ReadAt(s, ePos, ab, 12)) break;
+            if (memcmp(ab, "8BIM", 4) && memcmp(ab, "8B64", 4)) break;
+            UINT64 al = BE(ab + 8, 4);
+            if ((!memcmp(ab + 4, "lsct", 4) || !memcmp(ab + 4, "lsdk", 4)) && al >= 4) { UINT64 t; if (ReadBE(s, ePos + 12, 4, &t)) y.sect = (int)t; }
+            ePos += 12 + ((al + 1) & ~1ull);
+        }
+    }
+    for (auto& y : ls) for (auto& c : y.ch) { c.off = pos; pos += c.len; }
+    if (pos > liEnd + 16) return E_FAIL;
+    // grupos: os registros vêm de baixo para cima; o fim do grupo (3) antes, a abertura (1/2) depois com a visibilidade dele
+    {
+        std::vector<int> stack; // índices das aberturas pendentes, de cima para baixo
+        std::vector<int> open(n, -1);
+        for (int i = n - 1; i >= 0; --i) { // de cima para baixo
+            if (ls[i].sect == 1 || ls[i].sect == 2) stack.push_back(i);
+            else if (ls[i].sect == 3) { if (!stack.empty()) stack.pop_back(); }
+            bool hid = (ls[i].flags & 2) != 0;
+            for (int g : stack) if (g != i && (ls[g].flags & 2)) hid = true;
+            ls[i].hidden = hid;
+        }
+    }
+    UINT ow, oh;
+    FitSize(W, H, cx, &ow, &oh);
+    std::vector<float> acc((size_t)ow * oh * 4, 0.0f); // RGB pré-multiplicado + alfa
+    bool any = false;
+    Bytes comp, plane;
+    for (int i = 0; i < n; ++i) {
+        Lay& y = ls[i];
+        if (y.hidden || y.sect || y.r <= y.l || y.b <= y.t || !y.opacity) continue;
+        UINT lw = (UINT)(y.r - y.l), lh = (UINT)(y.b - y.t);
+        if (lw > 300000 || lh > 300000) continue;
+        size_t rowBytes = (size_t)lw * bpc;
+        // canais: cor 0..need-1 e transparência -1
+        const Ch* chs[5] = {};
+        for (auto& c : y.ch) { if (c.id >= 0 && c.id < (int)need) chs[c.id] = &c; else if (c.id == -1) chs[need] = &c; }
+        bool ok = true;
+        for (UINT c = 0; c < need; ++c) if (!chs[c]) ok = false;
+        if (!ok) continue;
+        // decodifica cada canal só nas linhas usadas
+        int y0 = max(0, (int)((INT64)y.t * oh / H)), y1 = min((int)oh, (int)(((INT64)y.b * oh + H - 1) / H));
+        int x0 = max(0, (int)((INT64)y.l * ow / W)), x1 = min((int)ow, (int)(((INT64)y.r * ow + W - 1) / W));
+        if (y0 >= y1 || x0 >= x1) continue;
+        std::vector<Bytes> rows(need + 1);
+        UINT nc = chs[need] ? need + 1 : need;
+        std::vector<Bytes> full(nc); std::vector<std::vector<UINT64>> roff(nc); std::vector<std::vector<UINT>> rlen(nc); std::vector<int> cm(nc);
+        for (UINT c = 0; c < nc && ok; ++c) {
+            const Ch& ch = *chs[c];
+            UINT64 m; if (ch.len < 2 || !ReadBE(s, ch.off, 2, &m)) { ok = false; break; }
+            cm[c] = (int)m;
+            if (m == 0) { if (ch.len - 2 < rowBytes * lh) ok = false; }
+            else if (m == 1) {
+                int cb = ph.psb ? 4 : 2;
+                Bytes counts((size_t)lh * cb);
+                if (!ReadAt(s, ch.off + 2, counts.data(), counts.size())) { ok = false; break; }
+                roff[c].resize(lh); rlen[c].resize(lh);
+                UINT64 d = ch.off + 2 + counts.size();
+                for (UINT r = 0; r < lh; ++r) { roff[c][r] = d; rlen[c][r] = (UINT)BE(&counts[(size_t)r * cb], cb); d += rlen[c][r]; }
+            } else if (m == 2 || m == 3) { // ZIP (com predição em 3)
+                if (ch.len > (512ull << 20) || rowBytes * lh > (512ull << 20)) { ok = false; break; }
+                comp.resize((size_t)(ch.len - 2));
+                if (comp.size() < 3 || !ReadAt(s, ch.off + 2, comp.data(), comp.size())) { ok = false; break; }
+                full[c].clear(); full[c].reserve(rowBytes * lh);
+                if (!Inflater(comp.data() + 2, comp.size() - 2, full[c], rowBytes * lh + 64).Run() || full[c].size() < rowBytes * lh) { ok = false; break; }
+                if (m == 3) for (UINT r = 0; r < lh; ++r) {
+                    BYTE* row = &full[c][(size_t)r * rowBytes];
+                    if (bpc == 1) for (size_t k = 1; k < rowBytes; ++k) row[k] = (BYTE)(row[k] + row[k - 1]);
+                    else for (size_t k = 1; k < lw; ++k) { USHORT a = (USHORT)(row[2 * k - 2] << 8 | row[2 * k - 1]), b = (USHORT)(row[2 * k] << 8 | row[2 * k + 1]); b = (USHORT)(a + b); row[2 * k] = (BYTE)(b >> 8); row[2 * k + 1] = (BYTE)b; }
+                }
+            } else ok = false;
+        }
+        if (!ok) continue;
+        Bytes src, row(rowBytes);
+        auto getRow = [&](UINT c, UINT r, Bytes& dst) -> bool {
+            dst.resize(rowBytes);
+            if (cm[c] == 0) return ReadAt(s, chs[c]->off + 2 + (UINT64)r * rowBytes, dst.data(), rowBytes);
+            if (cm[c] >= 2) { memcpy(dst.data(), &full[c][(size_t)r * rowBytes], rowBytes); return true; }
+            size_t nn = rlen[c][r];
+            if (nn > rowBytes * 2 + 1024) return false;
+            src.resize(nn);
+            if (nn && !ReadAt(s, roff[c][r], src.data(), nn)) return false;
+            size_t ii = 0, o = 0;
+            memset(dst.data(), 0, rowBytes);
+            while (ii < nn && o < rowBytes) {
+                signed char k = (signed char)src[ii++];
+                if (k >= 0) { size_t q = min((size_t)k + 1, min(rowBytes - o, nn - ii)); memcpy(&dst[o], &src[ii], q); ii += k + 1; o += q; }
+                else if (k != -128) { if (ii >= nn) break; size_t q = min((size_t)(1 - k), rowBytes - o); memset(&dst[o], src[ii++], q); o += q; }
+            }
+            return true;
+        };
+        float op = y.opacity / 255.0f;
+        for (int oy = y0; oy < y1; ++oy) {
+            INT64 sy = (INT64)oy * H / oh - y.t;
+            if (sy < 0 || sy >= (INT64)lh) continue;
+            for (UINT c = 0; c < nc; ++c) if (!getRow(c, (UINT)sy, rows[c])) { ok = false; break; }
+            if (!ok) break;
+            for (int ox = x0; ox < x1; ++ox) {
+                INT64 sx = (INT64)ox * W / ow - y.l;
+                if (sx < 0 || sx >= (INT64)lw) continue;
+                size_t k = (size_t)sx * bpc;
+                float v[4];
+                for (UINT c = 0; c < need; ++c) v[c] = rows[c][k] / 255.0f;
+                float a = (nc > need ? rows[need][k] / 255.0f : 1.0f) * op;
+                float R, G, B;
+                if (mode == 3) { R = v[0]; G = v[1]; B = v[2]; }
+                else if (mode == 1) R = G = B = v[0];
+                else { R = v[0] * v[3]; G = v[1] * v[3]; B = v[2] * v[3]; } // CMYK invertido
+                float* d = &acc[((size_t)oy * ow + ox) * 4];
+                d[0] = R * a + d[0] * (1 - a); d[1] = G * a + d[1] * (1 - a); d[2] = B * a + d[2] * (1 - a); d[3] = a + d[3] * (1 - a);
+                any = true;
+            }
+        }
+    }
+    if (!any) return E_FAIL;
+    BYTE* bits; HBITMAP bmp = CreateDib(ow, oh, &bits);
+    if (!bmp) return E_OUTOFMEMORY;
+    for (size_t i = 0; i < (size_t)ow * oh; ++i) { // sobre branco, como a composta
+        const float* a = &acc[i * 4];
+        bits[i * 4 + 0] = (BYTE)min(255.0f, (a[2] + (1 - a[3])) * 255 + 0.5f);
+        bits[i * 4 + 1] = (BYTE)min(255.0f, (a[1] + (1 - a[3])) * 255 + 0.5f);
+        bits[i * 4 + 2] = (BYTE)min(255.0f, (a[0] + (1 - a[3])) * 255 + 0.5f);
+        bits[i * 4 + 3] = 255;
+    }
+    *out = bmp;
+    return S_OK;
+}
+
 // Fallback: miniatura JPEG embutida (resource 1036/1033).
 inline HRESULT PsdEmbeddedThumb(IStream* s, UINT cx, HBITMAP* out) {
     Bytes res;
@@ -921,6 +1105,10 @@ inline HRESULT RenderUnchecked(IStream* s, const std::wstring& ext, UINT cx, int
         return ReadHead(s, b, 64u << 20) ? RenderFont(b, cx, out) : E_FAIL;
     }
     if (memcmp(magic, "8BPS", 4) == 0) {
+        if (!PsdHasRealComposite(s)) { // composta em branco: monta pelas camadas; senão, a miniatura embutida
+            if (SUCCEEDED(PsdLayers(s, cx, out))) return S_OK;
+            if (SUCCEEDED(PsdEmbeddedThumb(s, cx, out))) return S_OK;
+        }
         HRESULT hr = PsdComposite(s, cx, out);
         return SUCCEEDED(hr) ? hr : PsdEmbeddedThumb(s, cx, out);
     }

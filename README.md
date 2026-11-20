@@ -3,7 +3,7 @@
 <h3 align="center">Veja todos os seus arquivos de design no Windows,<br>mesmo sem os programas instalados.</h3>
 
 <p align="center">
-  <a href="https://github.com/thiagohcrispim-web/vizu/releases/latest/download/Vizu_Setup_9.12.1_x64.exe"><b>⬇ Baixar o Vizu para Windows</b></a> &nbsp;·&nbsp; grátis e de código aberto (MIT)
+  <a href="https://github.com/thiagohcrispim-web/vizu/releases/latest/download/Vizu_Setup_9.13.0_x64.exe"><b>⬇ Baixar o Vizu para Windows</b></a> &nbsp;·&nbsp; grátis e de código aberto (MIT)
 </p>
 
 ---
@@ -99,7 +99,7 @@ desligado nas Configurações.
 
 ## Instalar
 
-1. Baixe o **[instalador](https://github.com/thiagohcrispim-web/vizu/releases/latest/download/Vizu_Setup_9.12.1_x64.exe)** e abra. Não precisa de administrador.
+1. Baixe o **[instalador](https://github.com/thiagohcrispim-web/vizu/releases/latest/download/Vizu_Setup_9.13.0_x64.exe)** e abra. Não precisa de administrador.
 2. Pronto: as miniaturas aparecem conforme você navega pelas pastas.
 
 Para atualizar, o Vizu avisa sozinho quando sai versão nova. Para desinstalar, rode o instalador de novo ou use
@@ -155,8 +155,8 @@ https://docs.github.com/site-policy/privacy-policies/github-general-privacy-stat
 
 - Compilar no Linux: `./build.sh` (MinGW `g++-mingw-w64-x86-64-posix`; os headers mais novos do mingw-w64 estão em `third_party/`).
 - O GitHub Actions compila a cada envio e publica o instalador como artefato (`.github/workflows/build.yml`).
-- Instalação silenciosa: `Vizu_Setup_9.12.1_x64.exe /install /S` · desinstalar: `Vizu.exe /uninstall [/S]`.
-- Diagnóstico de um arquivo: `Vizu.exe /diag "arquivo"` ou arraste o arquivo sobre `diagnostico.bat`.
+- Instalação silenciosa: `Vizu_Setup_9.13.0_x64.exe /install /S` · desinstalar: `Vizu.exe /uninstall [/S]`.
+- Diagnóstico de um arquivo: `Vizu.exe /diag "arquivo"` ou arraste o arquivo sobre `diagnostico.bat`. Sem arquivo (`Vizu.exe /diag` ou dois cliques no `.bat`): diagnóstico do Espaço e do Alt.
 - A biblioteca `DesignThumbs.dll` (miniaturas do Explorer) e a chave de registro `HKCU\Software\DesignThumbs` mantêm o
   nome antigo, para não quebrar as miniaturas nem as configurações de quem já usa.
 </details>
@@ -164,6 +164,7 @@ https://docs.github.com/site-policy/privacy-policies/github-general-privacy-stat
 <details>
 <summary><b>Histórico de versões</b></summary>
 
+- **v9.13.0** — **Tema Crispy com visual novo** (o nome continua Vizu Crispy): janela de vidro grafite com o acrílico do Windows (sem ele, preto #08080A com manchas laranja e azulada), cartões em degradê com borda que vai do branco ao laranja, brilho laranja atrás de cada cartão e uma luz suave que segue o mouse, neon nas chaves ligadas, no preset ativo, nos botões principais e nos links, barra de rolagem laranja e granulado fino. **Animações em todos os temas**: chaves e seletores deslizam, *Avançado* abre e fecha suave, Configurações, Limpeza e Agenda abrem e fecham com fade e escala, os avisos entram deslizando e saem com fade, o menu circular abre e fecha com escala e a fatia ativa acende ao trocar, e números e barras da Limpeza contam até o valor final. Com "Mostrar animações no Windows" desligado, sobra só um fade curto. **Atalhos de programas no Alt**: segurando Alt sem nada selecionado, o menu radial mostra 8 espaços. Clique num deles, escolha o `.exe` e ele vira um atalho com o ícone do programa. O botão direito troca o programa, e *Configurações › Sistema › Avançado › Resetar atalhos do menu radial* apaga todos. **Correções**: PSD salvo com "Maximizar compatibilidade" desligado deixava a miniatura e a prévia em branco; agora o Vizu monta a imagem pelas camadas (ou usa a miniatura embutida). Para refazer miniaturas que já ficaram brancas, rode a Limpeza com "Miniaturas do Windows". Espaço e Alt ficaram mais firmes: funcionam com Lupa, Narrador e teclados que mostram cursor na lista, e não dependem só dos eventos de foco do Windows. Se outro programa ocupar o Espaço, aparece um aviso. Dois cliques em `diagnostico.bat` mostram por que o Espaço ou o Alt não respondem.
 - **v9.12.1** — Em Configurações › Outros, o **botão do ChatGPT** no relógio ganhou liga/desliga e **Editar botão**: uma caixinha onde você digita outro site (ou o caminho de um programa) para o botão abrir. Em branco volta para o ChatGPT. O preset Minimal desliga o botão; o Design liga.
 - **v9.12.0** — **Configurações novas, com presets**: no topo, *Aplicar presets* troca entre **Minimal** (só o Espaço e o OCR, o resto desligado), **Design** (quase tudo ligado; o padrão de instalações novas) e **Custom**, que entra sozinho quando você muda alguma opção. A janela ficou mais larga, com o nome da seção numa coluna fixa, chaves com **OFF/ON** e cada seção mostrando só o essencial; o resto fica em **Avançado**, recolhível. Novidades: atalho de teclado configurável para o **OCR** (Ctrl+Alt+T continua o padrão) e para abrir a **Limpeza**, botão do OCR no relógio que pode ser escondido, OCR também no **Vizu Lite**, e *Sobre o programa* e *Agradecimentos* abertos por links. O rodapé ganhou Atualizações, Desinstalar, Pasta do programa e Encerrar processo.
 - **v9.11.1** — Quem vinha de uma versão antiga e ficou com a fonte da interface antiga (Bahnschrift ou Segoe UI) volta para a Inter automaticamente; fontes escolhidas por você são mantidas. Ao desinstalar, o Vizu agora apaga o motor de PDF extraído em `%LOCALAPPDATA%\Vizu` e pergunta se também deve apagar as configurações (tema, fontes, relógio, agenda e widgets).
