@@ -910,6 +910,8 @@ static void DiscardDeviceResources() { SafeRelease(g_gpuBmp); SafeRelease(g_chec
 static D2D1_RECT_F GearRectF() { return ClassicBars() ? D2D1::RectF(16 * g_ui, 8 * g_ui, 48 * g_ui, 40 * g_ui) : D2D1::RectF(14 * g_ui, 12 * g_ui, 46 * g_ui, 44 * g_ui); }
 // Botões da barra de cima no Vizu Classic: 1 copiar imagem, 2 abrir no programa padrão, 3 fechar.
 static int g_barHot;
+static ui::Anim g_pvAnim;                       // Espiar: hover dos botões e luz do cursor nas cápsulas
+static POINT g_pvMouse = {-100000, -100000};
 static D2D1_RECT_F BarButton(int id) {
     RECT rc; GetClientRect(g_wnd, &rc);
     float right = rc.right - 16 * g_ui - (3 - id) * 44 * g_ui;
@@ -1091,6 +1093,7 @@ static void Paint() {
     g_rt->Clear(bars ? ui::Rgba(0x23272E) : th.tint);
     if (!bars) ui::Backdrop(g_rt, th, size.width, size.height);
     ui::Painter p(g_rt, g_dw, th, s);
+    g_pvAnim.Frame(); p.an = &g_pvAnim; p.mx = (float)g_pvMouse.x; p.my = (float)g_pvMouse.y;
 
     // imagem flutuando, com cantos arredondados
     D2D1_RECT_F a = ImageArea();
@@ -1125,6 +1128,15 @@ static void Paint() {
             D2D1_RECT_F r = PageArrow(d);
             bool enabled = d < 0 ? g_page > 0 : g_page < g_pages - 1;
             float rad = (r.bottom - r.top) / 2;
+            if (th.neon) { // Crispy: translúcido; acende em laranja com neon ao passar o mouse (~200 ms)
+                float k = p.A(0x20 + d, g_arrowHot == d && enabled ? 1.0f : 0.0f, 200);
+                p.Fill(r, rad, ui::Rgba(0x101013, 0.55f));
+                p.Neon(r, rad, k);
+                p.Fill(r, rad, ui::Rgba(ui::NeonColor(), 0.16f * k));
+                p.Stroke(r, rad, ui::Mix(ui::Rgba(0xFFFFFF, 0.14f), th.accent, k));
+                p.Icon(d < 0 ? L"\uE76B" : L"\uE76C", r, 14, enabled ? ui::Mix(th.text, th.accent, k) : th.text2);
+                continue;
+            }
             p.Fill(r, rad, th.dark ? ui::Rgba(0x1C1C1E, g_arrowHot == d ? 0.85f : 0.6f) : ui::Rgba(0xFFFFFF, g_arrowHot == d ? 0.95f : 0.75f));
             p.Stroke(r, rad, th.stroke);
             p.Icon(d < 0 ? L"\uE76B" : L"\uE76C", r, 14, enabled ? th.text : th.text2);
@@ -1154,7 +1166,7 @@ static void Paint() {
 
     if (bars) { PaintClassicBars(p, size, s); if (g_rt->EndDraw() == D2DERR_RECREATE_TARGET) DiscardDeviceResources(); return; }
     // barra de cima: engrenagem, nome, zoom/página
-    p.CircleButton(GearRectF(), L"", g_gearHot);
+    p.CircleButton(GearRectF(), L"", g_gearHot, 0x10);
     float side = 170 * s;
     p.Text(g_name, D2D1::RectF(side, 12 * s, size.width - side, 44 * s), 14, th.text, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
     wchar_t t[64];
@@ -1162,7 +1174,7 @@ static void Paint() {
     std::wstring zoom = t;
     float zw = p.Measure(zoom, 12, DWRITE_FONT_WEIGHT_SEMI_BOLD) + 24 * s, x = size.width - 14 * s;
     D2D1_RECT_F zr = D2D1::RectF(x - zw, 14 * s, x, 42 * s);
-    p.Glass(zr, 14 * s);
+    p.Glass(zr, 14 * s, false, 0x11);
     p.Text(zoom, zr, 12, th.text, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
     x = zr.left - 8 * s;
     if (g_pages > 1) {
@@ -1170,7 +1182,7 @@ static void Paint() {
         std::wstring pg = t;
         float pw = p.Measure(pg, 12, DWRITE_FONT_WEIGHT_SEMI_BOLD) + 24 * s;
         D2D1_RECT_F pr = D2D1::RectF(x - pw, 14 * s, x, 42 * s);
-        p.Glass(pr, 14 * s);
+        p.Glass(pr, 14 * s, false, 0x12);
         p.Text(pg, pr, 12, th.text, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
     }
     if (!g_flash.empty() || g_loading) {
@@ -1191,7 +1203,7 @@ static void Paint() {
     }
     float ob = size.height - 14 * s, oh = 36 * s;
     D2D1_RECT_F orn = D2D1::RectF((size.width - total) / 2, ob - oh, (size.width + total) / 2, ob);
-    p.Glass(orn, oh / 2);
+    p.Glass(orn, oh / 2, false, 0x13);
     float cxp = orn.left + padX;
     for (size_t i = 0; i < widths.size(); ++i) {
         if (i) { // separador fino
@@ -1205,6 +1217,7 @@ static void Paint() {
 
     PaintFontStrip(p, size.width, orn.top - 8 * s, padX, maxW, false, th.text, th.text2, th.danger);
     if (g_rt->EndDraw() == D2DERR_RECREATE_TARGET) DiscardDeviceResources();
+    g_pvAnim.Pump(g_wnd, ui::kAnimTick);
 }
 
 // Tema do Windows mudou (claro/escuro): reaplica o vidro e redesenha tudo.
@@ -1313,6 +1326,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         if (wp == kAltTimer) { AltTick(); return 0; }
         if (wp == kUpdateTimer) { if (g_cfg.autoUpdate) CheckForUpdates(false); SetTimer(h, kUpdateTimer, 6 * 3600 * 1000, nullptr); return 0; }
         if (wp == kAnimTimer) { InvalidateRect(h, nullptr, FALSE); if (GetTickCount() - g_animStart > 180) KillTimer(h, wp); return 0; }
+        if (wp == ui::kAnimTick) { KillTimer(h, wp); InvalidateRect(h, nullptr, FALSE); return 0; }
         if (wp == kSelTimer) { KillTimer(h, wp); if (HWND dv = FocusedFileList()) SyncSelectionOrder(dv); return 0; }
         KillTimer(h, wp);
         if (wp == kRefreshTimer && g_open) OpenSelection();
@@ -1355,6 +1369,11 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         RECT crc; GetClientRect(h, &crc);
         bool hotNow = gearNow || barNow || (ClassicBars() && (p.y < 48 * g_ui || p.y > crc.bottom - 52 * g_ui)); // sem conta-gotas sobre as barras
         int arrow = g_dragging ? 0 : PageArrowAt(p);
+        g_pvMouse = p;
+        if (g_theme.neon && !g_dragging && (p.y < 56 * g_ui || p.y > crc.bottom - 64 * g_ui)) { // luz do cursor nas cápsulas de cima e de baixo
+            TRACKMOUSEEVENT tme = {sizeof(tme), TME_LEAVE, h, 0}; TrackMouseEvent(&tme);
+            InvalidateRect(h, nullptr, FALSE);
+        }
         if (gearNow != g_gearHot || barNow != g_barHot || arrow != g_arrowHot) {
             g_gearHot = gearNow; g_barHot = barNow;
             g_arrowHot = arrow;
@@ -1380,7 +1399,8 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         }
         return 0;
     }
-    case WM_MOUSELEAVE: if (g_gearHot || g_barHot || g_arrowHot || g_pickOn) { g_gearHot = false; g_barHot = 0; g_arrowHot = 0; g_pickOn = false; InvalidateRect(h, nullptr, FALSE); } return 0;
+    case WM_MOUSELEAVE: g_pvMouse = {-100000, -100000}; if (g_theme.neon) InvalidateRect(h, nullptr, FALSE);
+        if (g_gearHot || g_barHot || g_arrowHot || g_pickOn) { g_gearHot = false; g_barHot = 0; g_arrowHot = 0; g_pickOn = false; InvalidateRect(h, nullptr, FALSE); } return 0;
     case WM_LBUTTONUP: {
         POINT p = {GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
         bool click = g_dragging && abs(p.x - g_downPt.x) < 4 && abs(p.y - g_downPt.y) < 4;
@@ -1592,6 +1612,8 @@ static std::vector<Side> g_sides;
 static int g_side, g_ringHot = -2;   // -1 = centro (troca de lado), -2 = nada
 static BYTE g_ringAlpha;
 static double g_ringShownAt; // abertura: escala 0,92 -> 1 e fade (~180 ms)
+static double g_ringHotAt;   // a fatia ativa acende em ~150 ms quando troca
+static double g_ringCloseAt; static bool g_ringClosing; // fechar: fade + escala 1 -> 0,96 (~120 ms)
 static float g_ringScale = 1;
 
 static void OpenResizeDialog();
@@ -1709,7 +1731,9 @@ static void RenderRing() {
     float s = g_ringScale, c = S / 2.0f, rIn = RingIn(), rOut = RingOut();
     D2D1_POINT_2F C = D2D1::Point2F(c, c);
     { float t = (float)((ui::NowMs() - g_ringShownAt) / 180.0), k = ui::EaseOut(t > 1 ? 1 : t), sc = ui::ReducedMotion() ? 1.0f : 0.92f + 0.08f * k;
+      if (g_ringClosing) { float u = (float)((ui::NowMs() - g_ringCloseAt) / 120.0); u = u > 1 ? 1 : u; sc = ui::ReducedMotion() ? 1.0f : 1 - 0.04f * ui::EaseInOut(u); }
       if (sc < 0.999f) rt->SetTransform(D2D1::Matrix3x2F::Scale(sc, sc, C)); }
+    float hotK; { float t = (float)((ui::NowMs() - g_ringHotAt) / 150.0); hotK = ui::EaseOut(t > 1 ? 1 : t); } // brilho que acompanha a troca de fatia
     ID2D1Factory* fac = nullptr; rt->GetFactory(&fac);
     ID2D1SolidColorBrush* br = nullptr;
     auto solid = [&](D2D1_COLOR_F col) { if (br) br->Release(); rt->CreateSolidColorBrush(col, &br); return br; };
@@ -1833,7 +1857,7 @@ static void RenderRing() {
                 else dist = min(ex, ey);
                 if (dist > 0) {
                     float tt = (r - ri) / (ro - ri);
-                    float al = st.hotOut + (st.hotIn - st.hotOut) * powf(max(0.0f, 1 - tt), 2.0f);
+                    float al = (st.hotOut + (st.hotIn - st.hotOut) * powf(max(0.0f, 1 - tt), 2.0f)) * hotK;
                     if (crispy) { R = R * (1 - al) + st.hot[0] * al; G = G * (1 - al) + st.hot[1] * al; B = B * (1 - al) + st.hot[2] * al; R *= 0.92f; G *= 0.92f; B *= 0.92f; }
                     else mixv(st.hot, al);
                     A = max(A, 0.99f);
@@ -1940,7 +1964,13 @@ static void RenderRing() {
     DeleteObject(bmp);
 }
 
-static void HideAltPopup() { if (g_altWnd && IsWindowVisible(g_altWnd)) ShowWindow(g_altWnd, SW_HIDE); g_ringHot = -2; }
+static void HideAltPopup() {
+    g_ringHot = -2;
+    if (!g_altWnd || !IsWindowVisible(g_altWnd) || g_ringClosing) return;
+    g_ringClosing = true; g_ringCloseAt = ui::NowMs(); // some com fade + leve escala; a janela é escondida no fim
+    KillTimer(g_altWnd, 1); KillTimer(g_altWnd, 2);
+    SetTimer(g_altWnd, 3, 16, nullptr);
+}
 
 static void ShowAltPopup() {
     SyncSelectionOrder(g_defView);
@@ -1956,7 +1986,7 @@ static void ShowAltPopup() {
     int x = max((int)mi.rcWork.left, min((int)mi.rcWork.right - S, (int)pt.x - S / 2));
     int y = max((int)mi.rcWork.top, min((int)mi.rcWork.bottom - S, (int)pt.y - S / 2));
     g_ringHot = -2;
-    g_ringAlpha = 0; g_ringShownAt = ui::NowMs();
+    g_ringAlpha = 0; g_ringShownAt = ui::NowMs(); g_ringHotAt = 0; g_ringClosing = false; KillTimer(g_altWnd, 3);
     SetWindowPos(g_altWnd, HWND_TOPMOST, x, y, S, S, SWP_NOACTIVATE | SWP_SHOWWINDOW);
     RenderRing();
     SetTimer(g_altWnd, 1, 15, nullptr); // aparece suavemente
@@ -1971,6 +2001,12 @@ static LRESULT CALLBACK AltProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         return RingHit(p) == -2 ? HTTRANSPARENT : HTCLIENT;
     }
     case WM_TIMER:
+        if (wp == 2) { RenderRing(); if (ui::NowMs() - g_ringHotAt > 160) KillTimer(h, 2); return 0; } // troca de fatia
+        if (wp == 3) { // fechando
+            float u = (float)((ui::NowMs() - g_ringCloseAt) / 120.0);
+            if (u >= 1) { KillTimer(h, 3); g_ringClosing = false; ShowWindow(h, SW_HIDE); return 0; }
+            g_ringAlpha = (BYTE)(255 * (1 - u)); RenderRing(); return 0;
+        }
         { float t = (float)((ui::NowMs() - g_ringShownAt) / (ui::ReducedMotion() ? 150.0 : 180.0)); g_ringAlpha = (BYTE)(255 * ui::EaseOut(t > 1 ? 1 : t)); }
         RenderRing();
         if (g_ringAlpha == 255) KillTimer(h, 1);
@@ -1978,7 +2014,7 @@ static LRESULT CALLBACK AltProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     case WM_MOUSEMOVE: {
         POINT p = {GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
         int hot = RingHit(p);
-        if (hot != g_ringHot) { g_ringHot = hot; RenderRing(); } // só redesenha quando a fatia muda
+        if (hot != g_ringHot && !g_ringClosing) { g_ringHot = hot; g_ringHotAt = ui::NowMs(); RenderRing(); SetTimer(h, 2, 16, nullptr); } // a fatia nova acende em ~150 ms
         TRACKMOUSEEVENT tme = {sizeof(tme), TME_LEAVE, h, 0};
         TrackMouseEvent(&tme);
         return 0;
@@ -3033,9 +3069,17 @@ static void PaintSettings(HWND h) {
     const float RH = 60 * s, SH = 52 * s, AH = 48 * s;
     // "Avançado": recolhível, seta para baixo; aberto, as linhas vêm num quadro recuado logo abaixo
     auto advanced = [&](std::vector<SRow>& rows, int sec, std::vector<SRow> extra) {
-        rows.push_back({AH, 0, [&, sec](D2D1_RECT_F r) {
+        int count = (int)extra.size();
+        rows.push_back({AH, 0, [&, sec, count](D2D1_RECT_F r) {
             bool hh = hit(kAdv0 + sec, D2D1::RectF(r.left + 16 * s, r.top, r.right - 16 * s, r.bottom));
-            p.Text(T(L"Avançado", L"Advanced", L"Avanzado"), D2D1::RectF(r.left + 16 * s, r.top, r.right - 60 * s, r.bottom), 13, th.text, DWRITE_FONT_WEIGHT_MEDIUM);
+            const wchar_t* adv = T(L"Avançado", L"Advanced", L"Avanzado");
+            p.Text(adv, D2D1::RectF(r.left + 16 * s, r.top, r.right - 60 * s, r.bottom), 13, th.neon ? th.text2 : th.text, DWRITE_FONT_WEIGHT_MEDIUM);
+            if (th.neon && count) { // Crispy V2: quantos ajustes há dentro
+                wchar_t n[48];
+                swprintf(n, 48, count == 1 ? T(L"%d ajuste", L"%d setting", L"%d ajuste") : T(L"%d ajustes", L"%d settings", L"%d ajustes"), count);
+                float ax = r.left + 16 * s + p.Measure(adv, 13, DWRITE_FONT_WEIGHT_MEDIUM) + 10 * s;
+                p.Text(n, D2D1::RectF(ax, r.top, r.right - 60 * s, r.bottom), 11, ui::Rgba(0x6E6E76));
+            }
             D2D1_RECT_F ar = D2D1::RectF(r.right - 44 * s, r.top, r.right - 16 * s, r.bottom);
             float rot = g_setAnim.m.count(kAdv0 + sec) ? g_setAnim.m[kAdv0 + sec].cur : (g_advOpen[sec] ? 1.0f : 0.0f);
             D2D1_MATRIX_3X2_F old; rt->GetTransform(&old);

@@ -273,6 +273,8 @@ static const char* kIcoMin = "M5 12h14";
 static const char* kIcoInfo = "M12 2a10 10 0 1 0 0 20 10 10 0 1 0 0-20zM12 16v-4M12 8h.01";
 static const char* kIcoX = "M6 6l12 12M18 6L6 18";
 
+static bool g_clClosing, g_clDown;            // fechando (animação) / botão do mouse apertado
+static POINT g_clMouse = {-100000, -100000};  // luz do cursor no cartão
 // Cores derivadas do tema (protótipo: Classic, Claro, Escuro, Crispy, Windows).
 struct ClColors { D2D1_COLOR_F panel, line, used, track, accent, onAccent, warn, box, hover; };
 static ClColors ClPalette(const ui::Theme& th) {
@@ -353,22 +355,25 @@ static void ClLegend(ui::Painter& p, const ClColors& c, float x, float y, float 
     }
 }
 
-static void ClButton(ui::Painter& p, const ClColors& c, D2D1_RECT_F r, const std::wstring& label, bool primary, bool hot, float s, bool enabled = true, const char* icon = nullptr) {
+static void ClButton(ui::Painter& p, const ClColors& c, D2D1_RECT_F r0, const std::wstring& label, bool primary, bool hot, float s, bool enabled = true, const char* icon = nullptr) {
+    int key = 0x5000 + (int)(r0.left / 4) * 977 + (int)(r0.top / 4); // pela posição: o fundo acende (~200 ms) e afunda ao clicar
+    D2D1_RECT_F r = p.Press(r0, key, hot && enabled);
+    float hk = p.A(key * 4 + 1, hot && enabled ? 1.0f : 0.0f, 200);
     float rad = 10 * s;
     if (p.th.neon) { // Crispy: pílula; secundário acende em laranja com neon ao passar o mouse
         rad = (r.bottom - r.top) / 2;
         if (primary) { if (enabled) p.Neon(r, rad); D2D1_COLOR_F f = c.accent; if (!enabled) f.a = 0.35f; p.Fill(r, rad, f); if (hot && enabled) p.Fill(r, rad, ui::Rgba(0xFFFFFF, 0.14f)); }
-        else { p.Fill(r, rad, ui::Rgba(0xFFFFFF, 0.04f)); if (hot) { p.Neon(r, rad); p.Fill(r, rad, ui::Rgba(ui::NeonColor(), 0.16f)); } p.Stroke(r, rad, hot ? c.accent : ui::Rgba(0xFFFFFF, 0.12f), 1 * s); }
+        else { p.Fill(r, rad, ui::Rgba(0xFFFFFF, 0.04f)); p.Neon(r, rad, hk); p.Fill(r, rad, ui::Rgba(ui::NeonColor(), 0.16f * hk)); p.Stroke(r, rad, ui::Mix(ui::Rgba(0xFFFFFF, 0.12f), c.accent, hk), 1 * s); }
     } else if (primary) {
         D2D1_COLOR_F f = c.accent; if (!enabled) f.a = 0.35f;
         if (p.th.neon && enabled) p.Glow(r, rad);
         p.Fill(r, rad, f);
         if (hot && enabled) p.Fill(r, rad, ui::Rgba(0xFFFFFF, 0.14f));
     } else {
-        if (hot) p.Fill(r, rad, c.hover);
+        D2D1_COLOR_F hv = c.hover; hv.a *= hk; p.Fill(r, rad, hv);
         p.Stroke(r, rad, c.line, 1 * s);
     }
-    D2D1_COLOR_F tc = primary ? c.onAccent : p.th.neon && hot ? c.accent : p.th.text;
+    D2D1_COLOR_F tc = primary ? c.onAccent : p.th.neon ? ui::Mix(p.th.text, c.accent, hk) : p.th.text;
     float tw = ClMeasure(p, label, 14, DWRITE_FONT_WEIGHT_SEMI_BOLD), iw = icon ? 22 * s : 0;
     float x0 = (r.left + r.right) / 2 - (tw + iw) / 2;
     if (icon) p.Feather(icon, D2D1::RectF(x0, r.top, x0 + 16 * s, r.bottom), 15 * s, tc);
@@ -403,7 +408,10 @@ static void PaintClean(HWND h) {
     ui::Painter p(rt, g_dw, th, s);
     static ui::Anim an; static HWND last; an.Frame(); p.an = &an;
     if (last != h) { last = h; an.m.clear(); an.Start(0x3000, 0, 1, 220); } // janela nova: fade + escala 0,98 -> 1
-    float openK = an.Get(0x3000, 1, 220), openSc = an.reduced ? 1.0f : 0.98f + 0.02f * openK;
+    p.mx = (float)g_clMouse.x; p.my = (float)g_clMouse.y; p.down = g_clDown;
+    float openK = an.Get(0x3000, g_clClosing ? 0.0f : 1.0f, g_clClosing ? 150.0f : 220.0f, g_clClosing); // fechar: o inverso, mais rápido
+    if (g_clClosing && openK <= 0.001f) { g_cl.surf.End(); PostMessage(h, WM_CLOSE, 1, 0); return; }
+    float openSc = an.reduced ? 1.0f : 0.98f + 0.02f * openK;
     rt->SetTransform(D2D1::Matrix3x2F::Scale(openSc, openSc, D2D1::Point2F(sz.width / 2, sz.height / 2)));
     bool openLayer = openK < 0.999f;
     if (openLayer) rt->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), nullptr, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE, D2D1::IdentityMatrix(), openK), nullptr);
@@ -453,7 +461,7 @@ static void PaintClean(HWND h) {
         sub = ClPermanent() || !anyReview ? T(L"Exclui de vez", L"Deletes permanently", L"Elimina definitivamente") : T(L"Revisar vai para a Lixeira", L"Review items go to the Recycle Bin", L"Revisar va a la Papelera");
     } else if (g_cl.phase == kClCleaning) {
         ULONGLONG d = g_cl.doneBytes;
-        int pct = g_cl.planBytes ? (int)min(100ull, d * 100 / g_cl.planBytes) : 0;
+        int pct = (int)(an.Get(4, g_cl.planBytes ? (float)min(100ull, d * 100 / g_cl.planBytes) : 0.0f, an.reduced ? 0.0f : 300.0f) + 0.5f); // percentual em contagem rápida
         swprintf(buf, 256, T(L"Limpando · %d%%", L"Cleaning · %d%%", L"Limpiando · %d%%"), pct);
         kicker = buf; g_cl.shownTarget = d; barClean = g_cl.planBytes > d ? g_cl.planBytes - d : 0; barFreed = d;
         legend = {{c.accent, std::wstring(T(L"Falta ", L"Left ", L"Falta ")) + CleanSize(barClean)}, {tint, std::wstring(T(L"Saiu ", L"Removed ", L"Salió ")) + CleanSize(d)}};
@@ -814,12 +822,20 @@ static void PaintClean(HWND h) {
     rt->SetTransform(D2D1::IdentityMatrix());
     if (!g_cl.surf.End()) InvalidateRect(h, nullptr, FALSE);
     an.Pump(h, ui::kAnimTick);
+    // número grande e indicador girando: o timer só existe enquanto há o que mover
+    if (g_cl.phase == kClScan || g_cl.phase == kClCleaning || fabsf((float)g_cl.shownTarget - g_cl.shown) > 1) SetTimer(h, 1, 16, nullptr); else KillTimer(h, 1);
 }
 
 // ---------- ações ----------
 
 static void OpenSettings();
-static void CloseCleanWindow() { if (g_cl.wnd) DestroyWindow(g_cl.wnd); }
+// Fecha com fade + escala (~150 ms); a janela some de verdade no fim (WM_CLOSE com wp = 1).
+static void CloseCleanWindow() {
+    if (!g_cl.wnd) return;
+    if (g_clClosing) return;
+    if (!IsWindowVisible(g_cl.wnd) || IsIconic(g_cl.wnd)) { DestroyWindow(g_cl.wnd); return; }
+    g_clClosing = true; InvalidateRect(g_cl.wnd, nullptr, FALSE);
+}
 
 static void ClAction(int id) {
     if (id == kClClose) { CloseCleanWindow(); return; }
@@ -897,13 +913,16 @@ static LRESULT CALLBACK CleanProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         POINT pt = {GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
         int hot = 0;
         for (auto& x : g_cl.hits) if (ui::Hit(x.second, pt)) hot = x.first;
-        if (hot != g_cl.hot) { g_cl.hot = hot; InvalidateRect(h, nullptr, FALSE); }
+        g_clMouse = pt;
+        if (hot != g_cl.hot || g_theme.neon) { g_cl.hot = hot; InvalidateRect(h, nullptr, FALSE); } // Crispy: a luz segue o cursor
         TRACKMOUSEEVENT tme = {sizeof(tme), TME_LEAVE, h, 0}; TrackMouseEvent(&tme);
         return 0;
     }
     case WM_SETCURSOR: if (LOWORD(lp) == HTCLIENT) { SetCursor(LoadCursor(nullptr, g_cl.hot ? IDC_HAND : IDC_ARROW)); return TRUE; } break;
-    case WM_MOUSELEAVE: if (g_cl.hot) { g_cl.hot = 0; InvalidateRect(h, nullptr, FALSE); } return 0;
+    case WM_MOUSELEAVE: g_cl.hot = 0; g_clMouse = {-100000, -100000}; g_clDown = false; InvalidateRect(h, nullptr, FALSE); return 0;
+    case WM_LBUTTONUP: if (g_clDown) { g_clDown = false; InvalidateRect(h, nullptr, FALSE); } return 0;
     case WM_LBUTTONDOWN: {
+        g_clDown = true;
         POINT pt = {GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
         int id = 0;
         for (auto& x : g_cl.hits) if (ui::Hit(x.second, pt)) id = x.first;
@@ -940,7 +959,7 @@ static LRESULT CALLBACK CleanProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         ClRefreshDisk();
         { ULONGLONG left = clean::Selected(g_cl.res); left = left > g_cl.removed ? left - g_cl.removed : 0; WriteDword(L"CleanLastFound", (DWORD)min(left >> 20, 0xFFFFFFFFull)); }
         WidgetsRenderAll();
-        if (g_cl.closeAfter) { DestroyWindow(h); return 0; }
+        if (g_cl.closeAfter) { CloseCleanWindow(); return 0; }
         InvalidateRect(h, nullptr, FALSE); return 0;
     }
     case WM_TIMER: { // número animado e girando
@@ -948,7 +967,7 @@ static LRESULT CALLBACK CleanProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         bool busy = g_cl.phase == kClScan || g_cl.phase == kClCleaning;
         if (wp == ui::kAnimTick) { KillTimer(h, wp); InvalidateRect(h, nullptr, FALSE); return 0; }
         if (fabsf(d) > 1 && !ui::ReducedMotion()) g_cl.shown += d * 0.22f; else g_cl.shown = target; // ~300 ms; sem contagem ao reduzir movimento
-        if (busy || fabsf(d) > 1) InvalidateRect(h, nullptr, FALSE);
+        if (busy || fabsf(d) > 1) InvalidateRect(h, nullptr, FALSE); else KillTimer(h, 1);
         return 0;
     }
     case WM_ACTIVATE: if (LOWORD(wp) != WA_INACTIVE && g_cl.phase == kClResult) { ClRefreshRunning(); InvalidateRect(h, nullptr, FALSE); } break; // fechou o Chrome? some o aviso
@@ -956,8 +975,8 @@ static LRESULT CALLBACK CleanProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     case WM_SIZE: g_cl.surf.Resize(LOWORD(lp), HIWORD(lp)); InvalidateRect(h, nullptr, FALSE); return 0;
     case WM_ERASEBKGND: return 1;
     case WM_PAINT: { PAINTSTRUCT ps; BeginPaint(h, &ps); PaintClean(h); EndPaint(h, &ps); return 0; }
-    case WM_CLOSE: if (g_cl.phase == kClCleaning) { g_cl.stop = true; g_cl.closeAfter = true; return 0; } DestroyWindow(h); return 0; // limpando: para entre um arquivo e outro e fecha
-    case WM_DESTROY: ClJoin(); g_cl.surf.Release(); g_cl.hits.clear(); g_cl.wnd = nullptr; return 0;
+    case WM_CLOSE: if (g_cl.phase == kClCleaning) { g_cl.stop = true; g_cl.closeAfter = true; return 0; } if (wp == 1) DestroyWindow(h); else CloseCleanWindow(); return 0; // limpando: para entre um arquivo e outro e fecha
+    case WM_DESTROY: g_clClosing = false; KillTimer(h, ui::kAnimTick); ClJoin(); g_cl.surf.Release(); g_cl.hits.clear(); g_cl.wnd = nullptr; return 0;
     }
     return DefWindowProcW(h, msg, wp, lp);
 }
