@@ -43,6 +43,7 @@ inline bool Fetch(const std::wstring& url, const std::wstring& dest, const Progr
     WinHttpSetTimeouts(session, 15000, 15000, 30000, 60000);
     HANDLE file = CreateFileW(dest.c_str(), GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ, nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
     bool ok = false;
+    std::wstring detail; // diagnóstico técnico da última tentativa (status HTTP, bytes, erro WinHTTP)
     if (file == INVALID_HANDLE_VALUE) { WinHttpCloseHandle(session); error = T(L"Não foi possível gravar o motor vetorial.", L"Couldn't save the vector engine.", L"No se pudo guardar el motor vectorial."); return false; }
     for (int attempt = 0; attempt < 4 && !ok && !Cancel(); ++attempt) {
         if (attempt) Sleep(1500 * attempt);
@@ -52,9 +53,13 @@ inline bool Fetch(const std::wstring& url, const std::wstring& dest, const Progr
         HINTERNET req = conn ? WinHttpOpenRequest(conn, L"GET", path, nullptr, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES,
                                                   u.nScheme == INTERNET_SCHEME_HTTPS ? WINHTTP_FLAG_SECURE : 0) : nullptr;
         std::wstring range = offset ? L"Range: bytes=" + std::to_wstring(offset) + L"-\r\n" : L"";
-        if (req && WinHttpSendRequest(req, range.empty() ? WINHTTP_NO_ADDITIONAL_HEADERS : range.c_str(), (DWORD)-1, nullptr, 0, 0, 0) && WinHttpReceiveResponse(req, nullptr)) {
+        detail = L"attempt " + std::to_wstring(attempt + 1) + L"/4: ";
+        if (!(req && WinHttpSendRequest(req, range.empty() ? WINHTTP_NO_ADDITIONAL_HEADERS : range.c_str(), (DWORD)-1, nullptr, 0, 0, 0) && WinHttpReceiveResponse(req, nullptr))) {
+            detail += L"no response, WinHTTP error " + std::to_wstring(GetLastError());
+        } else {
             DWORD status = 0, sz = sizeof(status);
             WinHttpQueryHeaders(req, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_HEADER_NAME_BY_INDEX, &status, &sz, WINHTTP_NO_HEADER_INDEX);
+            detail += L"HTTP " + std::to_wstring(status);
             DWORD length = 0; sz = sizeof(length);
             bool hasLength = WinHttpQueryHeaders(req, WINHTTP_QUERY_CONTENT_LENGTH | WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_HEADER_NAME_BY_INDEX, &length, &sz, WINHTTP_NO_HEADER_INDEX) != FALSE;
             bool resumed = status == 206 && offset > 0;
@@ -67,7 +72,7 @@ inline bool Fetch(const std::wstring& url, const std::wstring& dest, const Progr
                 std::vector<BYTE> buf(65536); DWORD n = 0; bool finished = false;
                 ULONGLONG last = GetTickCount64(), lastMark = last; unsigned long long lastGot = got;
                 while (!Cancel()) {
-                    if (!WinHttpReadData(req, buf.data(), (DWORD)buf.size(), &n)) break;
+                    if (!WinHttpReadData(req, buf.data(), (DWORD)buf.size(), &n)) { detail += L", read error " + std::to_wstring(GetLastError()); break; }
                     if (n == 0) { finished = true; break; }
                     DWORD written = 0;
                     if (!WriteFile(file, buf.data(), n, &written, nullptr) || written != n) break;
@@ -80,6 +85,7 @@ inline bool Fetch(const std::wstring& url, const std::wstring& dest, const Progr
                 }
                 if (onProgress) onProgress(got, total, 0);
                 ok = finished && !Cancel() && (total == 0 || got == total);
+                detail += L", " + std::to_wstring(got) + L"/" + (total ? std::to_wstring(total) : std::wstring(L"?")) + L" bytes";
             }
         }
         if (req) WinHttpCloseHandle(req);
@@ -87,7 +93,7 @@ inline bool Fetch(const std::wstring& url, const std::wstring& dest, const Progr
     }
     CloseHandle(file); WinHttpCloseHandle(session);
     if (Cancel()) error = T(L"Instalação cancelada.", L"Installation cancelled.", L"Instalación cancelada.");
-    else if (!ok) error = T(L"Não foi possível baixar o motor vetorial (inkscape.org). Verifique a internet e tente de novo, ou instale a edição Vizu.", L"Couldn't download the vector engine (inkscape.org). Check your internet and try again, or install the Vizu edition.", L"No se pudo descargar el motor vectorial (inkscape.org). Revisa tu internet e inténtalo de nuevo, o instala la edición Vizu.");
+    else if (!ok) error = T(L"Não foi possível baixar o motor vetorial (inkscape.org). Verifique a internet e tente de novo, ou instale a edição Vizu.", L"Couldn't download the vector engine (inkscape.org). Check your internet and try again, or install the Vizu edition.", L"No se pudo descargar el motor vectorial (inkscape.org). Revisa tu internet e inténtalo de nuevo, o instala la edición Vizu.") + std::wstring(L"\n[") + detail + L"]";
     return ok;
 }
 
@@ -146,7 +152,14 @@ inline std::wstring Unique(const std::wstring& root, const wchar_t* prefix) {
     StringFromGUID2(id, name, ARRAYSIZE(name));
     return Full(root) + L"\\" + prefix + name;
 }
-inline bool Prepare(const std::wstring& root, std::wstring& staging, std::wstring& error, const Progress& onProgress = nullptr) {
+inline unsigned long long FileBytes(const std::wstring& path) {
+    WIN32_FILE_ATTRIBUTE_DATA a = {};
+    return GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &a) ? ((unsigned long long)a.nFileSizeHigh << 32) | a.nFileSizeLow : 0;
+}
+// localArchive: .7z já baixado, usado só se o SHA-256 conferir (senão baixa normalmente).
+// keepArchive: copia o .7z verificado para cá antes de extrair. Ambos vazios no app; o CI usa para cache.
+inline bool Prepare(const std::wstring& root, std::wstring& staging, std::wstring& error, const Progress& onProgress = nullptr,
+                    const std::wstring& localArchive = L"", const std::wstring& keepArchive = L"") {
     staging = Unique(root, L"vector-engine-stage-");
     if (staging.empty() || !Owned(root, staging) || !CreateDirectoryW(staging.c_str(), nullptr)) {
         error = T(L"Não foi possível preparar a pasta do motor vetorial.", L"Couldn't prepare the vector engine folder.", L"No se pudo preparar la carpeta del motor vectorial."); return false;
@@ -154,12 +167,17 @@ inline bool Prepare(const std::wstring& root, std::wstring& staging, std::wstrin
     auto fail = [&]() { Remove(root, staging); staging.clear(); return false; };
     std::wstring archive = staging + L"\\engine.7z";
     // Integridade: se o arquivo baixado não confere, descarta e baixa de novo uma vez.
-    for (int pass = 0; pass < 2; ++pass) {
+    bool verified = !localArchive.empty() && CopyFileW(localArchive.c_str(), archive.c_str(), FALSE) && FileSha256(archive) == kSha256;
+    if (!verified) DeleteFileW(archive.c_str());
+    for (int pass = 0; pass < 2 && !verified; ++pass) {
         if (!Fetch(kUrl, archive, onProgress, error)) return fail();
-        if (FileSha256(archive) == kSha256) break;
+        std::string got = FileSha256(archive);
+        if (got == kSha256) break;
+        std::wstring why = L"\n[downloaded " + std::to_wstring(FileBytes(archive)) + L" bytes, SHA-256 " + vec::Wide(got) + L", expected " + vec::Wide(kSha256) + L"]";
         DeleteFileW(archive.c_str());
-        if (pass == 1) { error = T(L"O motor vetorial baixado não confere com a assinatura esperada (SHA-256). Instalação recusada.", L"The downloaded vector engine doesn't match the expected signature (SHA-256). Installation refused.", L"El motor vectorial descargado no coincide con la firma esperada (SHA-256). Instalación rechazada."); return fail(); }
+        if (pass == 1) { error = std::wstring(T(L"O motor vetorial baixado não confere com a assinatura esperada (SHA-256). Instalação recusada.", L"The downloaded vector engine doesn't match the expected signature (SHA-256). Installation refused.", L"El motor vectorial descargado no coincide con la firma esperada (SHA-256). Instalación rechazada.")) + why; return fail(); }
     }
+    if (!keepArchive.empty()) CopyFileW(archive.c_str(), keepArchive.c_str(), FALSE);
     wchar_t system[32768] = {}; GetSystemDirectoryW(system, ARRAYSIZE(system));
     std::wstring log;
     if (!vec::Run(std::wstring(system) + L"\\tar.exe", {L"-xf", archive, L"-C", staging}, staging + L"\\install.log", log, error, 300000)) {

@@ -6,7 +6,15 @@
 #include <stdexcept>
 #include "isolated_registry.h"
 static int checks = 0;
-static void Check(bool ok, const char* message) { ++checks; if (!ok) throw std::runtime_error(message); }
+static std::wstring lastError;
+static void Check(bool ok, const char* message) {
+    ++checks;
+    if (!ok) { std::string m = message; if (!lastError.empty()) m += "\n  reason: " + vec::Utf8(lastError); throw std::runtime_error(m); }
+    lastError.clear();
+}
+// VIZU_TEST_ENGINE_CACHE: caminho do .7z em cache no CI. Se existir, é usado (o SHA-256 é sempre conferido);
+// se não existir, o teste baixa de verdade pelo caminho do app e guarda o arquivo verificado ali.
+static std::wstring CachePath() { wchar_t v[32768] = {}; DWORD n = GetEnvironmentVariableW(L"VIZU_TEST_ENGINE_CACHE", v, ARRAYSIZE(v)); return n && n < ARRAYSIZE(v) ? v : L""; }
 int wmain() {
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     vec::Temp root;
@@ -19,7 +27,11 @@ int wmain() {
         Check(!vbundle::Owned(root.dir, root.dir + L"\\..\\vector-engine"), "reject escaped path");
         Check(!vbundle::Remove(root.dir, root.dir + L"\\unrelated"), "reject unrelated directory");
         Check(vec::WriteNew(root.At(L"source.svg"), L"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"100\" height=\"50\"><path d=\"M1 1C5 30 50 40 90 1Z\"/></svg>"), "test source");
-        Check(vbundle::Prepare(root.dir, stage, error), "download, verify and extract engine");
+        const std::wstring cache = CachePath();
+        const bool cached = !cache.empty() && vec::Exists(cache);
+        std::cout << (cached ? "using cached engine archive (SHA-256 verified)\n" : "downloading engine archive from inkscape.org\n");
+        bool prepared = vbundle::Prepare(root.dir, stage, error, nullptr, cached ? cache : L"", cached ? L"" : cache); lastError = error;
+        Check(prepared, "download, verify and extract engine");
         Check(vbundle::Commit(root.dir, stage, error), "install embedded engine");
         std::wstring engine = vec::BundledEngine(root.dir);
         Check(!engine.empty(), "discover installed engine automatically");
@@ -42,7 +54,8 @@ int wmain() {
         Check(!vbundle::Commit(root.dir, missing, error), "failed replacement rejected");
         Check(!vec::BundledEngine(root.dir).empty(), "old engine preserved after failed replacement");
         error.clear();
-        Check(vbundle::Prepare(root.dir, stage, error), "prepare reinstall");
+        prepared = vbundle::Prepare(root.dir, stage, error, nullptr, cache); lastError = error;
+        Check(prepared, "prepare reinstall");
         Check(vbundle::Commit(root.dir, stage, error), "replace previous engine");
         Check(vbundle::Cleanup(root.dir, false), "cleanup replacement remnants");
         Check(!vec::BundledEngine(root.dir).empty(), "engine present after reinstall");
