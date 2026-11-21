@@ -266,7 +266,7 @@ static void WidgetRender(int k) {
     float rad = (wd.open ? 14 : 12) * s;
     p.Shadow(card, rad);
     p.Fill(card, rad, surface);
-    if (alert) { if (th.neon) p.Glow(card, rad); p.Stroke(card, rad, hi, 1.5f * s); } else p.Stroke(card, rad, c.line, 1 * s);
+    if (alert) p.Stroke(card, rad, hi, 1.5f * s); // Crispy: sem neon como sombra do cartão else p.Stroke(card, rad, c.line, 1 * s);
     auto bar = [&](D2D1_RECT_F r, double pct, D2D1_COLOR_F col) {
         float hh = r.bottom - r.top; p.Fill(r, hh / 2, c.track);
         float wv = (float)((r.right - r.left) * max(0.0, min(1.0, pct / 100)));

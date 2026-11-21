@@ -243,31 +243,6 @@ inline D2D1_COLOR_F Mix(D2D1_COLOR_F a, D2D1_COLOR_F b, float k) {
     return D2D1::ColorF(a.r + (b.r - a.r) * k, a.g + (b.g - a.g) * k, a.b + (b.b - a.b) * k, a.a + (b.a - a.a) * k);
 }
 
-// Granulado: bitmap 128x128 de ruído fixo, repetido. Um por render target (vive enquanto ele viver).
-inline ID2D1BitmapBrush* NoiseBrush(ID2D1RenderTarget* rt) {
-    struct E { ID2D1RenderTarget* rt; ID2D1BitmapBrush* b; };
-    static std::vector<E> cache;
-    for (size_t i = 0; i < cache.size();) { // solta os de render targets já liberados (só a cache segura a referência)
-        cache[i].rt->AddRef();
-        if (cache[i].rt->Release() == 1 && cache[i].rt != rt) { cache[i].b->Release(); cache[i].rt->Release(); cache.erase(cache.begin() + i); }
-        else ++i;
-    }
-    for (auto& e : cache) if (e.rt == rt) return e.b;
-    const UINT N = 128;
-    std::vector<UINT> px(N * N);
-    UINT seed = 0x9E3779B9;
-    for (auto& v : px) { seed ^= seed << 13; seed ^= seed >> 17; seed ^= seed << 5; UINT a = (seed >> 24) & 0xFF, g = a; v = a << 24 | g << 16 | g << 8 | g; } // pré-multiplicado: cinza = alfa
-    ID2D1Bitmap* bmp = nullptr; ID2D1BitmapBrush* br = nullptr;
-    D2D1_BITMAP_PROPERTIES bp = D2D1::BitmapProperties(D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED));
-    if (FAILED(rt->CreateBitmap(D2D1::SizeU(N, N), px.data(), N * 4, bp, &bmp))) return nullptr;
-    rt->CreateBitmapBrush(bmp, D2D1::BitmapBrushProperties(D2D1_EXTEND_MODE_WRAP, D2D1_EXTEND_MODE_WRAP), &br);
-    bmp->Release();
-    if (!br) return nullptr;
-    rt->AddRef();
-    cache.push_back({rt, br});
-    return br;
-}
-
 // ---------- superfície Direct2D com transparência ----------
 
 struct Surface {
@@ -445,29 +420,12 @@ public:
     void StrokeBrush(const D2D1_RECT_F& r, float radius, ID2D1Brush* b, float w) {
         if (b) rt->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(r.left + w / 2, r.top + w / 2, r.right - w / 2, r.bottom - w / 2), radius, radius), b, w);
     }
-    // Brilho difuso atrás do cartão (~22 px, mais forte embaixo à direita). k: 0..1 de intensidade.
-    void BackGlow(const D2D1_RECT_F& r, float radius, float k) {
-        const int n = 9; const float spread = 22 * s;
-        for (int i = n; i >= 1; --i) {
-            float g = spread * i / n, t = (float)i / n;
-            D2D1_RECT_F q = D2D1::RectF(r.left - g * 0.6f, r.top - g * 0.5f, r.right + g, r.bottom + g * 1.1f);
-            Fill(q, radius + g, Rgba(NeonColor(), k * 0.30f / n * (1.6f - t)));
-        }
-    }
-    // Granulado sobre uma área arredondada (a = opacidade).
-    void Noise(const D2D1_RECT_F& r, float radius, float a) {
-        ID2D1BitmapBrush* nb = NoiseBrush(rt);
-        if (!nb || a <= 0) return;
-        nb->SetOpacity(a);
-        rt->FillRoundedRectangle(D2D1::RoundedRect(r, radius, radius), nb);
-    }
-    // Cartão Crispy V2: brilho atrás, degradê de 115°, borda em degradê, filete no topo e luz que segue o mouse.
-    // key != 0 anima o brilho e a luz do cursor (aparece ao entrar, apaga em ~250 ms ao sair).
-    void Card(const D2D1_RECT_F& r, float radius, int key = 0, bool glow = true) {
+    // Cartão Crispy V2: degradê de 115°, borda em degradê, filete no topo e luz que segue o mouse (só dentro do cartão).
+    // Sem brilho nem granulado atrás: a separação vem do preenchimento e da borda. key != 0 anima a luz (apaga em ~250 ms).
+    void Card(const D2D1_RECT_F& r, float radius, int key = 0) {
         if (!th.neon) { Fill(r, radius, th.panel); Stroke(r, radius, th.stroke); return; }
         bool over = Over(r);
         float hov = A(key ? key * 4 + 1 : 0, over ? 1.0f : 0.0f, over ? 300.0f : 250.0f);
-        if (glow) { BackGlow(r, radius, 0.75f + 0.25f * hov); Noise(D2D1::RectF(r.left - 16 * s, r.top - 12 * s, r.right + 22 * s, r.bottom + 24 * s), radius + 18 * s, 0.10f * 0.30f); }
         Fill(r, radius, Rgba(0x16171B));
         D2D1_GRADIENT_STOP fs[4] = {{0, Rgba(0x0A0B0E, 0.94f)}, {0.45f, Rgba(0x121318, 0.94f)}, {0.75f, Rgba(0x16171B, 0.92f)}, {1, Rgba(0x1E2028, 0.90f)}};
         if (auto* b = Angle(r, 115, fs, 4)) { FillBrush(r, radius, b); b->Release(); }
@@ -500,10 +458,9 @@ public:
             if (b) { StrokeBrush(r, radius, b, 1 * s); b->Release(); }
         }
     }
-    // Moldura da janela Crispy: contorno interno fino, filete branco no topo, toque laranja embaixo e granulado de 6%.
+    // Moldura da janela Crispy: contorno interno fino, filete branco no topo e toque laranja embaixo (sem granulado).
     void WindowFrame(const D2D1_RECT_F& r, float radius) {
         if (!th.neon) { Stroke(r, radius, th.stroke); return; }
-        Noise(r, radius, 0.06f);
         D2D1_GRADIENT_STOP bs[4] = {{0, Rgba(0xFFFFFF, 0.10f)}, {0.35f, Rgba(NeonColor(), 0.18f)}, {0.70f, Rgba(NeonColor(), 0.40f)}, {1, Rgba(NeonColor(), 0.75f)}};
         if (auto* b = Angle(r, 115, bs, 4)) { StrokeBrush(r, radius, b, 1 * s); b->Release(); }
         Fill(D2D1::RectF(r.left + radius, r.top + 1 * s, r.right - radius, r.top + 2 * s), 0, Rgba(0xFFFFFF, 0.10f));

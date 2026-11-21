@@ -483,7 +483,6 @@ static void ReminderRender() {
     D2D1_RECT_F card = D2D1::RectF(M, M, M + W, M + H);
     float rad = 22 * s;
     p.Shadow(card, rad);
-    if (urgent && th.neon) p.Glow(card, rad);
     p.Fill(card, rad, th.classic ? ui::Rgba(0x4A4F57) : th.neon ? ui::Rgba(0x0E0E10, 0.97f) : th.dark ? ui::Rgba(0x161618, 0.98f) : ui::Rgba(0xFAFAFC, 0.98f));
     p.Stroke(card, rad, urgent ? acc : th.classic ? ui::Rgba(0x5C6472) : th.neon ? ui::Rgba(ui::NeonColor(), 0.42f) : th.stroke, (urgent ? 1.3f : 1) * s);
     float x = card.left + 18 * s, y = card.top + 16 * s;
