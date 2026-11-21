@@ -188,9 +188,13 @@ static IShellView* ViewFromBrowser(IDispatch* disp, HWND defView) {
 }
 
 // IShellView da lista `defView` (janelas/abas do Explorer e área de trabalho).
+// 1º: a vista ativa cuja janela é exatamente `defView`. 2º (Explorer novo, com partes em WinUI, em que o
+// identificador não bate): a vista ativa da mesma janela principal, visível. g_viewProbe conta o que achou.
+static std::wstring g_viewProbe;
 static IShellView* ShellViewFor(HWND defView) {
     IShellWindows* sw = nullptr;
-    if (FAILED(CoCreateInstance(CLSID_ShellWindows, nullptr, CLSCTX_ALL, IID_PPV_ARGS(&sw)))) return nullptr;
+    HRESULT hr = CoCreateInstance(CLSID_ShellWindows, nullptr, CLSCTX_ALL, IID_PPV_ARGS(&sw));
+    if (FAILED(hr)) { wchar_t b[64]; swprintf(b, 64, L"ShellWindows falhou (0x%08X)", (unsigned)hr); g_viewProbe = b; return nullptr; }
     IShellView* view = nullptr;
     long count = 0;
     sw->get_Count(&count);
@@ -199,12 +203,35 @@ static IShellView* ShellViewFor(HWND defView) {
         IDispatch* d = nullptr;
         if (SUCCEEDED(sw->Item(v, &d)) && d) { view = ViewFromBrowser(d, defView); d->Release(); }
     }
+    const wchar_t* how = view ? L"exata" : nullptr;
+    if (!view) { // mesma janela principal: a aba ativa
+        HWND root = GetAncestor(defView, GA_ROOT);
+        for (long i = 0; i < count && !view; ++i) {
+            VARIANT v; VariantInit(&v); v.vt = VT_I4; v.lVal = i;
+            IDispatch* d = nullptr; IWebBrowser2* wb = nullptr;
+            if (SUCCEEDED(sw->Item(v, &d)) && d && SUCCEEDED(d->QueryInterface(IID_PPV_ARGS(&wb)))) {
+                SHANDLE_PTR hw = 0;
+                if (SUCCEEDED(wb->get_HWND(&hw)) && (HWND)hw == root) {
+                    IServiceProvider* sp = nullptr; IShellBrowser* sb = nullptr; IShellView* sv = nullptr;
+                    if (SUCCEEDED(d->QueryInterface(IID_PPV_ARGS(&sp))) && SUCCEEDED(sp->QueryService(SID_STopLevelBrowser, IID_PPV_ARGS(&sb))) &&
+                        SUCCEEDED(sb->QueryActiveShellView(&sv))) {
+                        HWND h = nullptr; sv->GetWindow(&h);
+                        if (h && IsWindowVisible(h)) { view = sv; sv = nullptr; how = L"pela janela principal"; }
+                    }
+                    SafeRelease(sv); SafeRelease(sb); SafeRelease(sp);
+                }
+            }
+            SafeRelease(wb); SafeRelease(d);
+        }
+    }
     if (!view) {
         VARIANT empty; VariantInit(&empty);
         long hwnd; IDispatch* d = nullptr;
-        if (sw->FindWindowSW(&empty, &empty, SWC_DESKTOP, &hwnd, SWFO_NEEDDISPATCH, &d) == S_OK && d) { view = ViewFromBrowser(d, defView); d->Release(); }
+        if (sw->FindWindowSW(&empty, &empty, SWC_DESKTOP, &hwnd, SWFO_NEEDDISPATCH, &d) == S_OK && d) { view = ViewFromBrowser(d, defView); d->Release(); if (view) how = L"área de trabalho"; }
     }
     sw->Release();
+    wchar_t b[160]; swprintf(b, 160, L"janelas do Explorer: %ld · vista da lista: %ls", count, how ? how : L"NÃO encontrada");
+    g_viewProbe = b;
     return view;
 }
 
@@ -220,6 +247,7 @@ static bool IsFile(const std::wstring& p) {
     return a != INVALID_FILE_ATTRIBUTES && !(a & FILE_ATTRIBUTE_DIRECTORY);
 }
 
+static void KeyLog(const std::wstring& line);
 // Arquivos selecionados, na ordem em que foram selecionados (ordem padrão do Explorer, sem SVGIO_FLAG_VIEWORDER).
 static std::vector<std::wstring> SelectedFiles(HWND defView) {
     std::vector<std::wstring> files;
@@ -237,6 +265,7 @@ static std::vector<std::wstring> SelectedFiles(HWND defView) {
             }
         }
     }
+    KeyLog(L"seleção: " + std::to_wstring(files.size()) + L" arquivo(s) · " + g_viewProbe); // para o diagnóstico
     SafeRelease(arr); SafeRelease(sv);
     return files;
 }

@@ -3,7 +3,7 @@
 <h3 align="center">Veja todos os seus arquivos de design no Windows,<br>mesmo sem os programas instalados.</h3>
 
 <p align="center">
-  <a href="https://github.com/thiagohcrispim-web/vizu/releases/latest/download/Vizu_Setup_9.13.2_x64.exe"><b>⬇ Baixar o Vizu para Windows</b></a> &nbsp;·&nbsp; grátis e de código aberto (MIT)
+  <a href="https://github.com/thiagohcrispim-web/vizu/releases/latest/download/Vizu_Setup_9.13.3_x64.exe"><b>⬇ Baixar o Vizu para Windows</b></a> &nbsp;·&nbsp; grátis e de código aberto (MIT)
 </p>
 
 ---
@@ -99,7 +99,7 @@ desligado nas Configurações.
 
 ## Instalar
 
-1. Baixe o **[instalador](https://github.com/thiagohcrispim-web/vizu/releases/latest/download/Vizu_Setup_9.13.2_x64.exe)** e abra. Não precisa de administrador.
+1. Baixe o **[instalador](https://github.com/thiagohcrispim-web/vizu/releases/latest/download/Vizu_Setup_9.13.3_x64.exe)** e abra. Não precisa de administrador.
 2. Pronto: as miniaturas aparecem conforme você navega pelas pastas.
 
 Para atualizar, o Vizu avisa sozinho quando sai versão nova. Para desinstalar, rode o instalador de novo ou use
@@ -155,7 +155,7 @@ https://docs.github.com/site-policy/privacy-policies/github-general-privacy-stat
 
 - Compilar no Linux: `./build.sh` (MinGW `g++-mingw-w64-x86-64-posix`; os headers mais novos do mingw-w64 estão em `third_party/`).
 - O GitHub Actions compila a cada envio e publica o instalador como artefato (`.github/workflows/build.yml`).
-- Instalação silenciosa: `Vizu_Setup_9.13.2_x64.exe /install /S` · desinstalar: `Vizu.exe /uninstall [/S]`.
+- Instalação silenciosa: `Vizu_Setup_9.13.3_x64.exe /install /S` · desinstalar: `Vizu.exe /uninstall [/S]`.
 - Diagnóstico de um arquivo: `Vizu.exe /diag "arquivo"` ou arraste o arquivo sobre `diagnostico.bat`. Sem arquivo (`Vizu.exe /diag` ou dois cliques no `.bat`): diagnóstico do Espaço e do Alt.
 - A biblioteca `DesignThumbs.dll` (miniaturas do Explorer) e a chave de registro `HKCU\Software\DesignThumbs` mantêm o
   nome antigo, para não quebrar as miniaturas nem as configurações de quem já usa.
@@ -164,6 +164,7 @@ https://docs.github.com/site-policy/privacy-policies/github-general-privacy-stat
 <details>
 <summary><b>Histórico de versões</b></summary>
 
+- **v9.13.3** — **Espaço e Alt no Explorer novo do Windows** (builds Insider com partes em WinUI): o Vizu não conseguia ler os arquivos selecionados, então a prévia não abria e o Alt mostrava o menu de atalhos em vez do de converter. Agora, se a lista não for encontrada pelo identificador, ele usa a aba ativa da mesma janela. A inspeção também testa a leitura da seleção, solta o Alt sem ativar o menu do Explorer e não conta PDFs (só prévia no Vizu) nem o gerador do CorelDRAW como erro de miniatura.
 - **v9.13.2** — **Inspeção do Vizu** (Configurações › Sistema › Avançado): um botão testa de verdade o Espaço (prévia), o Alt com arquivo selecionado (menu de converter), o Alt sem seleção (menu de atalhos) e as miniaturas de uma pasta que você escolhe, comparando a imagem do Vizu com a que o Explorer mostra. O resultado vira um relatório em `%LOCALAPPDATA%\Vizu\Inspecao` (Markdown com os dados em JSON, fácil de ler por pessoas e por assistentes como Claude ou Codex) e o Vizu abre um e-mail pronto para o suporte com o relatório anexado.
 - **v9.13.1** — **Crispy mais limpo**: sem granulado na janela e sem brilho laranja atrás dos cartões; o neon fica só nos controles (chaves, seletores, botão principal, links). **InDesign**: o Vizu mostra o total real de páginas; as que o InDesign não salvou no arquivo (por padrão ele guarda só as 2 primeiras) aparecem com o caminho para liberar todas nas preferências do InDesign. **PSD**: canais extras (seleções salvas, cores especiais) não são mais lidos como transparência, o que deixava miniaturas em branco. `diagnostico.bat` com um arquivo agora mostra qual gerador de miniaturas o Windows usa para a extensão (se não for o do Vizu, outro programa tomou o lugar) e quanto da imagem saiu branca.
 - **v9.13.0** — **Tema Crispy com visual novo** (o nome continua Vizu Crispy): janela de vidro grafite com o acrílico do Windows (sem ele, preto #08080A com manchas laranja e azulada), cartões em degradê com borda que vai do branco ao laranja, brilho laranja atrás de cada cartão e uma luz suave que segue o mouse, neon nas chaves ligadas, no preset ativo, nos botões principais e nos links, barra de rolagem laranja e granulado fino. **Animações em todos os temas**: chaves e seletores deslizam, *Avançado* abre e fecha suave, Configurações, Limpeza e Agenda abrem e fecham com fade e escala, os avisos entram deslizando e saem com fade, o menu circular abre e fecha com escala e a fatia ativa acende ao trocar, e números e barras da Limpeza contam até o valor final. Com "Mostrar animações no Windows" desligado, sobra só um fade curto. **Atalhos de programas no Alt**: segurando Alt sem nada selecionado, o menu radial mostra 8 espaços. Clique num deles, escolha o `.exe` e ele vira um atalho com o ícone do programa. O botão direito troca o programa, e *Configurações › Sistema › Avançado › Resetar atalhos do menu radial* apaga todos. **Correções**: PSD salvo com "Maximizar compatibilidade" desligado deixava a miniatura e a prévia em branco; agora o Vizu monta a imagem pelas camadas (ou usa a miniatura embutida). Para refazer miniaturas que já ficaram brancas, rode a Limpeza com "Miniaturas do Windows". Espaço e Alt ficaram mais firmes: funcionam com Lupa, Narrador e teclados que mostram cursor na lista, e não dependem só dos eventos de foco do Windows. Se outro programa ocupar o Espaço, aparece um aviso. Dois cliques em `diagnostico.bat` mostram por que o Espaço ou o Alt não respondem.

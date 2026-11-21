@@ -10,7 +10,7 @@ static const wchar_t* kSupportMail = L"thiago.art@live.com";
 static const UINT_PTR kInspectTimer = 0x7A20;
 
 struct InspCheck { std::string id; int result; std::wstring detail; }; // result: 1 ok, 0 falhou, 2 não testado
-struct InspThumb { std::wstring file, ext, handler; bool handlerVizu = false; HRESULT vizu = E_FAIL; int vizuWhite = -1, shellWhite = -1; DWORD ms = 0; std::wstring psd; };
+struct InspThumb { std::wstring file, ext, handler; bool handlerVizu = false, previewOnly = false; HRESULT vizu = E_FAIL; int vizuWhite = -1, shellWhite = -1; DWORD ms = 0; std::wstring psd; };
 static struct {
     bool running = false;
     int step = 0;
@@ -154,6 +154,8 @@ static void InspEnvironment() {
     e.push_back({L"atalhos_menu_radial_definidos", std::to_wstring(ringSet) + L" de " + std::to_wstring(kRingApps)});
 }
 
+// Solta o Alt sem ativar o menu do Explorer: uma tecla neutra (F24) no meio cancela a ativação.
+static void InspAltUp() { InspKey(VK_F24, false); InspKey(VK_F24, true); InspKey(VK_MENU, true); }
 static void InspFinish();
 static void InspThumbsAndReport();
 
@@ -167,6 +169,11 @@ static void InspectTick() {
         if (list && fg && ClassOf(fg) != L"VizuSettings") {
             g_insp.explorer = fg;
             InspAdd("explorer_lista_em_foco", 1, L"janela " + ClassOf(fg) + L", lista de arquivos reconhecida");
+            { // o Vizu consegue ler a seleção? (Espaço e Alt dependem disso)
+                std::vector<std::wstring> sel = SelectedFiles(list);
+                bool hasTest = std::find(sel.begin(), sel.end(), g_insp.testFile) != sel.end();
+                InspAdd("explorer_selecao", hasTest ? 1 : 0, std::to_wstring(sel.size()) + L" arquivo(s) selecionado(s) lido(s)" + (hasTest ? L", inclui o de teste" : L", o de teste NÃO") + L" · " + g_viewProbe);
+            }
             UpdateHotkeys();
             InspNext(2);
         } else if (InspElapsed() > 9000) {
@@ -206,11 +213,11 @@ static void InspectTick() {
         if (IsWindowVisible(g_altWnd) && !g_ringClosing) {
             InspAdd("alt_menu_converter", g_ringLaunch ? 0 : 1, g_ringLaunch ? L"abriu o menu de ATALHOS em vez do de converter: o Vizu não viu o arquivo selecionado"
                                                                         : L"o menu de converter abriu " + std::to_wstring((int)InspElapsed()) + L" ms depois de segurar Alt");
-            InspKey(VK_MENU, true); InspKey(VK_ESCAPE, false); InspKey(VK_ESCAPE, true);
+            InspAltUp();
             HideAltPopup();
             InspNext(6);
         } else if (InspElapsed() > g_cfg.altDelay + 2500) {
-            InspKey(VK_MENU, true); InspKey(VK_ESCAPE, false); InspKey(VK_ESCAPE, true);
+            InspAltUp();
             InspAdd("alt_menu_converter", 0, L"o menu não abriu em " + std::to_wstring(g_cfg.altDelay + 2500) + L" ms segurando Alt; lista em foco: " + (FocusedFileList() ? L"sim" : L"NÃO"));
             InspNext(6);
         }
@@ -230,11 +237,11 @@ static void InspectTick() {
         if (IsWindowVisible(g_altWnd) && !g_ringClosing) {
             InspAdd("alt_menu_atalhos", g_ringLaunch ? 1 : 0, g_ringLaunch ? L"o menu de atalhos abriu " + std::to_wstring((int)InspElapsed()) + L" ms depois de segurar Alt"
                                                                        : L"abriu o menu de CONVERTER, mas nada estava selecionado");
-            InspKey(VK_MENU, true); InspKey(VK_ESCAPE, false); InspKey(VK_ESCAPE, true);
+            InspAltUp();
             HideAltPopup();
             InspFinish();
         } else if (InspElapsed() > g_cfg.altDelay + 2500) {
-            InspKey(VK_MENU, true); InspKey(VK_ESCAPE, false); InspKey(VK_ESCAPE, true);
+            InspAltUp();
             InspAdd("alt_menu_atalhos", 0, L"o menu de atalhos não abriu segurando Alt sem seleção; lista em foco: " + std::wstring(FocusedFileList() ? L"sim" : L"NÃO"));
             InspFinish();
         }
@@ -298,6 +305,9 @@ static std::vector<InspThumb> InspScanFolder(const std::wstring& dir) {
         if (!fmt::Handles(ext)) continue;
         InspThumb t; t.file = fd.cFileName; t.ext = ext;
         t.handler = EffectiveHandler(ext, L"{e357fccd-a995-4576-b01f-234630154e96}", &t.handlerVizu, vizuThumb);
+        for (auto po : fmt::kPreviewOnly) if (_wcsicmp(po, ext.c_str()) == 0) t.previewOnly = true;
+        if (t.previewOnly) t.psd = L"o Vizu só faz o painel e a prévia deste tipo; a miniatura é do Windows ou de outro programa";
+        else if (!t.handlerVizu && t.handler.find(L"CDR Thumbnail") != std::wstring::npos) t.psd = L"miniatura do próprio CorelDRAW instalado";
         if (fd.dwFileAttributes & (FILE_ATTRIBUTE_OFFLINE | FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS)) t.psd = L"arquivo só na nuvem (não baixado)";
         DWORD t0 = GetTickCount();
         IStream* s = nullptr; HBITMAP b = nullptr; bool a = false;
@@ -388,8 +398,8 @@ static void InspThumbsAndReport() {
     int blankVizu = 0, blankShell = 0, failVizu = 0, notOurs = 0;
     for (auto& t : thumbs) {
         if (FAILED(t.vizu)) ++failVizu; else if (t.vizuWhite >= 97) ++blankVizu;
-        if (t.shellWhite >= 97 || t.shellWhite < 0) ++blankShell;
-        if (!t.handlerVizu) ++notOurs;
+        if (!t.previewOnly && (t.shellWhite >= 97 || t.shellWhite < 0)) ++blankShell;
+        if (!t.handlerVizu && !t.previewOnly) ++notOurs;
     }
     if (folder.empty()) InspAdd("miniaturas", 2, L"não testado: nenhuma pasta escolhida");
     else InspAdd("miniaturas", failVizu || blankVizu || blankShell || notOurs ? 0 : 1,
