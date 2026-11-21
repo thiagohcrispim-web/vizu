@@ -106,7 +106,7 @@ struct Window {
         };
         bool done = page == 2;
         ui::Brand(rt, body, L*s, 44*s, 32*s); // logotipo 125 x 32, como no protótipo
-        p.Text(L"9.13.0", rect(R-120, 44, R, 76), 13, text2, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_TRAILING);
+        p.Text(L"9.13.1", rect(R-120, 44, R, 76), 13, text2, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_TRAILING);
         if (page == 0) {
             ph.Text(installed ? T(L"Atualize ou troque a versão:",L"Update or switch edition:",L"Actualiza o cambia la versión:") : T(L"Escolha uma versão:",L"Choose an edition:",L"Elige una versión:"), rect(L,102,R,138), 32, text, DWRITE_FONT_WEIGHT_BOLD);
             p.Text(T(L"Para trocar depois, rode o instalador de novo.",L"To switch later, run the installer again.",L"Para cambiar después, ejecuta el instalador de nuevo."), rect(L,146,R,168), 15, text2);

@@ -589,9 +589,14 @@ inline HRESULT PsdComposite(IStream* s, UINT cx, HBITMAP* out) {
     if (w > 300000 || h > 300000 || channels > 56) return E_FAIL; // limites do formato (PSB); arquivo corrompido não pede memória absurda
     if (mode != 1 && mode != 3 && mode != 4) return E_FAIL; // Gray, RGB, CMYK
     UINT64 pos = 26, len;
+    bool mergedAlpha = false; // o 1º canal extra só é transparência quando a contagem de camadas vem negativa
     for (int section = 0; section < 3; ++section) {          // color mode, resources, layers
         int lenBytes = (section == 2 && ph.psb) ? 8 : 4;
         if (!ReadBE(s, pos, lenBytes, &len)) return E_FAIL;
+        if (section == 2 && len >= (UINT64)lenBytes + 2) {
+            UINT64 liLen, cnt;
+            if (ReadBE(s, pos + lenBytes, lenBytes, &liLen) && liLen >= 2 && ReadBE(s, pos + 2 * lenBytes, 2, &cnt)) mergedAlpha = (short)(USHORT)cnt < 0;
+        }
         pos += lenBytes + len;
     }
     UINT64 comp;
@@ -600,7 +605,7 @@ inline HRESULT PsdComposite(IStream* s, UINT cx, HBITMAP* out) {
 
     UINT need = mode == 3 ? 3 : mode == 4 ? 4 : 1;
     if (channels < need) return E_FAIL;
-    bool alpha = channels > need;
+    bool alpha = channels > need && mergedAlpha; // canais extras sem isso são seleções salvas ou cores especiais
     UINT use = alpha ? need + 1 : need;
     UINT bpc = depth / 8;
     size_t rowBytes = (size_t)w * bpc;
@@ -1087,6 +1092,39 @@ inline bool ReadPalette(IStream* s, const std::wstring& ext, std::vector<Swatch>
 
 // ---------- entrada única ----------
 
+// Página de InDesign sem prévia salva no arquivo: folha cinza-clara no tamanho da 1ª página com o motivo e como resolver.
+inline bool IsIndd(const Bytes& b) { return b.size() > 16 && b[0] == 0x06 && b[1] == 0x06 && b[2] == 0xED && b[3] == 0xF5; }
+inline HRESULT MissingPreviewPage(const Bytes& firstJpg, UINT cx, int page, int total, int saved, HBITMAP* out) {
+    HBITMAP ref = nullptr;
+    UINT w = cx, h = cx * 1414 / 1000;
+    if (SUCCEEDED(DecodeWic(firstJpg.data(), firstJpg.size(), cx, &ref)) && ref) {
+        BITMAP bm = {}; GetObject(ref, sizeof(bm), &bm); w = (UINT)bm.bmWidth; h = (UINT)std::abs(bm.bmHeight); DeleteObject(ref);
+    }
+    if (w < 200) { h = h * 200 / max(1u, w); w = 200; }
+    BYTE* bits; HBITMAP bmp = CreateDib(w, h, &bits);
+    if (!bmp) return E_OUTOFMEMORY;
+    for (size_t i = 0; i < (size_t)w * h; ++i) { bits[i * 4] = bits[i * 4 + 1] = bits[i * 4 + 2] = 0xEE; bits[i * 4 + 3] = 255; }
+    wchar_t msg[700];
+    swprintf(msg, 700, T(L"Página %d de %d\n\nO InDesign salvou a prévia só das %d primeiras páginas.\n\nPara ver todas: no InDesign, Preferências › Manipulação de arquivos › Salvar imagens de visualização com documentos › Páginas: Todas as páginas. Depois salve o arquivo de novo.",
+                         L"Page %d of %d\n\nInDesign saved a preview of only the first %d pages.\n\nTo see them all: in InDesign, Preferences › File Handling › Save Preview Images with Documents › Pages: All Pages. Then save the file again.",
+                         L"Página %d de %d\n\nInDesign guardó la vista previa solo de las %d primeras páginas.\n\nPara verlas todas: en InDesign, Preferencias › Gestión de archivos › Guardar imágenes de previsualización con documentos › Páginas: Todas las páginas. Luego guarda el archivo de nuevo."),
+             page + 1, total, saved);
+    HDC dc = CreateCompatibleDC(nullptr);
+    HGDIOBJ old = SelectObject(dc, bmp);
+    int fs = max(12, (int)(w / 26));
+    HFONT f = CreateFontW(-fs, 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Segoe UI");
+    HGDIOBJ of = SelectObject(dc, f);
+    SetBkMode(dc, TRANSPARENT); SetTextColor(dc, RGB(0x4A, 0x4F, 0x57));
+    RECT r = {(LONG)(w / 10), 0, (LONG)(w - w / 10), (LONG)h}, m = r;
+    DrawTextW(dc, msg, -1, &m, DT_CENTER | DT_WORDBREAK | DT_CALCRECT);
+    int th = m.bottom - m.top; r.top = (LONG)(h - th) / 2; r.bottom = r.top + th;
+    DrawTextW(dc, msg, -1, &r, DT_CENTER | DT_WORDBREAK);
+    SelectObject(dc, of); DeleteObject(f); SelectObject(dc, old); DeleteDC(dc);
+    for (size_t i = 0; i < (size_t)w * h; ++i) bits[i * 4 + 3] = 255; // o GDI zera o alfa do que escreve
+    *out = bmp;
+    return S_OK;
+}
+
 // Gera a imagem de um arquivo. ext: extensão com ponto (pode ser vazia); cx: lado máximo;
 // page: página (INDD com várias páginas); pages recebe o total de páginas.
 // hq: preview/painel/conversão (PDF e .ai renderizados página a página); sem hq: miniatura rápida.
@@ -1138,8 +1176,17 @@ inline HRESULT RenderUnchecked(IStream* s, const std::wstring& ext, UINT cx, int
     }
     std::vector<Bytes> list = XmpPages(b);
     if (!list.empty()) {
-        if (pages) *pages = (int)list.size();
-        page = max(0, min(page, (int)list.size() - 1));
+        // O InDesign só guarda prévia das páginas escolhidas nas preferências (padrão: as 2 primeiras).
+        // O total vem de xmpTPg:NPages; as páginas sem prévia viram um aviso no tamanho da página.
+        int total = (int)list.size();
+        if (list.size() > 1 || IsIndd(b)) {
+            auto np = XmpValues(b, "xmpTPg:NPages");
+            int n = np.empty() ? 0 : atoi(np.back().c_str());
+            if (n > total && n < 100000) total = n;
+        }
+        if (pages) *pages = total;
+        page = max(0, min(page, total - 1));
+        if (page >= (int)list.size()) return MissingPreviewPage(list[0], cx, page, total, (int)list.size(), out);
         if (SUCCEEDED(DecodeWic(list[page].data(), list[page].size(), cx, out))) return S_OK;
     }
     if (SUCCEEDED(EpsiPreview(b, cx, out))) return S_OK;

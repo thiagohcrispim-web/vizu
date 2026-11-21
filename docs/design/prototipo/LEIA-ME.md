@@ -48,7 +48,7 @@ Tokens (em `ui::CrispyTheme` e `ui::Painter::Card` no `Ui.h`): fundo #08080A, co
 Como o Direct2D reproduz o que é CSS no protótipo:
 
 - `backdrop-filter`: acrílico do DWM (`DWMWA_SYSTEMBACKDROP_TYPE`) com grafite a 55% por cima; sem ele, #08080A com as manchas laranja e azulada (`ui::Backdrop`). Com o acrílico, os cantos são os do Windows 11.
-- Brilho atrás dos cartões (`filter: blur(22px)`) e neon (`box-shadow` em duas camadas): camadas concêntricas translúcidas (`Painter::BackGlow`, `Painter::Neon`).
-- Granulado (`feTurbulence`): bitmap de ruído fixo de 128×128 repetido (`ui::NoiseBrush`).
+- Neon (`box-shadow` em duas camadas): camadas concêntricas translúcidas (`Painter::Neon`), só nos controles que usam a cor dominante.
+- Desde a 9.13.1 o app não desenha o brilho atrás dos cartões nem o granulado das telas: a separação vem do degradê e da borda.
 - Luz que segue o cursor: pincel radial na posição do mouse, no preenchimento e na borda (`Painter::CursorLight`).
 - `transition`: `ui::Anim`, com valores que deslizam até o alvo (ease-out cubic-bezier(0.23, 1, 0.32, 1) nas entradas, ease-in-out no que já está na tela). Só roda enquanto algo anima e nunca com a janela oculta ou minimizada. Com "Mostrar animações no Windows" desligado, sobram só fades de até 150 ms.

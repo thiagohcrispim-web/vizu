@@ -80,6 +80,16 @@ int wmain() {
             Check(px[2] > 200 && px[1] < 40 && px[0] < 40, "PSD without real composite shows the layer (red), not white");
             DeleteObject(bmp); bmp = nullptr;
         }
+        { // canal extra = seleção salva (preta), sem contagem negativa de camadas: não é transparência, não sai branco
+            fmt::Bytes sel = Psd(4, 1, 1, 0);
+            for (BYTE v : {(BYTE)200, (BYTE)10, (BYTE)10, (BYTE)0}) sel.push_back(v);
+            Check(SUCCEEDED(Render(sel, L".psd", &bmp)) && bmp, "PSD with saved selection renders");
+            DIBSECTION ds = {};
+            Check(GetObject(bmp, sizeof(ds), &ds) == sizeof(ds) && ds.dsBm.bmBits, "PSD selection bitmap is a DIB");
+            const BYTE* px = (const BYTE*)ds.dsBm.bmBits;
+            Check(px[2] > 180 && px[1] < 40, "saved selection channel is not treated as transparency");
+            DeleteObject(bmp); bmp = nullptr;
+        }
         // tamanhos absurdos: falha, sem pedir memória nem derrubar o processo
         Check(FAILED(Render(Psd(3, 0xFFFFFFFFu, 1, 0), L".psd", &bmp)), "PSD with absurd height is refused");
         Check(FAILED(Render(Psd(3, 1, 0xFFFFFFFFu, 1), L".psd", &bmp)), "PSD with absurd width is refused");

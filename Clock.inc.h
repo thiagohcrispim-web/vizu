@@ -381,7 +381,7 @@ static void ClockRender() {
         th.icon = th.text;
     }
     g_clock.s = s;
-    float H = 64 * s, M = docked ? 0 : (th.neon ? 26 : 14) * s, fpx = (float)g_clock.fontPx;
+    float H = 64 * s, M = docked ? 0 : 14 * s, fpx = (float)g_clock.fontPx;
     bool pomo = g_clock.phase != 0;
     UINT pc = kPomoPairs[min(2ul, (unsigned long)g_clock.pomoColors)][g_clock.phase == 1 ? 0 : 1];
 
@@ -409,10 +409,10 @@ static void ClockRender() {
     ui::Painter p(rt, g_dw, th, s);
     D2D1_RECT_F card = D2D1::RectF(M, M, M + Wc, M + H);
     float rad = 22 * s;
-    if (!docked && !th.neon) p.Shadow(card, rad);
+    if (!docked && !th.neon) p.Shadow(card, rad); // Crispy: sem sombra atrás do cartão
     D2D1_COLOR_F base = docked ? ui::Rgba(0x000000, 0.006f) // quase invisível: a barra de tarefas aparece por trás (e o clique funciona)
                        : th.classic ? ui::Rgba(0x4A4F57) : th.neon ? ui::Rgba(0x0E0E10, 0.94f) : th.dark ? ui::Rgba(0x161618, 0.94f) : ui::Rgba(0xFAFAFC, 0.95f);
-    if (th.neon && !docked) p.Card(card, rad, 0, !pomo); // Crispy V2: borda em degradê e brilho (Foco/Pausa sem brilho laranja)
+    if (th.neon && !docked) p.Card(card, rad); // Crispy V2: degradê e borda em degradê (Foco/Pausa põem o contorno verde/vermelho por cima)
     else p.Fill(card, rad, base);
     if (pomo) {
         p.Fill(card, rad, ui::Rgba(pc, 0.15f));

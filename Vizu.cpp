@@ -3897,10 +3897,25 @@ static void Diagnose(const std::wstring& path) {
         hr = fmt::Render(s, ext, 512, 1, &b, &a, &pages, true);
         BITMAP bm = {}; if (b) GetObject(b, sizeof(bm), &bm);
         line(L"Render (página 2): 0x%08X  ·  %dx%d  ·  páginas: %d  (%u ms)", (unsigned)hr, bm.bmWidth, std::abs(bm.bmHeight), pages, GetTickCount() - t0);
+        if (b && bm.bmBits && bm.bmBitsPixel == 32) { // imagem toda branca = o arquivo não trouxe imagem utilizável
+            size_t n = (size_t)bm.bmWidth * std::abs(bm.bmHeight), white = 0;
+            const BYTE* px = (const BYTE*)bm.bmBits;
+            for (size_t i = 0; i < n; ++i) if (px[i * 4] > 250 && px[i * 4 + 1] > 250 && px[i * 4 + 2] > 250) ++white;
+            line(L"Pixels brancos: %u%%", n ? (unsigned)(white * 100 / n) : 0);
+        }
         if (b) DeleteObject(b);
         fmt::Info in;
         fmt::GetInfo(s, ext, &in);
         line(L"Informações: páginas %u  ·  %ls", in.pages, in.pageSize.c_str());
+        fmt::PsdHeader ph;
+        if (fmt::ReadPsdHeader(s, &ph)) {
+            line(L"PSD: %ls  ·  %ux%u  ·  %u bits  ·  modo %u  ·  canais %u  ·  imagem pronta real: %ls", ph.psb ? L"PSB" : L"PSD", ph.w, ph.h, ph.depth, ph.mode, ph.channels,
+                 fmt::PsdHasRealComposite(s) ? L"sim" : L"NÃO (Maximizar compatibilidade desligado)");
+            HBITMAP lb = nullptr;
+            HRESULT lh = fmt::PsdLayers(s, 256, &lb);
+            line(L"Montagem pelas camadas: 0x%08X", (unsigned)lh);
+            if (lb) DeleteObject(lb);
+        }
         s->Release();
     }
     HBITMAP b = nullptr; bool a; int pages = 0;
@@ -3916,6 +3931,18 @@ static void Diagnose(const std::wstring& path) {
     v[0] = 0; sz = sizeof(v);
     if (prog[0]) RegGetValueW(HKEY_CLASSES_ROOT, (std::wstring(prog) + L"\\ShellEx\\{8895b1c6-b41f-4c1c-a562-0d564250836f}").c_str(), nullptr, RRF_RT_REG_SZ, nullptr, v, &sz);
     line(L"Programa padrão: %ls  ·  painel dele: %ls", prog[0] ? prog : L"(nenhum)", v[0] ? v : L"(nenhum)");
+    { // qual gerador de miniaturas o Windows usa de fato para a extensão (outro programa pode ter tomado o lugar)
+        const wchar_t* vizuThumb = L"{9E85547E-13C6-4C5E-95CC-990C74D9BB3F}";
+        wchar_t eff[128] = {}; DWORD en = 128;
+        HRESULT ah = AssocQueryStringW(ASSOCF_NONE, ASSOCSTR_SHELLEXTENSION, ext.c_str(), L"{e357fccd-a995-4576-b01f-234630154e96}", eff, &en);
+        std::wstring who = FAILED(ah) || !eff[0] ? L"(nenhum)" : eff;
+        if (SUCCEEDED(ah) && eff[0]) {
+            wchar_t nm[256] = {}; DWORD nsz = sizeof(nm);
+            RegGetValueW(HKEY_CLASSES_ROOT, (std::wstring(L"CLSID\\") + eff).c_str(), nullptr, RRF_RT_REG_SZ, nullptr, nm, &nsz);
+            if (nm[0]) who += std::wstring(L" (") + nm + L")";
+        }
+        line(L"Miniatura usada pelo Windows para %ls: %ls  ·  é do Vizu: %ls", ext.c_str(), who.c_str(), _wcsicmp(eff, vizuThumb) == 0 ? L"sim" : L"NÃO");
+    }
     line(L"");
     line(L"Ctrl+C copia este texto.");
     MessageBoxW(nullptr, r.c_str(), L"Vizu — diagnóstico", MB_OK | MB_ICONINFORMATION);
