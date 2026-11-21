@@ -59,7 +59,7 @@ if [ ! -f build/cdr/libvizucdr.a ]; then
 fi
 CDR_FLAGS="-I$CDR_SRC/libcdr-0.1.9/inc -I$CDR_SRC/librevenge-0.0.6/inc -I$CDR_SRC/zlib-1.3.1"
 $RC -c 65001 Vizu.rc -O coff -o Vizu.res.o # embute a DLL no EXE
-$CXX $FLAGS -municode -mwindows -D_WIN32_WINNT=0x0A00 -Wl,-Map=build/Vizu.map $CDR_FLAGS -o Vizu.exe Vizu.cpp Vizu.res.o build/webp/libwebp.a build/cdr/libvizucdr.a -lshlwapi -lole32 -loleaut32 -luuid -lgdi32 -ldwmapi -lshell32 -ld2d1 -ldwrite -lwindowscodecs -lruntimeobject -lshcore -lwinhttp -lurlmon -lcomctl32 -lcomdlg32 -lxmllite -lbcrypt -lmscms -lpdh
+$CXX $FLAGS -municode -mwindows -D_WIN32_WINNT=0x0A00 -Wl,-Map=build/Vizu.map $CDR_FLAGS -o Vizu.exe Vizu.cpp Vizu.res.o build/webp/libwebp.a build/cdr/libvizucdr.a -lshlwapi -lole32 -loleaut32 -luuid -lgdi32 -ldwmapi -lshell32 -ld2d1 -ldwrite -lwindowscodecs -lruntimeobject -lshcore -lwinhttp -lurlmon -lcomctl32 -lcomdlg32 -lxmllite -lbcrypt -lmscms -lpdh -lsetupapi
 # O próprio Vizu é o instalador. Ele leva a versão no nome: dist/Vizu_Setup_9.8.11_x64.exe
 VERSION=$(sed -n 's/.*VALUE "FileVersion", "\([0-9.]*\)".*/\1/p' Vizu.rc)
 mkdir -p dist

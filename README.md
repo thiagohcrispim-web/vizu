@@ -113,6 +113,10 @@ Para atualizar, o Vizu avisa sozinho quando sai versão nova. Para desinstalar, 
 
 O Vizu não envia nada sobre você. Ele só acessa a internet para: procurar versão nova uma vez por dia (consulta o
 `latest.json` deste repositório; dá para desligar) e traduzir um texto quando você clica em PT, ES ou EN. Mais nada.
+Se você ligar o **widget de uso de IA** (desligado por padrão), ele lê o login que o Claude Code e o Codex já guardam no
+seu PC (`.claude\.credentials.json` e `.codex\auth.json`) e consulta o uso direto na Anthropic e na OpenAI, a cada 5 minutos.
+O token vai só para o serviço dono dele, nunca é renovado nem gravado pelo Vizu. A ideia veio do
+[Codenotch](https://github.com/vinzdg/codenotch) (MIT, © 2026 Vinz). O **widget de bateria** só lê o Windows, sem internet.
 A política de privacidade do GitHub se aplica à consulta de atualização:
 https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement
 
