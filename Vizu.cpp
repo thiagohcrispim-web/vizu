@@ -2744,7 +2744,7 @@ static void CleanOnTheme() {
 enum { kTogSpace = 1, kTogAlt, kDelayMinus, kDelayPlus, kDpi72, kDpi300, kPdfSmall, kPdfRaw, kQualMinus, kQualPlus, kTogAuto, kBtnFolder, kBtnQuit, kBtnClose,
        kTogPicker, kBtnFolders, kLangPt, kLangEn, kLangEs, kTogUpdate, kBtnUpdate, kTheme0, kTheme1, kTheme2, kTheme3, kWebpMinus, kWebpPlus, kTogTray, kTogTempDel, kNeon0, kNeon1, kNeon2, kNeon3, kNeon4, kNeon5, kNeonRgb,
        kClockOn, kClockFont, kPomoT0, kPomoT1, kPomoT2, kPomoC0, kPomoC1, kPomoC2, kPomoC3, kTheftHist, kUiFont, kOcrOn, kOcrKeep, kOcrJoin, kOcrLang, kClk100, kClk90, kClk70, kClockDock, kSte, kTheme4, kTheftOn, kFocoOn, kAgendaOn, kVecText, kVecCurves, kSysToggle,
-       kClOpen, kAge1, kAge7, kAge30, kTogCleanBin, kTogDiskW, kTogDiskWarn, kDiskLimMinus, kDiskLimPlus, kDiskAll0, kDiskAll1, kTogPerfW, kTogClockClean, kPrimao,
+       kClOpen, kAge1, kAge7, kAge30, kTogCleanBin, kTogDiskW, kTogDiskWarn, kDiskLimMinus, kDiskLimPlus, kDiskAll0, kDiskAll1, kTogPerfW, kTogAiW, kTogBatW, kTogClockClean, kPrimao,
        kPreset0, kPreset1, kPreset2, kTogOcrBtn, kHkOcr, kHkClean, kAdv0, kAdv1, kAdv2, kAdv3, kAdv4, kAdv5, kLinkAbout, kLinkThanks, kBack, kBtnUninstall, kBtnLiteUpgrade, kTogChat, kChatEdit, kRingReset, kInspect };
 static const UINT kNeonPresets[6] = {0xFF6633, 0xFF2D95, 0x00E5FF, 0xB6FF3B, 0xA855F7, 0xFFD400};
 
@@ -2888,7 +2888,7 @@ static void ApplyPreset(int pr) {
         WriteDword(L"ClockTheft", full); WriteDword(L"ClockPomo", full); WriteDword(L"ClockAgenda", full); WriteDword(L"ClockClean", full);
         WriteDword(L"OcrOn", 1); WriteDword(L"ClockOcr", full); WriteDword(L"ClockChat", full);
         WriteDword(L"CleanRecycle", 0); // Lixeira fora da análise nos dois presets
-        for (int k : {kWDisk, kWPerf}) if (WidgetOn(k)) { WriteDword(k == kWDisk ? L"DiskWidget" : L"PerfWidget", 0); WidgetEnable(k, false); }
+        for (int k : {kWDisk, kWPerf, kWAi, kWBat}) if (WidgetOn(k)) { WriteDword(WKey(k), 0); WidgetEnable(k, false); }
         if (!g_lite && g_clock.on != full) { if (!full && g_clock.docked) ClockDock(false); ClockEnable(full); }
         RegisterGlobalHotkeys();
         ClockRender();
@@ -2913,7 +2913,7 @@ static bool PresetOption(int id) {
     switch (id) {
     case kTogSpace: case kTogPicker: case kTogAlt: case kDelayMinus: case kDelayPlus: case kDpi72: case kDpi300: case kPdfSmall: case kPdfRaw:
     case kVecText: case kVecCurves: case kQualMinus: case kQualPlus: case kWebpMinus: case kWebpPlus: case kClockOn: case kTheftOn: case kFocoOn:
-    case kAgendaOn: case kTogClockClean: case kTogTempDel: case kTogCleanBin: case kTogDiskW: case kTogPerfW: case kOcrOn: case kTogOcrBtn: case kTogChat:
+    case kAgendaOn: case kTogClockClean: case kTogTempDel: case kTogCleanBin: case kTogDiskW: case kTogPerfW: case kTogAiW: case kTogBatW: case kOcrOn: case kTogOcrBtn: case kTogChat:
     case kTogAuto: case kTogTray: case kTogUpdate: return true;
     default: return false;
     }
@@ -3066,6 +3066,8 @@ static void SettingsAction(int id) {
     case kTogCleanBin: WriteDword(L"CleanRecycle", !ReadDword(L"CleanRecycle", 1)); return;
     case kTogDiskW: WriteDword(L"DiskWidget", !WidgetOn(kWDisk)); WidgetEnable(kWDisk, WidgetOn(kWDisk)); return;
     case kTogPerfW: WriteDword(L"PerfWidget", !WidgetOn(kWPerf)); WidgetEnable(kWPerf, WidgetOn(kWPerf)); return;
+    case kTogAiW: WriteDword(L"AiWidget", !WidgetOn(kWAi)); WidgetEnable(kWAi, WidgetOn(kWAi)); return;
+    case kTogBatW: WriteDword(L"BatWidget", !WidgetOn(kWBat)); WidgetEnable(kWBat, WidgetOn(kWBat)); return;
     case kTogDiskWarn: WriteDword(L"DiskWarn", !ReadDword(L"DiskWarn", 1)); WidgetsRenderAll(); return;
     case kDiskLimMinus: case kDiskLimPlus: { int v = (int)ReadDword(L"DiskLimit", 10) + (id == kDiskLimPlus ? 5 : -5); WriteDword(L"DiskLimit", (DWORD)max(5, min(30, v))); WidgetsRenderAll(); return; }
     case kDiskAll0: case kDiskAll1:
@@ -3412,6 +3414,8 @@ static void PaintSettings(HWND h) {
             adv.push_back({SH, 2, [&](D2D1_RECT_F r) { rlabel(r, T(L"Discos", L"Disks", L"Discos"), T(L"Quais aparecem no widget", L"Which ones the widget shows", L"Cuáles aparecen en el widget")); rseg(r, 250 * s, {T(L"Só o do Windows", L"Windows only", L"Solo el de Windows"), T(L"Todos", L"All", L"Todos")}, ReadDword(L"DiskAll", 0) ? 1 : 0, kDiskAll0); }});
         }
         adv.push_back({SH, 1, [&](D2D1_RECT_F r) { rlabel(r, T(L"Widget de desempenho", L"Performance widget", L"Widget de rendimiento"), T(L"Mostra se o PC está lento e o que está pesando", L"Shows whether your PC is slow and what's heavy", L"Muestra si el PC está lento y qué pesa")); rtoggle(kTogPerfW, r, WidgetOn(kWPerf)); }});
+        adv.push_back({SH, 1, [&](D2D1_RECT_F r) { rlabel(r, T(L"Widget de uso de IA", L"AI usage widget", L"Widget de uso de IA"), T(L"Limites do Claude e do ChatGPT (pelo login do Claude Code e do Codex)", L"Claude and ChatGPT limits (via your Claude Code and Codex sign-in)", L"Límites de Claude y ChatGPT (con la sesión de Claude Code y Codex)")); rtoggle(kTogAiW, r, WidgetOn(kWAi)); }});
+        adv.push_back({SH, 1, [&](D2D1_RECT_F r) { rlabel(r, T(L"Widget de bateria", L"Battery widget", L"Widget de batería"), T(L"Bateria dos fones, mouses e teclados Bluetooth", L"Battery of Bluetooth headphones, mice and keyboards", L"Batería de auriculares, ratones y teclados Bluetooth")); rtoggle(kTogBatW, r, WidgetOn(kWBat)); }});
         advanced(rows, kSecClean, std::move(adv));
     }
     drawSection(T(L"Limpeza", L"Cleanup", L"Limpieza"), rows);
