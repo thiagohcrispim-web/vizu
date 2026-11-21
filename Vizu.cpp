@@ -2744,7 +2744,7 @@ static void CleanOnTheme() {
 enum { kTogSpace = 1, kTogAlt, kDelayMinus, kDelayPlus, kDpi72, kDpi300, kPdfSmall, kPdfRaw, kQualMinus, kQualPlus, kTogAuto, kBtnFolder, kBtnQuit, kBtnClose,
        kTogPicker, kBtnFolders, kLangPt, kLangEn, kLangEs, kTogUpdate, kBtnUpdate, kTheme0, kTheme1, kTheme2, kTheme3, kWebpMinus, kWebpPlus, kTogTray, kTogTempDel, kNeon0, kNeon1, kNeon2, kNeon3, kNeon4, kNeon5, kNeonRgb,
        kClockOn, kClockFont, kPomoT0, kPomoT1, kPomoT2, kPomoC0, kPomoC1, kPomoC2, kPomoC3, kTheftHist, kUiFont, kOcrOn, kOcrKeep, kOcrJoin, kOcrLang, kClk100, kClk90, kClk70, kClockDock, kSte, kTheme4, kTheftOn, kFocoOn, kAgendaOn, kVecText, kVecCurves, kSysToggle,
-       kClOpen, kAge1, kAge7, kAge30, kTogCleanBin, kTogDiskW, kTogDiskWarn, kDiskLimMinus, kDiskLimPlus, kDiskAll0, kDiskAll1, kTogPerfW, kTogAiW, kTogBatW, kTogClockClean, kPrimao,
+       kClOpen, kAge1, kAge7, kAge30, kTogCleanBin, kTogDiskW, kTogDiskWarn, kDiskLimMinus, kDiskLimPlus, kDiskAll0, kDiskAll1, kTogPerfW, kTogAiW, kTogBatW, kAiInstall, kAiEdge0, kAiEdge1, kAiEdge2, kAiEdge3, kTogBatDock, kTogClockClean, kPrimao,
        kPreset0, kPreset1, kPreset2, kTogOcrBtn, kHkOcr, kHkClean, kAdv0, kAdv1, kAdv2, kAdv3, kAdv4, kAdv5, kLinkAbout, kLinkThanks, kBack, kBtnUninstall, kBtnLiteUpgrade, kTogChat, kChatEdit, kRingReset, kInspect };
 static const UINT kNeonPresets[6] = {0xFF6633, 0xFF2D95, 0x00E5FF, 0xB6FF3B, 0xA855F7, 0xFFD400};
 
@@ -3068,6 +3068,9 @@ static void SettingsAction(int id) {
     case kTogPerfW: WriteDword(L"PerfWidget", !WidgetOn(kWPerf)); WidgetEnable(kWPerf, WidgetOn(kWPerf)); return;
     case kTogAiW: WriteDword(L"AiWidget", !WidgetOn(kWAi)); WidgetEnable(kWAi, WidgetOn(kWAi)); return;
     case kTogBatW: WriteDword(L"BatWidget", !WidgetOn(kWBat)); WidgetEnable(kWBat, WidgetOn(kWBat)); return;
+    case kAiInstall: ClaudeInstallAndLogin(); return;
+    case kAiEdge0: case kAiEdge1: case kAiEdge2: case kAiEdge3: { int i = id - kAiEdge0; NotchSetEdge(i == 0 ? kEdgeLeft : i == 1 ? kEdgeRight : i == 2 ? kEdgeTop : kEdgeBottom); return; }
+    case kTogBatDock: if (!WidgetOn(kWBat)) { WriteDword(L"BatDocked", !ReadDword(L"BatDocked", 0)); return; } WidgetDock(kWBat, !g_wd[kWBat].docked); return;
     case kTogDiskWarn: WriteDword(L"DiskWarn", !ReadDword(L"DiskWarn", 1)); WidgetsRenderAll(); return;
     case kDiskLimMinus: case kDiskLimPlus: { int v = (int)ReadDword(L"DiskLimit", 10) + (id == kDiskLimPlus ? 5 : -5); WriteDword(L"DiskLimit", (DWORD)max(5, min(30, v))); WidgetsRenderAll(); return; }
     case kDiskAll0: case kDiskAll1:
@@ -3407,18 +3410,34 @@ static void PaintSettings(HWND h) {
         adv.push_back({SH, 1, [&](D2D1_RECT_F r) { DWORD a = ReadDword(L"CleanAgeDays", 1); rlabel(r, T(L"Idade dos temporários", L"Temp file age", L"Antigüedad de temporales"), T(L"Só sai o que não foi mexido há mais tempo que isso", L"Only files untouched for longer than this go", L"Solo sale lo que no se tocó en más tiempo que esto"));
             rseg(r, 230 * s, {T(L"1 dia", L"1 day", L"1 día"), T(L"7 dias", L"7 days", L"7 días"), T(L"30 dias", L"30 days", L"30 días")}, a == 7 ? 1 : a == 30 ? 2 : 0, kAge1); }});
         adv.push_back({SH, 1, [&](D2D1_RECT_F r) { rlabel(r, T(L"Lixeira", L"Recycle Bin", L"Papelera"), T(L"Incluir a Lixeira na análise", L"Include the Recycle Bin in the scan", L"Incluir la Papelera en el análisis")); rtoggle(kTogCleanBin, r, ReadDword(L"CleanRecycle", 1) != 0); }});
-        adv.push_back({SH, 1, [&](D2D1_RECT_F r) { rlabel(r, T(L"Widget de disco", L"Disk widget", L"Widget de disco"), T(L"Espaço livre sempre visível na área de trabalho", L"Free space always visible on the desktop", L"Espacio libre siempre visible en el escritorio")); rtoggle(kTogDiskW, r, WidgetOn(kWDisk)); }});
-        if (WidgetOn(kWDisk)) {
-            adv.push_back({SH, 2, [&](D2D1_RECT_F r) { rlabel(r, T(L"Avisar com pouco espaço", L"Warn when space is low", L"Avisar con poco espacio"), T(L"Contorno de destaque quando o disco passa do limite", L"Highlighted outline when the disk crosses the limit", L"Contorno destacado cuando el disco pasa el límite")); rtoggle(kTogDiskWarn, r, ReadDword(L"DiskWarn", 1) != 0); }});
-            adv.push_back({SH, 2, [&](D2D1_RECT_F r) { rlabel(r, T(L"Limite", L"Limit", L"Límite"), T(L"Espaço livre mínimo no disco", L"Minimum free space on the disk", L"Espacio libre mínimo en el disco")); rstep(r, kDiskLimMinus, kDiskLimPlus, std::to_wstring(ReadDword(L"DiskLimit", 10)) + L"%"); }});
-            adv.push_back({SH, 2, [&](D2D1_RECT_F r) { rlabel(r, T(L"Discos", L"Disks", L"Discos"), T(L"Quais aparecem no widget", L"Which ones the widget shows", L"Cuáles aparecen en el widget")); rseg(r, 250 * s, {T(L"Só o do Windows", L"Windows only", L"Solo el de Windows"), T(L"Todos", L"All", L"Todos")}, ReadDword(L"DiskAll", 0) ? 1 : 0, kDiskAll0); }});
-        }
-        adv.push_back({SH, 1, [&](D2D1_RECT_F r) { rlabel(r, T(L"Widget de desempenho", L"Performance widget", L"Widget de rendimiento"), T(L"Mostra se o PC está lento e o que está pesando", L"Shows whether your PC is slow and what's heavy", L"Muestra si el PC está lento y qué pesa")); rtoggle(kTogPerfW, r, WidgetOn(kWPerf)); }});
-        adv.push_back({SH, 1, [&](D2D1_RECT_F r) { rlabel(r, T(L"Widget de uso de IA", L"AI usage widget", L"Widget de uso de IA"), T(L"Limites do Claude e do ChatGPT (pelo login do Claude Code e do Codex)", L"Claude and ChatGPT limits (via your Claude Code and Codex sign-in)", L"Límites de Claude y ChatGPT (con la sesión de Claude Code y Codex)")); rtoggle(kTogAiW, r, WidgetOn(kWAi)); }});
-        adv.push_back({SH, 1, [&](D2D1_RECT_F r) { rlabel(r, T(L"Widget de bateria", L"Battery widget", L"Widget de batería"), T(L"Bateria dos fones, mouses e teclados Bluetooth", L"Battery of Bluetooth headphones, mice and keyboards", L"Batería de auriculares, ratones y teclados Bluetooth")); rtoggle(kTogBatW, r, WidgetOn(kWBat)); }});
         advanced(rows, kSecClean, std::move(adv));
     }
     drawSection(T(L"Limpeza", L"Cleanup", L"Limpieza"), rows);
+
+    // MONITOR: widgets flutuantes (disco, desempenho, uso de IA e bateria)
+    rows = {
+        {RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Widget de disco", L"Disk widget", L"Widget de disco"), T(L"Espaço livre sempre visível na área de trabalho", L"Free space always visible on the desktop", L"Espacio libre siempre visible en el escritorio")); rtoggle(kTogDiskW, r, WidgetOn(kWDisk)); }},
+    };
+    if (WidgetOn(kWDisk)) {
+        rows.push_back({SH, 1, [&](D2D1_RECT_F r) { rlabel(r, T(L"Avisar com pouco espaço", L"Warn when space is low", L"Avisar con poco espacio"), T(L"Contorno de destaque quando o disco passa do limite", L"Highlighted outline when the disk crosses the limit", L"Contorno destacado cuando el disco pasa el límite")); rtoggle(kTogDiskWarn, r, ReadDword(L"DiskWarn", 1) != 0); }});
+        rows.push_back({SH, 1, [&](D2D1_RECT_F r) { rlabel(r, T(L"Limite", L"Limit", L"Límite"), T(L"Espaço livre mínimo no disco", L"Minimum free space on the disk", L"Espacio libre mínimo en el disco")); rstep(r, kDiskLimMinus, kDiskLimPlus, std::to_wstring(ReadDword(L"DiskLimit", 10)) + L"%"); }});
+        rows.push_back({SH, 1, [&](D2D1_RECT_F r) { rlabel(r, T(L"Discos", L"Disks", L"Discos"), T(L"Quais aparecem no widget", L"Which ones the widget shows", L"Cuáles aparecen en el widget")); rseg(r, 250 * s, {T(L"Só o do Windows", L"Windows only", L"Solo el de Windows"), T(L"Todos", L"All", L"Todos")}, ReadDword(L"DiskAll", 0) ? 1 : 0, kDiskAll0); }});
+    }
+    rows.push_back({RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Widget de desempenho", L"Performance widget", L"Widget de rendimiento"), T(L"Mostra se o PC está lento e o que está pesando", L"Shows whether your PC is slow and what's heavy", L"Muestra si el PC está lento y qué pesa")); rtoggle(kTogPerfW, r, WidgetOn(kWPerf)); }});
+    rows.push_back({RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Widget de uso de IA", L"AI usage widget", L"Widget de uso de IA"), T(L"Limites do Claude e do ChatGPT, preso na borda da tela", L"Claude and ChatGPT limits, docked to the screen edge", L"Límites de Claude y ChatGPT, en el borde de la pantalla")); rtoggle(kTogAiW, r, WidgetOn(kWAi)); }});
+    if (WidgetOn(kWAi)) {
+        rows.push_back({SH, 1, [&](D2D1_RECT_F r) { rlabel(r, T(L"Borda", L"Edge", L"Borde"), T(L"Ou arraste o widget até outra borda", L"Or drag the widget to another edge", L"O arrastra el widget a otro borde"));
+            int e = (int)min(3ul, (unsigned long)ReadDword(L"AiEdge", 0)); int sel = e == 1 ? 0 : e == 0 ? 1 : e; // ordem na tela: esquerda, direita, topo, base
+            rseg(r, 300 * s, {T(L"Esquerda", L"Left", L"Izquierda"), T(L"Direita", L"Right", L"Derecha"), T(L"Topo", L"Top", L"Arriba"), T(L"Base", L"Bottom", L"Abajo")}, sel, kAiEdge0); }});
+        rows.push_back({SH, 1, [&](D2D1_RECT_F r) { bool inst = ClaudeExe().empty();
+            rlabel(r, L"Claude Code", inst ? T(L"Necessário para ler o uso do Claude: instala e abre o login", L"Needed to read Claude usage: installs and opens sign-in", L"Necesario para leer el uso de Claude: instala y abre el inicio de sesión")
+                                            : T(L"Instalado. Entre de novo se o login vencer", L"Installed. Sign in again if the session expires", L"Instalado. Vuelve a iniciar sesión si vence"));
+            rpill(r, kAiInstall, inst ? T(L"Instalar e entrar", L"Install and sign in", L"Instalar y entrar") : T(L"Entrar", L"Sign in", L"Entrar"), 150 * s); }});
+    }
+    rows.push_back({RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Widget de bateria", L"Battery widget", L"Widget de batería"), T(L"Bateria dos fones, mouses e teclados Bluetooth", L"Battery of Bluetooth headphones, mice and keyboards", L"Batería de auriculares, ratones y teclados Bluetooth")); rtoggle(kTogBatW, r, WidgetOn(kWBat)); }});
+    if (WidgetOn(kWBat))
+        rows.push_back({SH, 1, [&](D2D1_RECT_F r) { rlabel(r, T(L"Anexar à barra de tarefas", L"Attach to the taskbar", L"Anclar a la barra de tareas"), T(L"Ícones e porcentagens ao lado da bandeja, como o relógio", L"Icons and percentages next to the tray, like the clock", L"Íconos y porcentajes junto a la bandeja, como el reloj")); rtoggle(kTogBatDock, r, ReadDword(L"BatDocked", 0) != 0); }});
+    drawSection(T(L"Monitor", L"Monitor", L"Monitor"), rows);
     } // !g_lite
 
     // OUTROS: OCR (também no Lite)

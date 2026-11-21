@@ -13,6 +13,9 @@ enum { kWDisk, kWPerf, kWAi, kWBat, kWCount };
 // Prefixo das chaves no registro de cada widget (liga/desliga, posição X/Y).
 static const wchar_t* WKey(int k) { return k == kWDisk ? L"DiskWidget" : k == kWPerf ? L"PerfWidget" : k == kWAi ? L"AiWidget" : L"BatWidget"; }
 static std::wstring WKeyXY(int k, bool y) { return std::wstring(WKey(k)) + (y ? L"Y" : L"X"); }
+static const wchar_t* WDockKey(int k) { return k == kWBat ? L"BatDocked" : L"PerfDocked"; }
+static const wchar_t* WDockXKey(int k) { return k == kWBat ? L"BatDockX" : L"PerfDockX"; }
+static bool WCanDock(int k) { return k == kWPerf || k == kWBat; }
 
 struct ProcUse { std::wstring exe; double cpu = 0; ULONGLONG mem = 0, io = 0; bool window = false; };
 
@@ -210,6 +213,9 @@ static void WidgetPresent(Widget& wd, HBITMAP bmp, LONG px, LONG py, UINT Wt, UI
     SelectObject(mem, old); DeleteDC(mem); ReleaseDC(nullptr, screen); DeleteObject(bmp);
 }
 
+static void WidgetEnable(int k, bool on);
+#include "AiNotch.inc.h"
+
 // Desempenho anexado à barra de tarefas: cabe na altura dela e segue a cor dela, como o relógio anexado.
 static void WidgetRenderDocked(Widget& wd, const RECT& tb) {
     float s = (tb.bottom - tb.top) / 48.0f;
@@ -242,10 +248,12 @@ static void WidgetRenderDocked(Widget& wd, const RECT& tb) {
 }
 
 static void WidgetRenderInfo(int k);
+static void NotchRender();
 static void WidgetRender(int k) {
     Widget& wd = g_wd[k];
     if (!wd.wnd) return;
-    if (k == kWAi || k == kWBat) { WidgetRenderInfo(k); return; }
+    if (k == kWAi) { NotchRender(); return; }
+    if (k == kWBat) { WidgetRenderInfo(k); return; }
     RECT tb{};
     bool docked = k == kWPerf && wd.docked && TaskbarRect(&tb);
     if (docked && !wd.open) { WidgetRenderDocked(wd, tb); return; }
@@ -424,26 +432,55 @@ static void WidgetRender(int k) {
     WidgetPresent(wd, bmp, px, py, Wt, Ht);
 }
 
-// Uso de IA e Bateria: mesmo cartão dos outros widgets. Fechado mostra o essencial; aberto, os detalhes e "Atualizar".
+// Bateria anexada à barra de tarefas: ícone e porcentagem de cada aparelho numa linha, como o relógio anexado.
+static void BatRenderDocked(Widget& wd, const RECT& tb, const std::vector<BatDev>& bat) {
+    float s = (tb.bottom - tb.top) / 48.0f;
+    bool dk = TaskbarDark();
+    D2D1_COLOR_F text = dk ? ui::Rgba(0xFFFFFF, 0.95f) : ui::Rgba(0x1D1D1F), text2 = dk ? ui::Rgba(0xFFFFFF, 0.62f) : ui::Rgba(0x000000, 0.58f);
+    D2D1_COLOR_F hi = g_cfg.themeMode == ui::kThemeWindows ? g_theme.accent : ui::Rgba(0xFF6633);
+    size_t n = min(bat.size(), (size_t)4);
+    UINT Wt = (UINT)((n ? 14 + n * 70 : 120) * s), Ht = (UINT)((tb.bottom - tb.top) * 0.86f);
+    fmt::Canvas cv(Wt, Ht);
+    if (!cv.rt) return;
+    ID2D1RenderTarget* rt = cv.rt;
+    rt->Clear(D2D1::ColorF(0, 0));
+    rt->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
+    ui::Painter p(rt, g_dw, g_theme, s);
+    p.Fill(D2D1::RectF(0, 0, (float)Wt, (float)Ht), 8 * s, wd.hot || wd.open ? ui::Rgba(dk ? 0xFFFFFF : 0x000000, 0.08f) : ui::Rgba(0x000000, 0.006f));
+    float cy = Ht / 2.0f, x = 10 * s;
+    if (!n) ClText(p, T(L"Sem aparelhos", L"No devices", L"Sin dispositivos"), D2D1::RectF(x, cy - 9 * s, (float)Wt - 6 * s, cy + 9 * s), 12, text2);
+    for (size_t i = 0; i < n; ++i) {
+        bool low = bat[i].pct <= 15;
+        p.Feather(BatIcon(bat[i].name), D2D1::RectF(x, cy - 9 * s, x + 18 * s, cy + 9 * s), 17 * s, low ? hi : text2);
+        wchar_t b[16]; swprintf(b, 16, L"%d%%", bat[i].pct);
+        ClText(p, b, D2D1::RectF(x + 22 * s, cy - 9 * s, x + 66 * s, cy + 9 * s), 12.5f, low ? hi : text, DWRITE_FONT_WEIGHT_SEMI_BOLD);
+        x += 70 * s;
+    }
+    HBITMAP bmp = nullptr;
+    if (FAILED(cv.Finish(&bmp)) || !bmp) return;
+    LONG px = max(tb.left + 4, min(tb.right - (LONG)Wt - 4, wd.ax)), py = tb.top + ((tb.bottom - tb.top) - (LONG)Ht) / 2;
+    WidgetPresent(wd, bmp, px, py, Wt, Ht);
+}
+
+// Bateria: mesmo cartão dos outros widgets. Fechado mostra os aparelhos; aberto, todos e "Atualizar".
 static void WidgetRenderInfo(int k) {
     Widget& wd = g_wd[k];
+    std::vector<BatDev> bat;
+    { std::lock_guard<std::mutex> lk(g_batMx); bat = g_bat; }
+    RECT tb{};
+    bool docked = wd.docked && TaskbarRect(&tb);
+    if (docked && !wd.open) { BatRenderDocked(wd, tb, bat); return; }
     const ui::Theme& th = g_theme;
     ClColors c = ClPalette(th);
     float s = GetDpiForWindow(wd.wnd) / 96.0f;
     D2D1_COLOR_F surface = th.classic ? ui::Rgba(0x353A42) : th.neon ? ui::Rgba(0x121215, 0.96f) : th.dark ? ui::Rgba(0x1F1F22, 0.97f) : ui::Rgba(0xFFFFFF, 0.97f);
     D2D1_COLOR_F hi = g_cfg.themeMode == ui::kThemeDark ? th.text : c.accent;
     float M = 14 * s;
-    AiProvider ai[2];
-    std::vector<BatDev> bat;
-    if (k == kWAi) { std::lock_guard<std::mutex> lk(g_aiMx); ai[0] = g_ai[0]; ai[1] = g_ai[1]; }
-    else { std::lock_guard<std::mutex> lk(g_batMx); bat = g_bat; }
     size_t nb = wd.open ? bat.size() : min(bat.size(), (size_t)4);
     bool alert = false;
-    if (k == kWAi) for (auto& a : ai) alert |= a.state == 1 && (a.w5h.pct >= 90 || a.week.pct >= 90);
-    else for (auto& b : bat) alert |= b.pct >= 0 && b.pct <= 15;
-    float W = (wd.open ? 260 : 220) * s, H;
-    if (k == kWAi) H = (wd.open ? 16 + 2 * 112 + 4 + 36 + 16 : 12 + 2 * 40 + 6) * s;
-    else H = (12 + (nb ? nb : 1) * 34 + 8 + (wd.open ? 8 + 36 + 8 : 0)) * s;
+    for (auto& b : bat) alert |= b.pct >= 0 && b.pct <= 15;
+    float W = (wd.open ? 260 : 220) * s;
+    float H = (12 + (nb ? nb : 1) * 34 + 8 + (wd.open ? 8 + 36 + 8 : 0)) * s;
     UINT Wt = (UINT)(W + 2 * M), Ht = (UINT)(H + 2 * M);
     fmt::Canvas cv(Wt, Ht);
     if (!cv.rt) return;
@@ -461,78 +498,40 @@ static void WidgetRenderInfo(int k) {
         float wv = (float)((r.right - r.left) * max(0.0, min(1.0, pct / 100)));
         if (wv > 0) { p.rt->PushAxisAlignedClip(D2D1::RectF(r.left, r.top, r.left + max(wv, hh), r.bottom), D2D1_ANTIALIAS_MODE_ALIASED); p.Fill(r, hh / 2, col); p.rt->PopAxisAlignedClip(); }
     };
-    float x = card.left + 14 * s, xr = card.right - 14 * s, y = card.top;
+    float x = card.left + 14 * s, xr = card.right - 14 * s, y = card.top + 12 * s;
     wd.rBtn = wd.rClose = wd.rOpt = wd.rApply = wd.rBack = D2D1::RectF(0, 0, 0, 0);
     wd.rItems.clear();
     wchar_t b[160];
-    if (k == kWAi) {
-        const char* icoAi = "M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z";
-        y += (wd.open ? 16 : 12) * s;
-        for (int i = 0; i < 2; ++i) {
-            const AiProvider& a = ai[i];
-            bool ok = a.fetchedMs != 0 && a.w5h.pct >= 0;
-            if (!wd.open) { // uma linha por IA: limite de 5 h
-                p.Feather(icoAi, D2D1::RectF(x, y + 1 * s, x + 14 * s, y + 15 * s), 14 * s, ok && a.w5h.pct >= 90 ? hi : th.text2);
-                ClText(p, a.name, D2D1::RectF(x + 22 * s, y, xr, y + 18 * s), 13, th.text, DWRITE_FONT_WEIGHT_SEMI_BOLD);
-                if (ok) swprintf(b, 160, L"%.0f%%", a.w5h.pct); else wcscpy_s(b, L"—");
-                ClText(p, b, D2D1::RectF(x, y, xr, y + 18 * s), 13, ok && a.w5h.pct >= 90 ? th.text : th.text2, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_TRAILING);
-                bar(D2D1::RectF(x + 22 * s, y + 24 * s, xr, y + 30 * s), ok ? a.w5h.pct : 0, ok && a.w5h.pct >= 90 ? hi : c.used);
-                y += 40 * s;
-                continue;
-            }
-            ClText(p, a.name, D2D1::RectF(x, y, xr, y + 20 * s), 16, th.text, DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_LEADING, L"Space Grotesk");
-            if (a.state != 1) ClText(p, AiStateText(a.state, i), D2D1::RectF(x, y + 22 * s, xr, y + 38 * s), 11.5f, a.fetchedMs ? th.text2 : th.text);
-            y += (a.state != 1 ? 42 : 26) * s;
-            if (!a.fetchedMs) { y += 112 * s - (a.state != 1 ? 42 : 26) * s; continue; }
-            struct Row { const wchar_t* n; const AiWindow* w; } rows[] = {{T(L"Limite de 5 horas", L"5-hour limit", L"Límite de 5 horas"), &a.w5h}, {T(L"Limite semanal", L"Weekly limit", L"Límite semanal"), &a.week}};
-            float used = (a.state != 1 ? 42 : 26) * s;
-            for (auto& r : rows) {
-                if (r.w->pct < 0) continue;
-                ClText(p, r.n, D2D1::RectF(x, y, xr, y + 16 * s), 12.5f, th.text, DWRITE_FONT_WEIGHT_MEDIUM);
-                std::wstring v = std::to_wstring((int)(r.w->pct + 0.5)) + L"%";
-                std::wstring rs = AiResetText(r.w->resetMs);
-                if (!rs.empty()) v = rs + L" · " + v;
-                ClText(p, v, D2D1::RectF(x, y, xr, y + 16 * s), 12, th.text2, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_TRAILING);
-                bar(D2D1::RectF(x, y + 21 * s, xr, y + 27 * s), r.w->pct, r.w->pct >= 90 ? hi : c.used);
-                y += 36 * s; used += 36 * s;
-            }
-            y += 112 * s - used;
-        }
-        if (wd.open) {
-            y += 4 * s;
-            wd.rBtn = D2D1::RectF(x, y, xr, y + 36 * s);
-            ClButton(p, c, wd.rBtn, g_aiBusy ? T(L"Atualizando…", L"Updating…", L"Actualizando…") : T(L"Atualizar", L"Refresh", L"Actualizar"), false, wd.hot == 1, s);
-        }
-    } else {
-        y += 12 * s;
-        if (bat.empty()) {
-            ClText(p, g_batBusy ? T(L"Procurando aparelhos…", L"Looking for devices…", L"Buscando dispositivos…") : T(L"Nenhum aparelho Bluetooth com bateria", L"No Bluetooth device with a battery", L"Ningún dispositivo Bluetooth con batería"),
-                   D2D1::RectF(x, y, xr, y + 34 * s), 12.5f, th.text2);
-            y += 34 * s;
-        }
-        for (size_t i = 0; i < nb; ++i) {
-            const BatDev& d = bat[i];
-            bool low = d.pct <= 15;
-            p.Feather(BatIcon(d.name), D2D1::RectF(x, y + 1 * s, x + 15 * s, y + 16 * s), 15 * s, low ? hi : th.text2);
-            swprintf(b, 160, L"%d%%", d.pct);
-            float vw = ClMeasure(p, b, 13) + 4 * s;
-            ClText(p, b, D2D1::RectF(xr - vw, y, xr, y + 18 * s), 13, low ? th.text : th.text2, low ? DWRITE_FONT_WEIGHT_SEMI_BOLD : DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_TRAILING);
-            ClText(p, d.name, D2D1::RectF(x + 24 * s, y, xr - vw - 6 * s, y + 18 * s), 13, th.text, DWRITE_FONT_WEIGHT_MEDIUM);
-            bar(D2D1::RectF(x + 24 * s, y + 23 * s, xr, y + 28 * s), d.pct, low ? hi : c.used);
-            y += 34 * s;
-        }
-        if (wd.open) {
-            y += 16 * s;
-            wd.rBtn = D2D1::RectF(x, y, xr, y + 36 * s);
-            ClButton(p, c, wd.rBtn, T(L"Atualizar", L"Refresh", L"Actualizar"), false, wd.hot == 1, s);
-        }
+    if (bat.empty()) {
+        ClText(p, g_batBusy ? T(L"Procurando aparelhos…", L"Looking for devices…", L"Buscando dispositivos…") : T(L"Nenhum aparelho Bluetooth com bateria", L"No Bluetooth device with a battery", L"Ningún dispositivo Bluetooth con batería"),
+               D2D1::RectF(x, y, xr, y + 34 * s), 12.5f, th.text2);
+        y += 34 * s;
+    }
+    for (size_t i = 0; i < nb; ++i) {
+        const BatDev& d = bat[i];
+        bool low = d.pct <= 15;
+        p.Feather(BatIcon(d.name), D2D1::RectF(x, y + 1 * s, x + 15 * s, y + 16 * s), 15 * s, low ? hi : th.text2);
+        swprintf(b, 160, L"%d%%", d.pct);
+        float vw = ClMeasure(p, b, 13) + 4 * s;
+        ClText(p, b, D2D1::RectF(xr - vw, y, xr, y + 18 * s), 13, low ? th.text : th.text2, low ? DWRITE_FONT_WEIGHT_SEMI_BOLD : DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_TRAILING);
+        ClText(p, d.name, D2D1::RectF(x + 24 * s, y, xr - vw - 6 * s, y + 18 * s), 13, th.text, DWRITE_FONT_WEIGHT_MEDIUM);
+        bar(D2D1::RectF(x + 24 * s, y + 23 * s, xr, y + 28 * s), d.pct, low ? hi : c.used);
+        y += 34 * s;
+    }
+    if (wd.open) {
+        y += 16 * s;
+        wd.rBtn = D2D1::RectF(x, y, xr, y + 36 * s);
+        ClButton(p, c, wd.rBtn, T(L"Atualizar", L"Refresh", L"Actualizar"), false, wd.hot == 1, s);
     }
     HBITMAP bmp = nullptr;
     if (FAILED(cv.Finish(&bmp)) || !bmp) return;
     LONG px = wd.ax - (LONG)M, py = wd.ay - (LONG)M;
     POINT apt = {wd.ax, wd.ay};
     MONITORINFO mi = {sizeof(mi)}; GetMonitorInfoW(MonitorFromPoint(apt, MONITOR_DEFAULTTONEAREST), &mi);
-    if (py + (LONG)Ht > mi.rcWork.bottom) py = max((LONG)mi.rcWork.top, mi.rcWork.bottom - (LONG)Ht);
+    if (docked) { // anexado: abre logo acima da barra (ou abaixo, se a barra estiver em cima)
+        POINT tp = {tb.left, tb.top}; GetMonitorInfoW(MonitorFromPoint(tp, MONITOR_DEFAULTTONEAREST), &mi);
+        py = tb.top > mi.rcMonitor.top ? tb.top - (LONG)Ht + (LONG)M : tb.bottom - (LONG)M;
+    } else if (py + (LONG)Ht > mi.rcWork.bottom) py = max((LONG)mi.rcWork.top, mi.rcWork.bottom - (LONG)Ht);
     if (px + (LONG)Wt > mi.rcWork.right) px = max((LONG)mi.rcWork.left, mi.rcWork.right - (LONG)Wt);
     WidgetPresent(wd, bmp, px, py, Wt, Ht);
 }
@@ -542,7 +541,7 @@ static void WidgetDock(int k, bool on);
 static void WidgetMenu(int k, POINT pt) {
     HMENU m = CreatePopupMenu();
     enum { kDock = 1, kHide };
-    if (k == kWPerf) AppendMenuW(m, MF_STRING, kDock, g_wd[k].docked ? T(L"Desanexar da barra de tarefas", L"Detach from the taskbar", L"Desanclar de la barra de tareas")
+    if (WCanDock(k)) AppendMenuW(m, MF_STRING, kDock, g_wd[k].docked ? T(L"Desanexar da barra de tarefas", L"Detach from the taskbar", L"Desanclar de la barra de tareas")
                                                                     : T(L"Anexar à barra de tarefas", L"Attach to the taskbar", L"Anclar a la barra de tareas"));
     AppendMenuW(m, MF_STRING, kHide, T(L"Ocultar widget", L"Hide widget", L"Ocultar widget"));
     SetForegroundWindow(g_wd[k].wnd);
@@ -567,7 +566,6 @@ static LRESULT CALLBACK WidgetProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     case WM_TIMER:
         if (wp == 1) { // 1 s
             if (k == kWPerf) PerfSample();
-            if (k == kWAi) AiRefresh(h, false); // ela mesma só consulta a cada 5 min
             static int batTick = 0;
             if (k == kWBat && ++batTick % 60 == 0) BatRefresh(h);
             if (wd.docked && !wd.open) SetWindowPos(h, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
@@ -604,8 +602,8 @@ static LRESULT CALLBACK WidgetProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         if (ui::Hit(wd.rOpt, pt)) { OptBuild(); wd.mode = 1; WidgetRender(k); return 0; }
         if (ui::Hit(wd.rBack, pt)) { wd.mode = 0; WidgetRender(k); return 0; }
         if (ui::Hit(wd.rApply, pt)) { wd.mode = 0; wd.open = false; WidgetRender(k); OptApply(h); return 0; }
-        if (k == kWAi || k == kWBat) {
-            if (ui::Hit(wd.rBtn, pt)) { if (k == kWAi) AiRefresh(h, true); else BatRefresh(h); }
+        if (k == kWBat) {
+            if (ui::Hit(wd.rBtn, pt)) BatRefresh(h);
             return 0;
         }
         if (ui::Hit(wd.rClose, pt) && !g_perf.top.empty()) {
@@ -628,7 +626,7 @@ static LRESULT CALLBACK WidgetProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     case WM_APP + 71: WidgetRender(k); return 0; // leitura nova (uso de IA ou bateria)
     case WM_EXITSIZEMOVE: {
         RECT r; GetWindowRect(h, &r);
-        if (wd.docked) { wd.ax = r.left; WriteDword(L"PerfDockX", (DWORD)r.left); return 0; }
+        if (wd.docked) { wd.ax = r.left; WriteDword(WDockXKey(k), (DWORD)r.left); return 0; }
         float M = 14 * GetDpiForWindow(h) / 96.0f;
         wd.ax = r.left + (LONG)M; wd.ay = r.top + (LONG)M;
         WriteDword(WKeyXY(k, false).c_str(), (DWORD)wd.ax); WriteDword(WKeyXY(k, true).c_str(), (DWORD)wd.ay);
@@ -642,6 +640,7 @@ static LRESULT CALLBACK WidgetProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
 static bool WidgetOn(int k) { return !g_lite && ReadDword(WKey(k), 0) != 0; }
 
 static void WidgetEnable(int k, bool on) {
+    if (k == kWAi) { NotchEnable(on && !g_lite); return; }
     Widget& wd = g_wd[k];
     if (!on || g_lite) { if (wd.wnd) { KillTimer(wd.wnd, 1); DestroyWindow(wd.wnd); wd.wnd = nullptr; } return; }
     if (wd.wnd) { WidgetRender(k); return; }
@@ -656,18 +655,17 @@ static void WidgetEnable(int k, bool on) {
         float s = GetDpiForSystem() / 96.0f;
         size_t n = ReadDword(L"DiskAll", 0) ? max((size_t)1, clean::AllDisks().size()) : 1; // o de desempenho fica logo abaixo do de disco
         float below = WidgetOn(kWDisk) ? 20 + 56 + (n - 1) * 30 + 16 : 20;
-        if (k >= kWAi) below = (WidgetOn(kWPerf) ? below + 76 : below) + (k == kWBat && WidgetOn(kWAi) ? 120 : 0); // empilha os novos embaixo
+        if (k >= kWAi) below = (WidgetOn(kWPerf) ? below + 76 : below); // a bateria fica embaixo dos outros
         pt.x = mi.rcWork.right - (LONG)(240 * s); pt.y = mi.rcWork.top + (LONG)((k == kWDisk ? 20 : below) * s);
     }
     wd.ax = pt.x; wd.ay = pt.y;
     RECT tb;
-    if (k == kWPerf && ReadDword(L"PerfDocked", 0) && TaskbarRect(&tb)) {
+    if (WCanDock(k) && ReadDword(WDockKey(k), 0) && TaskbarRect(&tb)) {
         wd.docked = true;
-        DWORD dx = ReadDword(L"PerfDockX", 0x80000000);
-        wd.ax = dx == 0x80000000 ? tb.right - (LONG)(360 * GetDpiForSystem() / 96) : (LONG)dx; // perto da bandeja, sem cobrir o relógio do Windows
+        DWORD dx = ReadDword(WDockXKey(k), 0x80000000);
+        wd.ax = dx == 0x80000000 ? tb.right - (LONG)((k == kWBat ? 560 : 360) * GetDpiForSystem() / 96) : (LONG)dx; // perto da bandeja, sem cobrir o relógio do Windows
     }
     if (k == kWPerf) PerfSample();
-    if (k == kWAi) AiRefresh(wd.wnd, false);
     if (k == kWBat) BatRefresh(wd.wnd);
     WidgetRender(k);
     ShowWindow(wd.wnd, SW_SHOWNOACTIVATE);
@@ -678,7 +676,7 @@ static void WidgetDock(int k, bool on) {
     Widget& wd = g_wd[k];
     RECT tb;
     if (on && !TaskbarRect(&tb)) { MessageBoxW(wd.wnd, T(L"A barra de tarefas precisa estar na horizontal (embaixo ou em cima).", L"The taskbar must be horizontal (bottom or top).", L"La barra de tareas debe estar en horizontal."), L"Vizu", MB_OK | MB_ICONINFORMATION); return; }
-    WriteDword(L"PerfDocked", on);
+    WriteDword(WDockKey(k), on);
     WidgetEnable(k, false); WidgetEnable(k, true); // recria na posição certa
 }
 
