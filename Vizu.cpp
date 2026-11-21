@@ -130,6 +130,7 @@ static const struct { int id; UINT mod, vk; } kOpenKeys[] = {
     {kHotAdd, 0, VK_ADD}, {kHotSub, 0, VK_SUBTRACT}, {kHotPgUp, 0, VK_PRIOR}, {kHotPgDn, 0, VK_NEXT},
 };
 enum { kRefreshTimer = 1, kFlashTimer, kAltTimer, kToastTimer, kSelTimer, kAnimTimer, kUpdateTimer, kFocusPoll };
+static void InspectTick(); // Inspect.inc.h
 static const float kCaption = 56, kPad = 18;
 static ui::Theme g_theme = ui::MakeTheme(ui::kThemeDark, false);
 static std::wstring g_uiFont; // fonte da interface escolhida pelo usuário (vazio = padrão: Inter)
@@ -1371,7 +1372,8 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
     case WM_TIMER:
         if (wp == kAltTimer) { AltTick(); return 0; }
-        if (wp == kFocusPoll) { UpdateHotkeys(); return 0; } // reserva: funciona mesmo se os eventos de foco não chegarem
+        if (wp == kFocusPoll) { UpdateHotkeys(); return 0; }
+        if (wp == 0x7A20) { InspectTick(); return 0; } // inspeção (Inspect.inc.h) // reserva: funciona mesmo se os eventos de foco não chegarem
         if (wp == kUpdateTimer) { if (g_cfg.autoUpdate) CheckForUpdates(false); SetTimer(h, kUpdateTimer, 6 * 3600 * 1000, nullptr); return 0; }
         if (wp == kAnimTimer) { InvalidateRect(h, nullptr, FALSE); if (GetTickCount() - g_animStart > 180) KillTimer(h, wp); return 0; }
         if (wp == ui::kAnimTick) { KillTimer(h, wp); InvalidateRect(h, nullptr, FALSE); return 0; }
@@ -2714,7 +2716,7 @@ enum { kTogSpace = 1, kTogAlt, kDelayMinus, kDelayPlus, kDpi72, kDpi300, kPdfSma
        kTogPicker, kBtnFolders, kLangPt, kLangEn, kLangEs, kTogUpdate, kBtnUpdate, kTheme0, kTheme1, kTheme2, kTheme3, kWebpMinus, kWebpPlus, kTogTray, kTogTempDel, kNeon0, kNeon1, kNeon2, kNeon3, kNeon4, kNeon5, kNeonRgb,
        kClockOn, kClockFont, kPomoT0, kPomoT1, kPomoT2, kPomoC0, kPomoC1, kPomoC2, kPomoC3, kTheftHist, kUiFont, kOcrOn, kOcrKeep, kOcrJoin, kOcrLang, kClk100, kClk90, kClk70, kClockDock, kSte, kTheme4, kTheftOn, kFocoOn, kAgendaOn, kVecText, kVecCurves, kSysToggle,
        kClOpen, kAge1, kAge7, kAge30, kTogCleanBin, kTogDiskW, kTogDiskWarn, kDiskLimMinus, kDiskLimPlus, kDiskAll0, kDiskAll1, kTogPerfW, kTogClockClean, kPrimao,
-       kPreset0, kPreset1, kPreset2, kTogOcrBtn, kHkOcr, kHkClean, kAdv0, kAdv1, kAdv2, kAdv3, kAdv4, kAdv5, kLinkAbout, kLinkThanks, kBack, kBtnUninstall, kBtnLiteUpgrade, kTogChat, kChatEdit, kRingReset };
+       kPreset0, kPreset1, kPreset2, kTogOcrBtn, kHkOcr, kHkClean, kAdv0, kAdv1, kAdv2, kAdv3, kAdv4, kAdv5, kLinkAbout, kLinkThanks, kBack, kBtnUninstall, kBtnLiteUpgrade, kTogChat, kChatEdit, kRingReset, kInspect };
 static const UINT kNeonPresets[6] = {0xFF6633, 0xFF2D95, 0x00E5FF, 0xB6FF3B, 0xA855F7, 0xFFD400};
 
 
@@ -2952,6 +2954,8 @@ static void EditChatButton(HWND owner) {
     if (g_chatEditResult == IDOK) { g_clock.app = NormalizeChatTarget(g_chatEditText); ClockSave(); ClockRender(); }
 }
 
+#include "Inspect.inc.h" // Configurações › Sistema › Avançado › Inspeção do Vizu
+
 static void SettingsAction(int id) {
     if (g_capHot && id != kHkOcr && id != kHkClean) CaptureHotkey(g_capHot); // clicar em outro lugar cancela a captura
     if (!g_lite && g_preset != kPresetCustom && PresetOption(id)) { g_preset = kPresetCustom; WriteDword(L"SettingsPreset", kPresetCustom); }
@@ -3059,6 +3063,7 @@ static void SettingsAction(int id) {
         return;
     }
     case kBtnClose: CloseSettings(); return;
+    case kInspect: StartInspection(); return;
     case kRingReset: { // apaga os 8 atalhos de programas do menu radial (pede confirmação)
         if (MessageBoxW(g_settingsWnd, T(L"Apagar os 8 atalhos de programas do menu radial?\nOs espaços voltam a mostrar \"Clique para definir o atalho\".",
                                          L"Delete the 8 program shortcuts of the radial menu?\nThe slots go back to \"Click to set the shortcut\".",
@@ -3424,6 +3429,10 @@ static void PaintSettings(HWND h) {
             wchar_t sub[96]; swprintf(sub, 96, T(L"Programas do Alt sem nada selecionado · %d de %d definidos", L"Programs on Alt with nothing selected · %d of %d set", L"Programas del Alt sin nada seleccionado · %d de %d definidos"), set, kRingApps);
             rlabel(r, T(L"Resetar atalhos do menu radial", L"Reset radial menu shortcuts", L"Restablecer accesos del menú radial"), sub);
             rpill(r, kRingReset, T(L"Resetar", L"Reset", L"Restablecer"), 110 * s); }},
+        {SH, 1, [&](D2D1_RECT_F r) {
+            rlabel(r, T(L"Inspeção do Vizu", L"Vizu inspection", L"Inspección de Vizu"),
+                   T(L"Testa o Espaço, o Alt e as miniaturas e prepara um relatório para o suporte", L"Tests Space, Alt and thumbnails and prepares a report for support", L"Prueba Espacio, Alt y miniaturas y prepara un informe para soporte"));
+            rpill(r, kInspect, T(L"Rodar inspeção", L"Run inspection", L"Ejecutar inspección"), 150 * s); }},
         {SH, 1, [&](D2D1_RECT_F r) { rlabel(r, T(L"Idioma", L"Language", L"Idioma"), nullptr); rseg(r, 270 * s, {L"Português", L"English", L"Español"}, i18n::Current(), kLangPt); }},
         {SH, 1, [&](D2D1_RECT_F r) {
             std::wstring ver = std::wstring(T(L"Versão ", L"Version ", L"Versión ")) + upd::kVersion;
