@@ -165,9 +165,11 @@ static void AiApply(int i, const AiProvider& got) {
     if (got.state == 1) { d.w5h = got.w5h; d.week = got.week; d.fetchedMs = got.fetchedMs; } // falha: mantém a última leitura
 }
 
+static void ClaudeRenewIfNeeded(); // AiNotch.inc.h
 static void AiFetchClaude() {
     AiProvider r; ULONGLONG now = AiNowMs();
     { std::lock_guard<std::mutex> lk(g_aiMx); if (now < g_ai[0].backoffUntil) return; }
+    ClaudeRenewIfNeeded(); // perto de vencer: o próprio Claude Code renova antes da leitura
     std::string cred = AiReadFile(AiHome() + L"\\.claude\\.credentials.json");
     std::string tok = AiJsonStr(cred, "accessToken");
     double exp = 0;
@@ -242,9 +244,9 @@ static std::wstring AiResetText(ULONGLONG resetMs) {
 static const wchar_t* AiStateText(int state, int i) {
     switch (state) {
     case 0: return T(L"Lendo…", L"Reading…", L"Leyendo…");
-    case 2: return i == 0 ? T(L"Entre no Claude Code (claude no terminal)", L"Sign in to Claude Code (claude in a terminal)", L"Inicia sesión en Claude Code (claude en la terminal)")
+    case 2: return i == 0 ? T(L"O Claude Code ainda não está conectado.", L"Claude Code isn't connected yet.", L"Claude Code aún no está conectado.")
                           : T(L"Entre no Codex para ver o uso", L"Sign in to Codex to see usage", L"Inicia sesión en Codex para ver el uso");
-    case 3: return i == 0 ? T(L"Login vencido: rode claude no terminal", L"Sign-in expired: run claude in a terminal", L"Sesión vencida: ejecuta claude en la terminal")
+    case 3: return i == 0 ? T(L"O login do Claude Code venceu.", L"Your Claude Code sign-in expired.", L"La sesión de Claude Code venció.")
                           : T(L"Login vencido: abra o Codex", L"Sign-in expired: open Codex", L"Sesión vencida: abre Codex");
     case 5: return T(L"Muitas consultas, tentando mais tarde", L"Too many requests, retrying later", L"Demasiadas consultas, reintentando");
     default: return T(L"Sem leitura agora", L"No reading right now", L"Sin lectura ahora");
