@@ -19,7 +19,9 @@ int wmain() {
         Check(!vbundle::Owned(root.dir, root.dir + L"\\..\\vector-engine"), "reject escaped path");
         Check(!vbundle::Remove(root.dir, root.dir + L"\\unrelated"), "reject unrelated directory");
         Check(vec::WriteNew(root.At(L"source.svg"), L"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"100\" height=\"50\"><path d=\"M1 1C5 30 50 40 90 1Z\"/></svg>"), "test source");
-        Check(vbundle::Prepare(root.dir, stage, error), "download, verify and extract engine");
+        bool prepared = vbundle::Prepare(root.dir, stage, error);
+        if (!prepared) std::wcerr << L"Prepare: " << error << L"\n"; // mostra o motivo no log do CI
+        Check(prepared, "download, verify and extract engine");
         Check(vbundle::Commit(root.dir, stage, error), "install embedded engine");
         std::wstring engine = vec::BundledEngine(root.dir);
         Check(!engine.empty(), "discover installed engine automatically");

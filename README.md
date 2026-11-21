@@ -3,7 +3,7 @@
 <h3 align="center">Veja todos os seus arquivos de design no Windows,<br>mesmo sem os programas instalados.</h3>
 
 <p align="center">
-  <a href="https://github.com/thiagohcrispim-web/vizu/releases/latest/download/Vizu_Setup_9.14.0_x64.exe"><b>⬇ Baixar o Vizu para Windows</b></a> &nbsp;·&nbsp; grátis e de código aberto (MIT)
+  <a href="https://github.com/thiagohcrispim-web/vizu/releases/latest/download/Vizu_Setup_9.14.1_x64.exe"><b>⬇ Baixar o Vizu para Windows</b></a> &nbsp;·&nbsp; grátis e de código aberto (MIT)
 </p>
 
 ---
@@ -99,7 +99,7 @@ desligado nas Configurações.
 
 ## Instalar
 
-1. Baixe o **[instalador](https://github.com/thiagohcrispim-web/vizu/releases/latest/download/Vizu_Setup_9.14.0_x64.exe)** e abra. Não precisa de administrador.
+1. Baixe o **[instalador](https://github.com/thiagohcrispim-web/vizu/releases/latest/download/Vizu_Setup_9.14.1_x64.exe)** e abra. Não precisa de administrador.
 2. Pronto: as miniaturas aparecem conforme você navega pelas pastas.
 
 Para atualizar, o Vizu avisa sozinho quando sai versão nova. Para desinstalar, rode o instalador de novo ou use
@@ -115,7 +115,8 @@ O Vizu não envia nada sobre você. Ele só acessa a internet para: procurar ver
 `latest.json` deste repositório; dá para desligar) e traduzir um texto quando você clica em PT, ES ou EN. Mais nada.
 Se você ligar o **widget de uso de IA** (desligado por padrão), ele lê o login que o Claude Code e o Codex já guardam no
 seu PC (`.claude\.credentials.json` e `.codex\auth.json`) e consulta o uso direto na Anthropic e na OpenAI, a cada 5 minutos.
-O token vai só para o serviço dono dele, nunca é renovado nem gravado pelo Vizu. A ideia veio do
+O token vai só para o serviço dono dele e o Vizu nunca o grava. Perto de vencer, o Vizu roda `claude -p` escondido para o próprio
+Claude Code renovar o login. O botão "Instalar e entrar" usa o instalador oficial da Anthropic (`claude.ai/install.ps1`). A ideia veio do
 [Codenotch](https://github.com/vinzdg/codenotch) (MIT, © 2026 Vinz). O **widget de bateria** só lê o Windows, sem internet.
 A política de privacidade do GitHub se aplica à consulta de atualização:
 https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement
@@ -159,7 +160,7 @@ https://docs.github.com/site-policy/privacy-policies/github-general-privacy-stat
 
 - Compilar no Linux: `./build.sh` (MinGW `g++-mingw-w64-x86-64-posix`; os headers mais novos do mingw-w64 estão em `third_party/`).
 - O GitHub Actions compila a cada envio e publica o instalador como artefato (`.github/workflows/build.yml`).
-- Instalação silenciosa: `Vizu_Setup_9.14.0_x64.exe /install /S` · desinstalar: `Vizu.exe /uninstall [/S]`.
+- Instalação silenciosa: `Vizu_Setup_9.14.1_x64.exe /install /S` · desinstalar: `Vizu.exe /uninstall [/S]`.
 - Diagnóstico de um arquivo: `Vizu.exe /diag "arquivo"` ou arraste o arquivo sobre `diagnostico.bat`. Sem arquivo (`Vizu.exe /diag` ou dois cliques no `.bat`): diagnóstico do Espaço e do Alt.
 - A biblioteca `DesignThumbs.dll` (miniaturas do Explorer) e a chave de registro `HKCU\Software\DesignThumbs` mantêm o
   nome antigo, para não quebrar as miniaturas nem as configurações de quem já usa.
@@ -168,6 +169,7 @@ https://docs.github.com/site-policy/privacy-policies/github-general-privacy-stat
 <details>
 <summary><b>Histórico de versões</b></summary>
 
+- **v9.14.1** — **Nova seção Monitor** na Configuração, com os widgets de disco, desempenho, uso de IA e bateria. **Uso de IA:** um trilho preso à borda da tela, com um anel por IA mostrando o limite de 5 horas do Claude e do ChatGPT; passe o mouse para ver a sessão, o limite semanal e quando cada um volta. Arraste para cima e para baixo ou leve até outra borda (esquerda, direita, topo ou base). Um botão instala o Claude Code e abre o login, e o Vizu pede ao próprio Claude Code para renovar o login antes de vencer. **Bateria:** fones, mouses, teclados e controles Bluetooth, do mais fraco para o mais forte, com destaque abaixo de 15%, e pode ser anexada à barra de tarefas como o relógio.
 - **v9.14.0** — **Dois widgets novos** (em Configuração › Limpeza › Avançado, desligados por padrão): **uso de IA**, com os limites de 5 horas e semanal do Claude e do ChatGPT e quando cada um volta, lido pelo login do Claude Code e do Codex; e **bateria**, com o nível dos fones, mouses, teclados e controles Bluetooth, do mais fraco para o mais forte, com destaque abaixo de 15%.
 - **v9.13.3** — **Espaço e Alt no Explorer novo do Windows** (builds Insider com partes em WinUI): o Vizu não conseguia ler os arquivos selecionados, então a prévia não abria e o Alt mostrava o menu de atalhos em vez do de converter. Agora, se a lista não for encontrada pelo identificador, ele usa a aba ativa da mesma janela. A inspeção também testa a leitura da seleção, solta o Alt sem ativar o menu do Explorer e não conta PDFs (só prévia no Vizu) nem o gerador do CorelDRAW como erro de miniatura.
 - **v9.13.2** — **Inspeção do Vizu** (Configurações › Sistema › Avançado): um botão testa de verdade o Espaço (prévia), o Alt com arquivo selecionado (menu de converter), o Alt sem seleção (menu de atalhos) e as miniaturas de uma pasta que você escolhe, comparando a imagem do Vizu com a que o Explorer mostra. O resultado vira um relatório em `%LOCALAPPDATA%\Vizu\Inspecao` (Markdown com os dados em JSON, fácil de ler por pessoas e por assistentes como Claude ou Codex) e o Vizu abre um e-mail pronto para o suporte com o relatório anexado.
