@@ -833,7 +833,9 @@ static void AltTick() {
         if (vk != VK_MENU && vk != VK_LMENU && vk != VK_RMENU && GetAsyncKeyState(vk) < 0) { g_altDownAt = now; g_altFired = false; break; }
     if (!g_altFired && !g_open && !IsWindowVisible(g_altWnd) && now - g_altDownAt >= g_cfg.altDelay) {
         g_altFired = true;
-        if (HWND dv = FocusedFileList()) { g_defView = dv; ShowAltPopup(); }
+        HWND dv = FocusedFileList();
+        KeyLog(dv ? L"alt: segurado com a lista em foco" : L"alt: segurado, mas a lista de arquivos não está em foco");
+        if (dv) { g_defView = dv; ShowAltPopup(); }
     }
 }
 
@@ -2155,6 +2157,7 @@ static void ShowAltPopup() {
     g_ringLaunch = g_convFiles.empty(); // nada selecionado: atalhos de programas
     if (g_ringLaunch) { g_side = 0; BuildLauncher(); }
     else BuildSides();
+    { wchar_t b[160]; swprintf(b, 160, L"alt: %zu arquivo(s) selecionado(s), menu de %ls com %zu lado(s)", g_convFiles.size(), g_ringLaunch ? L"atalhos" : L"converter", g_sides.size()); KeyLog(b); }
     if (g_sides.empty()) return;
     POINT pt; GetCursorPos(&pt);
     g_ringScale = GetDpiForWindow(g_defView) / 96.0f;
