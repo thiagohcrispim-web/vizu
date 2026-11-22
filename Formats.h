@@ -21,7 +21,7 @@ typedef std::vector<BYTE> Bytes;
 // Extensões tratadas (registradas como miniatura e decodificadas direto pelo Vizu).
 static const wchar_t* const kExtensions[] = {
     L".psd", L".psb", L".ai", L".indd", L".indt", L".eps", L".epsf", L".epsi", L".svg", L".svgz",
-    L".cdr", L".afdesign", L".afphoto", L".afpub", L".xd", L".sketch", L".kra", L".ora", L".procreate",
+    L".cdr", L".af", L".afdesign", L".afphoto", L".afpub", L".xd", L".sketch", L".kra", L".ora", L".procreate",
     L".ase", L".aco", // paletas de cor
     // câmeras: usa o JPEG de preview embutido no RAW
     L".cr2", L".cr3", L".crw", L".nef", L".nrw", L".arw", L".srf", L".sr2", L".dng", L".raf", L".orf",
@@ -417,6 +417,35 @@ inline bool Gunzip(const Bytes& in, Bytes& out) {
     if (p >= in.size()) return false;
     out.reserve((size_t)LE(&in[in.size() - 4], 4));
     return Inflater(&in[p], in.size() - p, out, 256u << 20).Run();
+}
+
+// ---------- Affinity (.af da Canva; .afdesign/.afphoto/.afpub) ----------
+// O arquivo começa com 00 FF 4B 41 e guarda a miniatura do documento como um PNG logo depois da marca "Thmb"
+// (no fim do arquivo, cerca de 512 px no lado maior). O documento em si é proprietário: só a miniatura é lida.
+inline bool IsAffinityMagic(const BYTE* m) { return m[0] == 0x00 && m[1] == 0xFF && m[2] == 0x4B && m[3] == 0x41; }
+inline bool AffinityPreview(IStream* s, Bytes& img) {
+    UINT64 size = StreamSize(s);
+    if (size < 64) return false;
+    size_t n = (size_t)min<UINT64>(size, 64u << 20); // a miniatura fica no fim: lê só a cauda
+    Bytes b(n);
+    if (!ReadAt(s, size - n, b.data(), n)) return false;
+    static const BYTE kPng[8] = {0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A};
+    for (size_t t = n; t-- > 4;) {
+        if (memcmp(&b[t - 4], "Thmb", 4) != 0) continue;
+        size_t lim = min(n, t + 256);
+        for (size_t p = t; p + 8 <= lim; ++p) {
+            if (memcmp(&b[p], kPng, 8) != 0) continue;
+            for (size_t q = p + 8; q + 12 <= n;) { // percorre os blocos do PNG até o IEND
+                UINT64 len = ((UINT64)b[q] << 24) | ((UINT64)b[q + 1] << 16) | ((UINT64)b[q + 2] << 8) | b[q + 3];
+                if (len > n || q + 12 + len > n) return false;
+                bool end = memcmp(&b[q + 4], "IEND", 4) == 0;
+                q += 12 + (size_t)len;
+                if (end) { img.assign(b.begin() + p, b.begin() + q); return true; }
+            }
+            return false;
+        }
+    }
+    return false;
 }
 
 // ---------- ZIP: CDR, Affinity, XD, Sketch, Krita, OpenRaster, Procreate ----------
@@ -1161,6 +1190,10 @@ inline HRESULT RenderUnchecked(IStream* s, const std::wstring& ext, UINT cx, int
         Bytes img;
         return ZipPreview(s, img) ? DecodeWic(img.data(), img.size(), cx, out, alpha) : E_FAIL;
     }
+    if (IsAffinityMagic(magic)) {
+        Bytes img;
+        return AffinityPreview(s, img) ? DecodeWic(img.data(), img.size(), cx, out, alpha) : E_FAIL;
+    }
 
     Bytes b;
     if (!ReadHead(s, b, 512u << 20) || b.size() < 8) return E_FAIL;
@@ -1311,6 +1344,14 @@ inline void GetInfoUnchecked(IStream* s, const std::wstring& ext, Info* in) {
             XmpInfo(b, &x);
             in->app = x.app; in->fonts = x.fonts; in->fontFamilies = x.fontFamilies;
         }
+        return;
+    }
+    if (IsAffinityMagic(magic)) {
+        Bytes img;
+        if (AffinityPreview(s, img)) WicInfo(img.data(), img.size(), in);
+        in->app = L"Affinity";
+        in->note = T(L"miniatura do Affinity", L"Affinity thumbnail", L"miniatura de Affinity");
+        in->w = in->h = 0; // tamanho da miniatura, não do documento
         return;
     }
     if (memcmp(magic, "PK\3\4", 4) == 0) {
