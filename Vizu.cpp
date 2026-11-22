@@ -166,7 +166,10 @@ static HWND FocusedFileList() {
     if (!GetGUIThreadInfo(GetWindowThreadProcessId(fg, nullptr), &gti)) return nullptr;
     if (gti.flags & (GUI_INMENUMODE | GUI_POPUPMENUMODE | GUI_INMOVESIZE)) return nullptr;
     HWND f = gti.hwndFocus;
-    if (!f || ClassOf(f) != L"DirectUIHWND") return nullptr;
+    // Explorer: DirectUIHWND. Área de trabalho (Progman/WorkerW): SysListView32, também filho do SHELLDLL_DefView.
+    if (!f) return nullptr;
+    std::wstring fc = ClassOf(f);
+    if (fc != L"DirectUIHWND" && fc != L"SysListView32") return nullptr;
     // Cursor de texto em outra janela = renomeando ou digitando. Na própria lista ele aparece com
     // acessibilidade (Lupa, Narrador, indicador do cursor) e alguns teclados/IMEs: não é digitação.
     if (gti.hwndCaret && gti.hwndCaret != f) return nullptr;
@@ -2744,7 +2747,8 @@ static void CleanOnTheme() {
 enum { kTogSpace = 1, kTogAlt, kDelayMinus, kDelayPlus, kDpi72, kDpi300, kPdfSmall, kPdfRaw, kQualMinus, kQualPlus, kTogAuto, kBtnFolder, kBtnQuit, kBtnClose,
        kTogPicker, kBtnFolders, kLangPt, kLangEn, kLangEs, kTogUpdate, kBtnUpdate, kTheme0, kTheme1, kTheme2, kTheme3, kWebpMinus, kWebpPlus, kTogTray, kTogTempDel, kNeon0, kNeon1, kNeon2, kNeon3, kNeon4, kNeon5, kNeonRgb,
        kClockOn, kClockFont, kPomoT0, kPomoT1, kPomoT2, kPomoC0, kPomoC1, kPomoC2, kPomoC3, kTheftHist, kUiFont, kOcrOn, kOcrKeep, kOcrJoin, kOcrLang, kClk100, kClk90, kClk70, kClockDock, kSte, kTheme4, kTheftOn, kFocoOn, kAgendaOn, kVecText, kVecCurves, kSysToggle,
-       kClOpen, kAge1, kAge7, kAge30, kTogCleanBin, kTogDiskW, kTogDiskWarn, kDiskLimMinus, kDiskLimPlus, kDiskAll0, kDiskAll1, kTogPerfW, kTogAiW, kTogBatW, kAiInstall, kAiEdge0, kAiEdge1, kAiEdge2, kAiEdge3, kTogBatDock, kTogClockClean, kPrimao,
+       kClOpen, kAge1, kAge7, kAge30, kTogCleanBin, kTogDiskW, kTogDiskWarn, kDiskLimMinus, kDiskLimPlus, kDiskAll0, kDiskAll1, kTogPerfW, kTogAiW, kTogBatW, kAiInstall, kAiEdge0, kAiEdge1, kAiEdge2, kAiEdge3, kAiRecenter, kAiShowLeft, kAiWarnMinus, kAiWarnPlus, kAiCritMinus, kAiCritPlus, kAiLimReset,
+       kAiWeek0, kAiWeek1, kAiWeek2, kAiShow0, kAiShow1, kAiShow2, kAiHideFull, kAiNotify, kAiSound, kAiPreview, kAiSize0, kAiSize1, kAiSize2, kTogBatDock, kTogClockClean, kPrimao,
        kPreset0, kPreset1, kPreset2, kTogOcrBtn, kHkOcr, kHkClean, kAdv0, kAdv1, kAdv2, kAdv3, kAdv4, kAdv5, kLinkAbout, kLinkThanks, kBack, kBtnUninstall, kBtnLiteUpgrade, kTogChat, kChatEdit, kRingReset, kInspect };
 static const UINT kNeonPresets[6] = {0xFF6633, 0xFF2D95, 0x00E5FF, 0xB6FF3B, 0xA855F7, 0xFFD400};
 
@@ -3070,6 +3074,21 @@ static void SettingsAction(int id) {
     case kTogBatW: WriteDword(L"BatWidget", !WidgetOn(kWBat)); WidgetEnable(kWBat, WidgetOn(kWBat)); return;
     case kAiInstall: ClaudeInstallAndLogin(); return;
     case kAiEdge0: case kAiEdge1: case kAiEdge2: case kAiEdge3: { int i = id - kAiEdge0; NotchSetEdge(i == 0 ? kEdgeLeft : i == 1 ? kEdgeRight : i == 2 ? kEdgeTop : kEdgeBottom); return; }
+    case kAiRecenter: NotchRecenter(); return;
+    case kAiShowLeft: WriteDword(L"AiShowLeft", !ReadDword(L"AiShowLeft", 0)); NotchApply(); return;
+    case kAiWarnMinus: case kAiWarnPlus: {
+        int w = max(5, min(90, NotchWarn() + (id == kAiWarnPlus ? 5 : -5)));
+        WriteDword(L"AiWarn", (DWORD)w); if (NotchCrit() < w + 5) WriteDword(L"AiCrit", (DWORD)(w + 5)); NotchApply(); return;
+    }
+    case kAiCritMinus: case kAiCritPlus: WriteDword(L"AiCrit", (DWORD)max(NotchWarn() + 5, min(100, NotchCrit() + (id == kAiCritPlus ? 5 : -5)))); NotchApply(); return;
+    case kAiLimReset: WriteDword(L"AiWarn", 75); WriteDword(L"AiCrit", 90); NotchApply(); return;
+    case kAiWeek0: case kAiWeek1: case kAiWeek2: WriteDword(L"AiWeekRing", (DWORD)(id - kAiWeek0)); NotchApply(); return;
+    case kAiShow0: case kAiShow1: case kAiShow2: WriteDword(L"AiShow", (DWORD)(id - kAiShow0)); NotchApply(); return;
+    case kAiHideFull: WriteDword(L"AiHideFull", !ReadDword(L"AiHideFull", 1)); NotchApply(); return;
+    case kAiNotify: WriteDword(L"AiResetNotify", !ReadDword(L"AiResetNotify", 1)); return;
+    case kAiSound: WriteDword(L"AiResetSound", !ReadDword(L"AiResetSound", 1)); return;
+    case kAiPreview: NotchToastShow(0, 0, true); return;
+    case kAiSize0: case kAiSize1: case kAiSize2: WriteDword(L"AiSize", (DWORD)(id - kAiSize0)); NotchApply(); return;
     case kTogBatDock: if (!WidgetOn(kWBat)) { WriteDword(L"BatDocked", !ReadDword(L"BatDocked", 0)); return; } WidgetDock(kWBat, !g_wd[kWBat].docked); return;
     case kTogDiskWarn: WriteDword(L"DiskWarn", !ReadDword(L"DiskWarn", 1)); WidgetsRenderAll(); return;
     case kDiskLimMinus: case kDiskLimPlus: { int v = (int)ReadDword(L"DiskLimit", 10) + (id == kDiskLimPlus ? 5 : -5); WriteDword(L"DiskLimit", (DWORD)max(5, min(30, v))); WidgetsRenderAll(); return; }
@@ -3429,6 +3448,21 @@ static void PaintSettings(HWND h) {
         rows.push_back({SH, 1, [&](D2D1_RECT_F r) { rlabel(r, T(L"Borda", L"Edge", L"Borde"), T(L"Ou arraste o widget até outra borda", L"Or drag the widget to another edge", L"O arrastra el widget a otro borde"));
             int e = (int)min(3ul, (unsigned long)ReadDword(L"AiEdge", 0)); int sel = e == 1 ? 0 : e == 0 ? 1 : e; // ordem na tela: esquerda, direita, topo, base
             rseg(r, 300 * s, {T(L"Esquerda", L"Left", L"Izquierda"), T(L"Direita", L"Right", L"Derecha"), T(L"Topo", L"Top", L"Arriba"), T(L"Base", L"Bottom", L"Abajo")}, sel, kAiEdge0); }});
+        rows.push_back({SH, 1, [&](D2D1_RECT_F r) { rlabel(r, T(L"Posição", L"Position", L"Posición"), T(L"Volta o trilho para o meio da borda", L"Moves the rail back to the middle of the edge", L"Devuelve el riel al centro del borde")); rpill(r, kAiRecenter, T(L"Recentralizar", L"Recenter", L"Recentrar"), 150 * s); }});
+        rows.push_back({SH, 1, [&](D2D1_RECT_F r) { rlabel(r, T(L"Exibição", L"Display", L"Visualización"), T(L"Recolhido, o trilho vira uma faixa fina na borda", L"Collapsed, the rail becomes a thin strip on the edge", L"Recogido, el riel queda como una franja fina en el borde"));
+            rseg(r, 330 * s, {T(L"Sempre exibir", L"Always show", L"Mostrar siempre"), T(L"Ao passar o cursor", L"On hover", L"Al pasar el cursor"), T(L"Ocultar", L"Hide", L"Ocultar")}, NotchShowMode(), kAiShow0); }});
+        rows.push_back({SH, 1, [&](D2D1_RECT_F r) { rlabel(r, T(L"Tamanho", L"Size", L"Tamaño"), T(L"Do trilho; o cartão continua no tamanho normal", L"Of the rail; the card keeps its normal size", L"Del riel; la tarjeta mantiene su tamaño normal"));
+            rseg(r, 270 * s, {T(L"Pequeno", L"Small", L"Pequeño"), T(L"Médio", L"Medium", L"Mediano"), T(L"Grande", L"Large", L"Grande")}, (int)min(2ul, (unsigned long)ReadDword(L"AiSize", 1)), kAiSize0); }});
+        rows.push_back({SH, 1, [&](D2D1_RECT_F r) { rlabel(r, T(L"Anel semanal", L"Weekly ring", L"Anillo semanal"), T(L"Um segundo anel, mais fino, com a cota da semana", L"A second, thinner ring with the weekly quota", L"Un segundo anillo, más fino, con la cuota semanal"));
+            rseg(r, 270 * s, {T(L"Desativado", L"Off", L"Desactivado"), T(L"Dentro", L"Inside", L"Dentro"), T(L"Fora", L"Outside", L"Fuera")}, NotchWeekMode(), kAiWeek0); }});
+        rows.push_back({SH, 1, [&](D2D1_RECT_F r) { rlabel(r, T(L"Mostrar o restante em vez do usado", L"Show what's left instead of used", L"Mostrar lo restante en lugar de lo usado"), T(L"O anel continua enchendo pelo uso", L"The ring still fills by usage", L"El anillo sigue llenándose por el uso")); rtoggle(kAiShowLeft, r, ReadDword(L"AiShowLeft", 0) != 0); }});
+        rows.push_back({SH, 1, [&](D2D1_RECT_F r) { rlabel(r, T(L"Limite de atenção", L"Warning threshold", L"Límite de atención"), T(L"A partir daqui o anel fica amarelo", L"From here the ring turns yellow", L"Desde aquí el anillo se pone amarillo")); rstep(r, kAiWarnMinus, kAiWarnPlus, std::to_wstring(NotchWarn()) + L"%"); }});
+        rows.push_back({SH, 1, [&](D2D1_RECT_F r) { rlabel(r, T(L"Limite crítico", L"Critical threshold", L"Límite crítico"), T(L"A partir daqui o anel fica vermelho", L"From here the ring turns red", L"Desde aquí el anillo se pone rojo")); rstep(r, kAiCritMinus, kAiCritPlus, std::to_wstring(NotchCrit()) + L"%"); }});
+        rows.push_back({SH, 1, [&](D2D1_RECT_F r) { rlabel(r, T(L"Cores dos limites", L"Threshold colors", L"Colores de los límites"), T(L"75% e 90%", L"75% and 90%", L"75% y 90%")); rpill(r, kAiLimReset, T(L"Restaurar padrões", L"Restore defaults", L"Restaurar valores"), 170 * s); }});
+        rows.push_back({SH, 1, [&](D2D1_RECT_F r) { rlabel(r, T(L"Recolher em apps de tela cheia", L"Hide in full-screen apps", L"Ocultar en apps a pantalla completa"), T(L"Vídeos, jogos e apresentações", L"Videos, games and presentations", L"Videos, juegos y presentaciones")); rtoggle(kAiHideFull, r, ReadDword(L"AiHideFull", 1) != 0); }});
+        rows.push_back({SH, 1, [&](D2D1_RECT_F r) { rlabel(r, T(L"Avisar quando um limite renovar", L"Notify when a limit renews", L"Avisar cuando un límite se renueve"), T(L"Um cartão perto do trilho, por 8 segundos", L"A card near the rail, for 8 seconds", L"Una tarjeta cerca del riel, por 8 segundos")); rtoggle(kAiNotify, r, ReadDword(L"AiResetNotify", 1) != 0); }});
+        rows.push_back({SH, 1, [&](D2D1_RECT_F r) { rlabel(r, T(L"Som do aviso", L"Notification sound", L"Sonido del aviso"), nullptr); rtoggle(kAiSound, r, ReadDword(L"AiResetSound", 1) != 0); }});
+        rows.push_back({SH, 1, [&](D2D1_RECT_F r) { rlabel(r, T(L"Aviso de limite renovado", L"Limit renewed notice", L"Aviso de límite renovado"), T(L"Mostra o cartão como ele vai aparecer", L"Shows the card as it will appear", L"Muestra la tarjeta como aparecerá")); rpill(r, kAiPreview, T(L"Ver prévia", L"Preview", L"Ver vista previa"), 150 * s); }});
         rows.push_back({SH, 1, [&](D2D1_RECT_F r) { bool inst = ClaudeExe().empty();
             rlabel(r, L"Claude Code", inst ? T(L"Necessário para ler o uso do Claude: instala e abre o login", L"Needed to read Claude usage: installs and opens sign-in", L"Necesario para leer el uso de Claude: instala y abre el inicio de sesión")
                                             : T(L"Instalado. Entre de novo se o login vencer", L"Installed. Sign in again if the session expires", L"Instalado. Vuelve a iniciar sesión si vence"));

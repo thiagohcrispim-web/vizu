@@ -16,6 +16,7 @@
 // com receptor USB próprio (Logitech, Razer...) usam protocolos de cada marca e ficam de fora.
 
 #include <setupapi.h>
+#include <mmsystem.h>
 #include <devpropdef.h>
 #include <mutex>
 #include <atomic>
