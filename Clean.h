@@ -115,7 +115,7 @@ inline std::wstring RealPath(const std::wstring& p) {
 // Arquivos de trabalho: nunca saem, mesmo dentro de um alvo.
 inline bool BlockedExt(const std::wstring& path) {
     static const wchar_t* ext[] = {L".psd", L".psb", L".psdt", L".ai", L".ait", L".indd", L".indt", L".idml", L".prproj", L".aep", L".aet", L".pdf",
-                                   L".cdr", L".afdesign", L".afphoto", L".afpub", L".sketch", L".fig", L".xd"};
+                                   L".cdr", L".af", L".afdesign", L".afphoto", L".afpub", L".sketch", L".fig", L".xd"};
     size_t dot = path.find_last_of(L".\\");
     if (dot == std::wstring::npos || path[dot] != L'.') return false;
     for (auto e : ext) if (!_wcsicmp(path.c_str() + dot, e)) return true;
