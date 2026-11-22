@@ -164,7 +164,12 @@ static HWND FocusedFileList() {
     if (!fg) return nullptr;
     GUITHREADINFO gti = {sizeof(gti)};
     if (!GetGUIThreadInfo(GetWindowThreadProcessId(fg, nullptr), &gti)) return nullptr;
-    if (gti.flags & (GUI_INMENUMODE | GUI_POPUPMENUMODE | GUI_INMOVESIZE)) return nullptr;
+    // Na área de trabalho, segurar Alt põe a janela do desktop em "modo menu" (o Windows espera um atalho de menu
+    // que ela nem tem); no Explorer isso não acontece. Por isso o modo menu só barra fora da área de trabalho.
+    std::wstring fgc = ClassOf(fg);
+    bool desk = fgc == L"Progman" || fgc == L"WorkerW";
+    if (gti.flags & (GUI_POPUPMENUMODE | GUI_INMOVESIZE)) return nullptr;
+    if ((gti.flags & GUI_INMENUMODE) && !(desk && GetAsyncKeyState(VK_MENU) < 0)) return nullptr;
     HWND f = gti.hwndFocus;
     // Explorer: DirectUIHWND. Área de trabalho (Progman/WorkerW): SysListView32, também filho do SHELLDLL_DefView.
     if (!f) return nullptr;
