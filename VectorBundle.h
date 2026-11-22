@@ -154,7 +154,10 @@ inline bool Prepare(const std::wstring& root, std::wstring& staging, std::wstrin
     auto fail = [&]() { Remove(root, staging); staging.clear(); return false; };
     std::wstring archive = staging + L"\\engine.7z";
     // Integridade: se o arquivo baixado não confere, descarta e baixa de novo uma vez.
-    for (int pass = 0; pass < 2; ++pass) {
+    // Cópia local (o teste do CI usa o cache do GitHub em VIZU_ENGINE_ARCHIVE): só vale se o SHA-256 conferir.
+    wchar_t local[MAX_PATH] = {};
+    if (GetEnvironmentVariableW(L"VIZU_ENGINE_ARCHIVE", local, MAX_PATH) && FileSha256(local) == kSha256 && CopyFileW(local, archive.c_str(), FALSE)) {}
+    else for (int pass = 0; pass < 2; ++pass) {
         if (!Fetch(kUrl, archive, onProgress, error)) return fail();
         if (FileSha256(archive) == kSha256) break;
         DeleteFileW(archive.c_str());

@@ -17,6 +17,22 @@ jobs:
         run: |
           if not exist build mkdir build
           cl /nologo /std:c++17 /utf-8 /EHsc /W4 /DUNICODE /D_UNICODE tests\vector_bundle_tests.cpp /Fe:build\bundle-tests.exe /link shlwapi.lib ole32.lib xmllite.lib advapi32.lib bcrypt.lib urlmon.lib winhttp.lib
+      # Cópia do motor no cache do GitHub (chave = SHA-256 fixo do VectorBundle.h): o teste não depende do inkscape.org estar no ar.
+      - name: Restore vector engine archive
+        id: engine
+        uses: actions/cache@v4
+        with:
+          path: build/engine.7z
+          key: inkscape-1.4.2-757e0358512630e65505a4cca89885369087f2908469439bc41b5a346604cbd4
+      - name: Download vector engine archive (with retries)
+        if: steps.engine.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          curl -fL --retry 6 --retry-all-errors --retry-delay 20 --connect-timeout 30 -o build/engine.7z \
+            https://media.inkscape.org/dl/resources/file/inkscape-1.4.2_2025-05-13_f4327f4-x64.7z
+          echo "757e0358512630e65505a4cca89885369087f2908469439bc41b5a346604cbd4  build/engine.7z" | sha256sum -c -
       - name: Test download, installation, SVG/EPS conversion, reinstall and uninstall
         shell: cmd
+        env:
+          VIZU_ENGINE_ARCHIVE: ${{ github.workspace }}\build\engine.7z
         run: build\bundle-tests.exe
