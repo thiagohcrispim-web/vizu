@@ -582,6 +582,11 @@ static LRESULT CALLBACK WidgetProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             wd.pressed = wd.dragging = false;
             return 0;
         }
+        if (k == kWBat && wd.docked) { // anexada: só realça; não abre o cartão em cima da barra de tarefas
+            if (!wd.hot) { wd.hot = 1; WidgetRender(k); }
+            TRACKMOUSEEVENT te = {sizeof(te), TME_LEAVE, h, 0}; TrackMouseEvent(&te);
+            return 0;
+        }
         int hot = ui::Hit(wd.rBtn, pt) ? 1 : ui::Hit(wd.rClose, pt) ? 2 : ui::Hit(wd.rOpt, pt) ? 3 : ui::Hit(wd.rApply, pt) ? 4 : ui::Hit(wd.rBack, pt) ? 5 : 0;
         for (size_t i = 0; i < wd.rItems.size(); ++i) if (ui::Hit(wd.rItems[i], pt)) hot = 10 + (int)i;
         bool changed = hot != wd.hot || !wd.open;
@@ -591,7 +596,8 @@ static LRESULT CALLBACK WidgetProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         TRACKMOUSEEVENT te = {sizeof(te), TME_LEAVE, h, 0}; TrackMouseEvent(&te);
         return 0;
     }
-    case WM_MOUSELEAVE: wd.leaveAt = GetTickCount64() + (wd.mode ? 2500 : 400); wd.hot = 0; return 0; // fecha com um respiro (mais longo no Otimizar)
+    case WM_MOUSELEAVE: if (k == kWBat && wd.docked) { wd.hot = 0; WidgetRender(k); return 0; }
+        wd.leaveAt = GetTickCount64() + (wd.mode ? 2500 : 400); wd.hot = 0; return 0; // fecha com um respiro (mais longo no Otimizar)
     case WM_SETCURSOR: SetCursor(LoadCursor(nullptr, wd.hot ? IDC_HAND : IDC_ARROW)); return TRUE;
     case WM_LBUTTONDOWN: wd.pressed = true; wd.down = {GET_X_LPARAM(lp), GET_Y_LPARAM(lp)}; SetCapture(h); return 0;
     case WM_LBUTTONUP: {
@@ -603,7 +609,7 @@ static LRESULT CALLBACK WidgetProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         if (ui::Hit(wd.rBack, pt)) { wd.mode = 0; WidgetRender(k); return 0; }
         if (ui::Hit(wd.rApply, pt)) { wd.mode = 0; wd.open = false; WidgetRender(k); OptApply(h); return 0; }
         if (k == kWBat) {
-            if (ui::Hit(wd.rBtn, pt)) BatRefresh(h);
+            if (wd.docked || ui::Hit(wd.rBtn, pt)) BatRefresh(h); // anexada: clique atualiza
             return 0;
         }
         if (ui::Hit(wd.rClose, pt) && !g_perf.top.empty()) {
