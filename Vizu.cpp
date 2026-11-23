@@ -4173,15 +4173,13 @@ static bool InstallFiles(int edition, const installui::Progress& progress, std::
     progress(5, vectors ? T(L"Preparando o motor vetorial…",L"Preparing the vector engine…",L"Preparando el motor vectorial…") : T(L"Preparando os arquivos do Vizu…",L"Preparing Vizu files…",L"Preparando los archivos de Vizu…"), {});
     vbundle::Cancel().store(false);
     bool engineReady = vbundle::Configure(dir, vectors, error, [&progress](unsigned long long got, unsigned long long total, double bps) {
-        int pct = total ? 10 + (int)(55.0 * got / total) : 10; // 10 a 65: a etapa seguinte começa em 65
+        int pct = total ? 10 + (int)(50.0 * got / total) : 10; // 10 a 60: a conferência ocupa 60 e a instalação começa em 65
         progress(pct, T(L"Baixando o motor vetorial…", L"Downloading the vector engine…", L"Descargando el motor vectorial…"), {got, total, bps});
     });
     if (!engineReady) return false;
     // Etapa: Conferindo a integridade do motor vetorial (SHA-256 + verificação de inicialização)
     if (vectors) {
         progress(60, T(L"Conferindo a integridade…",L"Checking integrity…",L"Verificando la integridad…"), {});
-        // A verificação já ocorreu dentro de vbundle::Prepare (SHA-256 do arquivo + inkscape --version)
-        // Apenas reportamos o progresso aqui para o UI mostrar a etapa correta
     }
     { // instalação nova (sem Vizu registrado): começa no preset Design, aplicado na primeira vez que o Vizu abrir
         DWORD sz = 0;
