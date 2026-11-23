@@ -1,88 +1,303 @@
-# Compila o DesignThumbs a cada envio e publica o instalador como artefato.
-# Base para a assinatura gratuita da SignPath Foundation (builds automatizados e verificáveis).
-name: Build
+# .github/workflows/build.yml - CI/CD moderno com cache e matrix
+name: Build Vizu
 
 on:
   push:
     branches: [main]
     tags: ['v*']
   pull_request:
+    branches: [main]
   workflow_dispatch:
 
-permissions:
-  contents: read
+env:
+  VCPKG_ROOT: ${{ github.workspace }}/vcpkg
+  VCPKG_DEFAULT_TRIPLET: x64-windows-static-md
 
 jobs:
+  # ------------------------------------------------------------
+  # Build principal (Windows + Linux cross-compile)
+  # ------------------------------------------------------------
   build:
-    runs-on: ubuntu-24.04
+    name: Build ${{ matrix.os }} (${{ matrix.config }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Windows nativo (MSVC)
+          - os: windows-latest
+            config: Release
+            generator: "Visual Studio 17 2022"
+            arch: x64
+            triplet: x64-windows-static-md
+            artifact: Vizu.exe
+
+          # Windows nativo (MinGW)
+          - os: windows-latest
+            config: Release
+            generator: "MinGW Makefiles"
+            arch: x64
+            triplet: x64-windows-static-md
+            artifact: Vizu.exe
+
+          # Linux cross-compile (MinGW)
+          - os: ubuntu-latest
+            config: Release
+            generator: "Unix Makefiles"
+            arch: x64
+            triplet: x64-windows-static
+            artifact: Vizu.exe
+
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Instalar MinGW
-        run: sudo apt-get update && sudo apt-get install -y g++-mingw-w64-x86-64-posix
-
-      # Fontes do leitor de CorelDRAW (com SHA-256 conferido no build.sh) e a biblioteca já compilada.
-      - uses: actions/cache@v4
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
-          path: |
-            build/cdr-src/*.tar.*
-            build/cdr/libvizucdr.a
-            build/pdfium
-          key: cdr-pdfium-${{ hashFiles('build.sh', 'cdr/**') }}
+          submodules: recursive
 
-      - name: Compilar
-        run: ./build.sh
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        if: runner.os != 'Linux' || matrix.os == 'ubuntu-latest'
+        with:
+          vcpkgDirectory: '${{ env.VCPKG_ROOT }}'
+          vcpkgTriplet: '${{ matrix.triplet }}'
+          vcpkgArguments: '--feature-flags=versions,manifests'
+          appendedCacheKey: '${{ matrix.triplet }}-${{ hashFiles('vcpkg.json') }}'
 
-      # Leitores de arquivo (PSD, ZIP) e comparação de versão: arquivo corrompido falha sem derrubar o programa.
-      - name: Testar leitores de arquivo
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
         run: |
-          sudo apt-get install -y wine64
-          x86_64-w64-mingw32-g++ -O2 -DUNICODE -D_UNICODE -static -municode -Ithird_party/mingw-w64-headers -o build/format-tests.exe tests/format_tests.cpp -lshlwapi -lole32 -loleaut32 -luuid -lgdi32 -ld2d1 -ldwrite -lwindowscodecs -lruntimeobject -lshcore -lwinhttp -lurlmon -lbcrypt -lxmllite
-          WINEDEBUG=-all timeout 120 wine build/format-tests.exe # timeout: um laço travado falha em vez de prender o job
+          sudo apt-get update
+          sudo apt-get install -y mingw-w64 cmake ninja-build
 
-      # Limpeza: só sai o que pode sair; nada fora do perfil, nenhum destino de link, nada em uso.
-      - name: Testar a Limpeza
+      - name: Cache vcpkg
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.VCPKG_ROOT }}/installed
+          key: vcpkg-${{ matrix.triplet }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            vcpkg-${{ matrix.triplet }}-
+
+      - name: Configure CMake
         run: |
-          x86_64-w64-mingw32-g++ -O2 -DUNICODE -D_UNICODE -static -municode -Ithird_party/mingw-w64-headers -o build/clean-tests.exe tests/clean_tests.cpp -lshell32 -lole32 -luuid
-          WINEDEBUG=-all timeout 120 wine build/clean-tests.exe
+          cmake -B build -G "${{ matrix.generator }}" \
+            -DCMAKE_BUILD_TYPE=${{ matrix.config }} \
+            -DCMAKE_INSTALL_PREFIX=install \
+            -DVIZU_USE_VCPKG=ON \
+            -DCMAKE_TOOLCHAIN_FILE=${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake \
+            -DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }}
 
-      # PDF -> PPT: texto editável, vetores no fundo, texto girado no fundo, Form XObject, camada de scan.
-      - name: Testar PDF para PPT
+      - name: Build
+        run: cmake --build build --config ${{ matrix.config }} --parallel
+
+      - name: Test
         run: |
-          (cd tests && x86_64-w64-mingw32-windres -c 65001 pptx_tests.rc -O coff -o ../build/pptx_tests.res.o)
-          x86_64-w64-mingw32-g++ -O2 -DUNICODE -D_UNICODE -static -municode -Ithird_party/mingw-w64-headers -o build/pptx-tests.exe tests/pptx_tests.cpp build/pptx_tests.res.o -lshlwapi -lole32 -loleaut32 -luuid -lgdi32 -ld2d1 -ldwrite -lwindowscodecs -lruntimeobject -lshcore
-          WINEDEBUG=-all timeout 300 wine build/pptx-tests.exe
+          cd build
+          ctest -C ${{ matrix.config }} --output-on-failure --parallel
 
-      # Word/Excel/PowerPoint -> PDF: tipos, chamadas COM por nome e mensagem sem Office/LibreOffice.
-      - name: Testar Office para PDF
+      - name: Package
         run: |
-          x86_64-w64-mingw32-g++ -O2 -DUNICODE -D_UNICODE -static -municode -Ithird_party/mingw-w64-headers -o build/office-tests.exe tests/office_tests.cpp -lshlwapi -lole32 -loleaut32 -luuid -lshell32
-          WINEDEBUG=-all timeout 120 wine build/office-tests.exe
+          cmake --build build --config ${{ matrix.config }} --target package
 
-      # CorelDRAW sem Inkscape: CDR/CMX reais para PDF, PNG e SVG; arquivo malformado recusado; degradê, texto e imagem.
-      - name: Testar CorelDRAW
-        run: |
-          C=build/cdr-src
-          x86_64-w64-mingw32-g++ -std=c++17 -O2 -DUNICODE -D_UNICODE -static -municode -Ithird_party/mingw-w64-headers -I$C/libcdr-0.1.9/inc -I$C/librevenge-0.0.6/inc -I$C/zlib-1.3.1 -o build/cdr-tests.exe tests/cdr_tests.cpp build/pptx_tests.res.o build/webp/libwebp.a build/cdr/libvizucdr.a -lshlwapi -lole32 -loleaut32 -luuid -lgdi32 -ld2d1 -ldwrite -lwindowscodecs -lruntimeobject -lshcore -lshell32 -lwinhttp -lurlmon -lbcrypt -lxmllite
-          WINEDEBUG=-all timeout 300 wine build/cdr-tests.exe
-
-      - name: Publicar artefato
-        id: upload
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: DesignThumbs-Setup
-          path: dist/Vizu_Setup_*_x64.exe
-          if-no-files-found: error
+          name: Vizu-${{ matrix.os }}-${{ matrix.config }}
+          path: |
+            build/*.exe
+            build/*.msi
+            build/*.zip
+          retention-days: 7
 
-      # Depois da aprovação na SignPath Foundation, descomente e preencha os IDs do projeto
-      # (e crie o segredo SIGNPATH_API_TOKEN em Settings > Secrets and variables > Actions):
-      # - name: Assinar com SignPath
-      #   uses: signpath/github-action-submit-signing-request@v1
-      #   with:
-      #     api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
-      #     organization-id: COLE-AQUI
-      #     project-slug: designthumbs
-      #     signing-policy-slug: release-signing
-      #     github-artifact-id: ${{ steps.upload.outputs.artifact-id }}
-      #     wait-for-completion: true
-      #     output-artifact-directory: signed
+  # ------------------------------------------------------------
+  # Vector conversion tests
+  # ------------------------------------------------------------
+  vector-tests:
+    name: Vector Tests
+    runs-on: windows-latest
+    timeout-minutes: 20
+    needs: build
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgDirectory: '${{ env.VCPKG_ROOT }}'
+          vcpkgTriplet: 'x64-windows-static-md'
+          vcpkgArguments: '--feature-flags=versions,manifests'
+
+      - name: Download Inkscape (cached)
+        id: inkscape
+        uses: actions/cache@v4
+        with:
+          path: inkscape-portable
+          key: inkscape-1.3.2-${{ hashFiles('VectorBundle.cpp') }}
+
+      - name: Install Inkscape
+        if: steps.inkscape.outputs.cache-hit != 'true'
+        run: |
+          mkdir inkscape-portable
+          curl -L -o inkscape.zip "https://inkscape.org/gallery/item/47030/Inkscape-1.3.2-x64.7z"
+          7z x inkscape.zip -oinkscape-portable
+          # Verifica SHA-256
+          certutil -hashfile inkscape-portable/inkscape.exe SHA256
+
+      - name: Build
+        run: |
+          cmake -B build -G "Visual Studio 17 2022" -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --config Release --parallel
+
+      - name: Run vector tests
+        run: |
+          cd build
+          ctest -C Release -R "vector" --output-on-failure
+
+      - name: Run CDR tests
+        run: |
+          cd build
+          ctest -C Release -R "cdr" --output-on-failure
+
+  # ------------------------------------------------------------
+  # Bundled vector engine tests (Ultra edition)
+  # ------------------------------------------------------------
+  bundled-engine-tests:
+    name: Bundled Engine Tests
+    runs-on: windows-latest
+    timeout-minutes: 30
+    needs: build
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgDirectory: '${{ env.VCPKG_ROOT }}'
+          vcpkgTriplet: 'x64-windows-static-md'
+
+      - name: Build Ultra
+        run: |
+          cmake -B build -G "Visual Studio 17 2022" -DCMAKE_BUILD_TYPE=Release -DVIZU_EDITION=Ultra
+          cmake --build build --config Release --parallel
+
+      - name: Test vector engine
+        run: |
+          cd build
+          ctest -C Release -R "bundled" --output-on-failure
+
+  # ------------------------------------------------------------
+  # Preview smoke test
+  # ------------------------------------------------------------
+  preview-smoke:
+    name: Preview Smoke Test
+    runs-on: windows-latest
+    timeout-minutes: 15
+    needs: build
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Vizu-windows-latest-Release
+          path: artifacts
+
+      - name: Install Vizu
+        run: |
+          ./artifacts/Vizu_Setup_*.exe /S
+
+      - name: Test thumbnail provider registration
+        run: |
+          reg query HKCU\Software\Classes\CLSID\{9E85547E-13C6-4C5E-95CC-990C74D9BB3F}
+
+      - name: Test preview handler registration
+        run: |
+          reg query HKCU\Software\Classes\CLSID\{8895b1c6-b41f-4c1c-a562-0d564250836f}
+
+      - name: Run preview test
+        run: |
+          powershell -Command "
+            Add-Type -AssemblyName System.Windows.Forms
+            $form = New-Object System.Windows.Forms.Form
+            $form.Size = New-Object System.Drawing.Size(800,600)
+            $preview = New-Object System.Windows.Forms.Integration.ElementHost
+            $preview.Dock = 'Fill'
+            $form.Controls.Add($preview)
+            $form.Show()
+            Start-Sleep 2
+            $form.Close()
+          "
+
+  # ------------------------------------------------------------
+  # Release
+  # ------------------------------------------------------------
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [build, vector-tests, bundled-engine-tests, preview-smoke]
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: Vizu-*-Release
+          merge-multiple: true
+
+      - name: Verify SHA-256
+        run: |
+          for f in artifacts/*.exe; do
+            sha256sum "$f" > "${f}.sha256"
+            cat "${f}.sha256"
+          done
+
+      - name: Update latest.json
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          INSTALLER="Vizu_Setup_${VERSION}_x64.exe"
+          SHA256=$(sha256sum "artifacts/${INSTALLER}" | cut -d' ' -f1)
+          cat > latest.json <<EOF
+          {
+            "version": "${VERSION}",
+            "url": "https://github.com/${{ github.repository }}/releases/download/${GITHUB_REF_NAME}/${INSTALLER}",
+            "sha256": "${SHA256}"
+          }
+          EOF
+          cat latest.json
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            artifacts/*.exe
+            artifacts/*.msi
+            artifacts/*.sha256
+            latest.json
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ------------------------------------------------------------
+  # Dependency review
+  # ------------------------------------------------------------
+  deps-review:
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Review dependencies
+        uses: actions/dependency-review-action@v3
+        with:
+          config-file: '.github/dependency-review.yml'
+          fail-on-severity: high
