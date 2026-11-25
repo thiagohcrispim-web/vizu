@@ -2,7 +2,7 @@
 # Requer CMake 3.20+, MinGW-w64 no Linux ou MSVC no Windows
 cmake_minimum_required(VERSION 3.20)
 project(Vizu
-    VERSION 19.5.1
+    VERSION 19.5.2
     LANGUAGES CXX C RC
     DESCRIPTION "Vizu - Quick Look para Windows Explorer"
 )
@@ -49,7 +49,7 @@ add_compile_definitions(
     VIZU_VERSION_MAJOR=19
     VIZU_VERSION_MINOR=5
     VIZU_VERSION_PATCH=1
-    VIZU_VERSION_STRING="19.5.1"
+    VIZU_VERSION_STRING="19.5.2"
     UNICODE
     _UNICODE
 )
