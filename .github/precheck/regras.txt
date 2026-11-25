@@ -87,3 +87,15 @@ arquivos: Vizu.cpp
 proibido: advanced\(rows, (?!kSec(Conv|Time|Clean|Other|Sys|RainAdv)\b)
 motivo: advanced() recebe o índice da seção (kSec...), não um id de botão; um id grande lê fora de g_advOpen e o Avançado não abre (chuva na v19.5)
 origem: v19.5.6
+
+id: aviso-de-atualizacao-legivel
+arquivos: Vizu.cpp
+proibido: ty \+ tk\.sp_6 \* 2\.875f
+motivo: na 19.5 a segunda linha do aviso ("Clique para atualizar") caía fora da janela; sem ver o pedido, ninguém clicava e a atualização nunca instalava
+origem: v19.5.7
+
+id: atualizacao-manual-instala
+arquivos: Vizu.cpp
+exigido: PostMessage\(wnd, WM_UPDATE_FOUND, manual,
+motivo: o botão "Atualizações" já é o pedido da pessoa: instala direto, sem depender de clicar no aviso
+origem: v19.5.7

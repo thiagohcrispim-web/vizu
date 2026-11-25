@@ -830,7 +830,7 @@ static void CheckForUpdates(bool manual) {
         try { ok = upd::Latest(&r); } catch (...) { ok = false; }
         if (ok && upd::Compare(upd::kVersion, r.tag) < 0) {
             auto* p = new upd::Release(r);
-            if (!PostMessage(wnd, WM_UPDATE_FOUND, 0, (LPARAM)p)) delete p;
+            if (!PostMessage(wnd, WM_UPDATE_FOUND, manual, (LPARAM)p)) delete p; // manual: instala direto
         } else if (manual) PostMessage(wnd, WM_UPDATE_NONE, ok, 0);
     }).detach();
 }
@@ -1421,6 +1421,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         g_toastAction = 1;
         ShowToast(std::wstring(T(L"Nova versão ", L"New version ", L"Nueva versión ")) + g_release.tag,
                   T(L"Clique para atualizar", L"Click to update", L"Clic para actualizar"), 15000, 1);
+        if (wp) PostMessage(g_toastWnd, WM_LBUTTONUP, 0, 0); // botão "Atualizações": a pessoa já pediu, não precisa clicar no aviso
         return 0;
     }
     case WM_UPDATE_NONE:
@@ -2727,17 +2728,18 @@ static LRESULT CALLBACK ToastProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             ui::Painter p(rt, g_dw, g_theme, tk, s);
             if (g_theme.classic) { // protótipo 3.3: cartão chapado com um ponto laranja (vermelho se deu erro)
                 rt->Clear(ui::Rgba(0x4A4F57));
-                float cy = g_toastState == 0 ? tk.sp_6 * 2 * s : sz.height / 2;
-                p.Fill(D2D1::RectF(tk.sp_4 * s, cy - tk.sp_1 * s, tk.sp_7 * s, cy + tk.sp_1 * s), tk.r_chip * s, g_toastState == 2 ? g_theme.danger : ui::Rgba(0xFF6633));
-                float x = tk.sp_6 * 2.5f * s, ty = g_toastState == 0 ? tk.sp_3 * s : sz.height / 2 - tk.sp_6 * 2 * s;
-                p.Text(g_toastTitle, D2D1::RectF(x, ty, sz.width - tk.sp_4 * s, ty + tk.sp_6 * 2 * s), tk.t_section.size * 1.36f, ui::Rgba(0xFFFFFF), DWRITE_FONT_WEIGHT_SEMI_BOLD);
-                p.Text(g_toastText, D2D1::RectF(x, ty + tk.sp_6 * 2.875f * s, sz.width - tk.sp_4 * s, ty + tk.sp_6 * 5.25f * s), tk.t_body.size, ui::Rgba(0xCDD2DA));
+                // medidas da 9.14.5: na 19.5 a segunda linha ("Clique para atualizar") caía fora do aviso
+                float cy = g_toastState == 0 ? 33 * s : sz.height / 2;
+                p.Fill(D2D1::RectF(18 * s, cy - 5 * s, 28 * s, cy + 5 * s), 5 * s, g_toastState == 2 ? g_theme.danger : ui::Rgba(0xFF6633));
+                float x = 42 * s, ty = g_toastState == 0 ? 13 * s : sz.height / 2 - 22 * s;
+                p.Text(g_toastTitle, D2D1::RectF(x, ty, sz.width - 18 * s, ty + 22 * s), 15, ui::Rgba(0xFFFFFF), DWRITE_FONT_WEIGHT_SEMI_BOLD);
+                p.Text(g_toastText, D2D1::RectF(x, ty + 23 * s, sz.width - 18 * s, ty + 42 * s), 13, ui::Rgba(0xCDD2DA));
                 if (g_toastState == 0) {
-                    D2D1_RECT_F bar = D2D1::RectF(x, sz.height - tk.sp_6 * 2.125f * s, sz.width - tk.sp_4 * s, sz.height - tk.sp_3 * s * 1.625f);
-                    p.Fill(bar, tk.sp_1 * s * 0.5f, ui::Rgba(0x23272E));
+                    D2D1_RECT_F bar = D2D1::RectF(x, sz.height - 17 * s, sz.width - 18 * s, sz.height - 13 * s);
+                    p.Fill(bar, 2 * s, ui::Rgba(0x23272E));
                     float f = g_toastTotal ? (float)g_toastDone / g_toastTotal : 0.05f;
-                    bar.right = bar.left + max(tk.sp_1 * s, (bar.right - bar.left) * f);
-                    p.Fill(bar, tk.sp_1 * s * 0.5f, ui::Rgba(0xFF6633));
+                    bar.right = bar.left + max(4 * s, (bar.right - bar.left) * f);
+                    p.Fill(bar, 2 * s, ui::Rgba(0xFF6633));
                 }
                 g_toastSurf.End();
                 EndPaint(h, &ps);
