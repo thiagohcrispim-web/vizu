@@ -48,7 +48,8 @@ enum {
 
 // ---------- configurações (HKCU\Software\DesignThumbs) ----------
 
-struct Config { DWORD themeMode = 0, webpQuality = 75, neon = 0xFF6633; bool tray = true; bool space = true, alt = true, picker = true, autoUpdate = true, dpi300 = false, pdfRaw = false, vectorTextPaths = false, tempPermanent = false; DWORD altDelay = 500, quality = 75; };
+struct Config { DWORD themeMode = 0, webpQuality = 75, neon = 0xFF6633; bool tray = true; bool space = true, alt = true, picker = true, autoUpdate = true, dpi300 = false, pdfRaw = false, vectorTextPaths = false, tempPermanent = false; DWORD altDelay = 500, quality = 75;
+    bool rainEnabled = false; DWORD rainColor = 0x0E1014, rainOpacity = 22, rainCycleMs = 20000, rainHeadRatio = 15, rainCharset = 0, rainFps = 24; std::wstring rainCustomChars; };
 static Config g_cfg;
 static bool g_lite = false; // Vizu Lite: só prévia com Espaço e miniaturas
 static const wchar_t* kCfgKey = L"Software\\DesignThumbs";
@@ -75,11 +76,25 @@ static void LoadConfig() {
     g_cfg.vectorTextPaths = ReadDword(L"VectorTextPaths", 0) != 0;
     g_cfg.tempPermanent = ReadDword(L"TempPermanent", 0) != 0;
     g_cfg.neon = ReadDword(L"NeonColor", 0xFF6633) & 0xFFFFFF; ui::NeonColor() = g_cfg.neon;
+    // Chuva digital (tema Classic)
+    g_cfg.rainEnabled = ReadDword(L"RainEnabled", 0) != 0;
+    g_cfg.rainColor = ReadDword(L"RainColor", 0x0E1014) & 0xFFFFFF;
+    g_cfg.rainOpacity = max(5ul, min(60ul, (unsigned long)ReadDword(L"RainOpacity", 22)));
+    g_cfg.rainCycleMs = (max(10000ul, min(40000ul, (unsigned long)ReadDword(L"RainCycleMs", 20000))) + 2500) / 5000 * 5000;
+    g_cfg.rainHeadRatio = min(60ul, (unsigned long)ReadDword(L"RainHeadRatio", 15));
+    g_cfg.rainCharset = min(2ul, (unsigned long)ReadDword(L"RainCharset", 0));
+    g_cfg.rainFps = ReadDword(L"RainFps", 24);
+    if (g_cfg.rainFps != 20 && g_cfg.rainFps != 24 && g_cfg.rainFps != 30) g_cfg.rainFps = 24;
+    { wchar_t buf[512] = {}; DWORD cb = sizeof(buf);
+      g_cfg.rainCustomChars = RegGetValueW(HKEY_CURRENT_USER, kCfgKey, L"RainCustomChars", RRF_RT_REG_SZ, nullptr, buf, &cb) == ERROR_SUCCESS ? buf : L""; }
 }
 static void SaveConfig() {
     WriteDword(L"SpacePreview", g_cfg.space); WriteDword(L"AltButtons", g_cfg.alt);
     WriteDword(L"AltDelay", g_cfg.altDelay); WriteDword(L"JpgQuality", g_cfg.quality);
     WriteDword(L"ConvertDpi", g_cfg.dpi300 ? 300 : 72); WriteDword(L"ColorPicker", g_cfg.picker); WriteDword(L"Theme2", g_cfg.themeMode); WriteDword(L"WebpQuality", g_cfg.webpQuality); WriteDword(L"TrayIcon", g_cfg.tray); WriteDword(L"AutoUpdate", g_cfg.autoUpdate); WriteDword(L"PdfUncompressed", g_cfg.pdfRaw); WriteDword(L"VectorTextPaths", g_cfg.vectorTextPaths); WriteDword(L"TempPermanent", g_cfg.tempPermanent); WriteDword(L"NeonColor", g_cfg.neon);
+    WriteDword(L"RainEnabled", g_cfg.rainEnabled); WriteDword(L"RainColor", g_cfg.rainColor); WriteDword(L"RainOpacity", g_cfg.rainOpacity); WriteDword(L"RainCycleMs", g_cfg.rainCycleMs);
+    WriteDword(L"RainHeadRatio", g_cfg.rainHeadRatio); WriteDword(L"RainCharset", g_cfg.rainCharset); WriteDword(L"RainFps", g_cfg.rainFps);
+    RegSetKeyValueW(HKEY_CURRENT_USER, kCfgKey, L"RainCustomChars", REG_SZ, g_cfg.rainCustomChars.c_str(), (DWORD)((g_cfg.rainCustomChars.size() + 1) * sizeof(wchar_t)));
 }
 
 // ---------- estado ----------
@@ -3252,7 +3267,7 @@ static void SettingsAction(int id) {
         swprintf(buf, 101, L"%ls", g_cfg.rainCustomChars.c_str());
         // Simple input dialog using MessageBox - could be improved
         // For now just show current value
-        MessageBoxW(g_settingsWnd, T(L"Clique em \"OK\" para manter os caracteres atuais ou \"Cancelar\" para limpar.\nCaracteres atuais: ", L"Click OK to keep current characters or Cancel to clear.\nCurrent: ", L"Haz clic en OK para mantener los caracteres actuales o Cancelar para borrar.\nActuales: ") + g_cfg.rainCustomChars, T(L"Caracteres personalizados", L"Custom characters", L"Caracteres personalizados"), MB_OKCANCEL);
+        MessageBoxW(g_settingsWnd, (std::wstring(T(L"Clique em \"OK\" para manter os caracteres atuais ou \"Cancelar\" para limpar.\nCaracteres atuais: ", L"Click OK to keep current characters or Cancel to clear.\nCurrent: ", L"Haz clic en OK para mantener los caracteres actuales o Cancelar para borrar.\nActuales: ")) + g_cfg.rainCustomChars).c_str(), T(L"Caracteres personalizados", L"Custom characters", L"Caracteres personalizados"), MB_OKCANCEL);
         return;
     }
     case kBtnClose: CloseSettings(); return;
@@ -3965,6 +3980,7 @@ static std::wstring StartupLink() {
 static HWND FindRunning() { // Vizu atual
     return FindWindowW(L"VizuWnd", nullptr);
 }
+static std::wstring OldLink(const std::wstring& lnk) { return lnk.substr(0, lnk.size() - 8) + L"DesignPeek.lnk"; } // atalho das versões antigas
 static bool AutostartEnabled() {
     std::wstring l = StartupLink();
     return !l.empty() && GetFileAttributesW(l.c_str()) != INVALID_FILE_ATTRIBUTES;

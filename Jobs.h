@@ -157,7 +157,7 @@ inline Result Run(const std::vector<std::wstring>& files, const Job& j, const st
                             // Text is already converted to curves by cdrv::Collector
                         }
                         if (sink->BeginDocument(pageSize)) {
-                            cdrv::engines::ConvertDrawingToVectorSink(d, sink);
+                            engines::ConvertDrawingToVectorSink(d, sink);
                             if (sink->EndDocument()) {
                                 if (sink->SaveToFile(out.c_str())) {
                                     r.outputs.push_back(out);
@@ -209,7 +209,7 @@ inline Result Run(const std::vector<std::wstring>& files, const Job& j, const st
                 engines::VectorSink* sink = engines::VectorWriterFactory::Create(engines::VectorWriterFactory::PDF, pageSize);
                 if (sink) {
                     if (sink->BeginDocument(pageSize)) {
-                        cdrv::engines::ConvertDrawingToVectorSink(sel, sink);
+                        engines::ConvertDrawingToVectorSink(sel, sink);
                         if (sink->EndDocument()) {
                             std::vector<uint8_t> buffer = sink->GetBuffer();
                             std::wstring target = files.size() == 1 ? out : UniquePath(DirOf(files[0]), L"~vizu-" + std::to_wstring(GetCurrentProcessId()) + L"-" + std::to_wstring(i), L".pdf");

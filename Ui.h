@@ -209,6 +209,38 @@ inline double NowMs() {
     return c.QuadPart * 1000.0 / f.QuadPart;
 }
 
+// Animação com mola (spring) - estilo Apple, interrompível, fluido em 60/144Hz
+// response: tempo para chegar ~63% do alvo (0.25 = rápido, 0.35 = médio, 0.4 = lento)
+// damping: amortecimento (1.0 = crítico/sem oscilação, <1 = subamortecido/com bounce)
+struct Spring {
+    float x = 0, v = 0, target = 0;
+    float response = 0.35f, damping = 0.85f; // padrão: abrir Giro, Espiar
+    bool reduced = false;
+    // Atualiza a física da mola. dt em ms.
+    void Step(float dt) {
+        if (reduced) { x = target; v = 0; return; }
+        if (x == target && v == 0) return;
+        // Equação: f = -k*x - c*v  (Hooke + amortecimento)
+        // k = (2*pi/response)^2, c = 2*damping*sqrt(k)
+        // dt em segundos para a simulação
+        float dtSec = dt / 1000.0f;
+        float k = (6.28318530718f / response) * (6.28318530718f / response);
+        float c = 2.0f * damping * sqrtf(k);
+        float a = (-k * (x - target) - c * v);
+        v += a * dtSec;
+        x += v * dtSec;
+        // Para quando praticamente parado
+        if (fabsf(x - target) < 0.001f && fabsf(v) < 0.001f) { x = target; v = 0; }
+    }
+    bool Done() const { return x == target && v == 0; }
+    // Define novo alvo (interrompe animação atual suavemente)
+    void SetTarget(float t) { target = t; }
+    // Define parâmetros da mola
+    void SetParams(float resp, float damp) { response = resp; damping = damp; }
+    // Ativa/desativa modo reduzido
+    void SetReduced(bool r) { reduced = r; if (r) { x = target; v = 0; } }
+};
+
 // Valores que deslizam até o alvo. Cada janela tem um; Frame() no começo do desenho, Pump() no fim.
 // Nada anima sozinho: um valor só se move quando o alvo muda (ação ou mouse).
 struct Anim {
@@ -273,37 +305,7 @@ struct Anim {
 };
 enum : UINT_PTR { kAnimTick = 0x7A11 }; // id de timer reservado para Anim::Pump em todas as janelas
 
-// Animação com mola (spring) - estilo Apple, interrompível, fluido em 60/144Hz
-// response: tempo para chegar ~63% do alvo (0.25 = rápido, 0.35 = médio, 0.4 = lento)
-// damping: amortecimento (1.0 = crítico/sem oscilação, <1 = subamortecido/com bounce)
-struct Spring {
-    float x = 0, v = 0, target = 0;
-    float response = 0.35f, damping = 0.85f; // padrão: abrir Giro, Espiar
-    bool reduced = false;
-    // Atualiza a física da mola. dt em ms.
-    void Step(float dt) {
-        if (reduced) { x = target; v = 0; return; }
-        if (x == target && v == 0) return;
-        // Equação: f = -k*x - c*v  (Hooke + amortecimento)
-        // k = (2*pi/response)^2, c = 2*damping*sqrt(k)
-        // dt em segundos para a simulação
-        float dtSec = dt / 1000.0f;
-        float k = (6.28318530718f / response) * (6.28318530718f / response);
-        float c = 2.0f * damping * sqrtf(k);
-        float a = (-k * (x - target) - c * v);
-        v += a * dtSec;
-        x += v * dtSec;
-        // Para quando praticamente parado
-        if (fabsf(x - target) < 0.001f && fabsf(v) < 0.001f) { x = target; v = 0; }
-    }
-    bool Done() const { return x == target && v == 0; }
-    // Define novo alvo (interrompe animação atual suavemente)
-    void SetTarget(float t) { target = t; }
-    // Define parâmetros da mola
-    void SetParams(float resp, float damp) { response = resp; damping = damp; }
-    // Ativa/desativa modo reduzido
-    void SetReduced(bool r) { reduced = r; if (r) { x = target; v = 0; } }
-};
+
 
 // Parâmetros recomendados por uso (seção 9 do GUIA-DESIGN):
 // Hover, toggle, segmentado: response=0.25, damping=1.0
@@ -326,7 +328,7 @@ struct Tokens {
     float smooth = 0.6f;
 
     // Espaçamento em grade de 4px
-    float sp_1 = 4, sp_2 = 8, sp_3 = 12, sp_4 = 16, sp_6 = 24, sp_8 = 32;
+    float sp_1 = 4, sp_2 = 8, sp_3 = 12, sp_4 = 16, sp_5 = 20, sp_6 = 24, sp_7 = 28, sp_8 = 32;
 
     // Tipografia Inter (semibold/medium/regular)
     struct Type { float size; int weight; float leading; };

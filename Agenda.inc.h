@@ -3,6 +3,7 @@
 
 #include <set>
 
+static void AgSetTimer(HWND h);
 static D2D1_COLOR_F AccentOf(const ui::Theme& th) {
     return th.classic ? ui::Rgba(0xFF6633) : th.neon ? ui::Rgba(ui::NeonColor()) : g_cfg.themeMode == ui::kThemeWindows ? th.accent : th.dark ? ui::Rgba(0xE6E6E8) : ui::Rgba(0x1D1D1F);
 }

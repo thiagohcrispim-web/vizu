@@ -22,6 +22,7 @@ static std::wstring DataPath(const wchar_t* file) {
 static const UINT kPomoPairs[3][2] = {{0x25D366, 0xE0245E}, {0x0A84FF, 0x8E8E93}, {0xB6FF3B, 0xA855F7}};
 static const int kPomoTimes[3][3] = {{25, 5, 15}, {50, 10, 20}, {15, 3, 10}}; // foco, pausa, pausa longa (min)
 
+static void SetClockTimer(HWND h);
 struct ClockState {
     HWND wnd = nullptr;
     bool on = false;
@@ -321,6 +322,7 @@ static void ShowTheftHistory() {
     static bool reg = false;
     if (!reg) { WNDCLASSW wc = {}; wc.lpfnWndProc = TheftProc; wc.hInstance = GetModuleHandleW(nullptr); wc.lpszClassName = L"VizuTheft"; wc.hCursor = LoadCursor(nullptr, IDC_ARROW); RegisterClassW(&wc); reg = true; }
     g_tv.week = false;
+    const ui::Tokens& tk = ui::g_tokens;
     float s = GetDpiForSystem() / 96.0f;
     int w = (int)(tk.sp_8 * 23.75f * s), hgt = (int)TheftHeight();
     RECT cr = {}; if (g_clock.wnd) GetWindowRect(g_clock.wnd, &cr);
@@ -383,6 +385,8 @@ static void ClockRender() {
         th.icon = th.text;
     }
     g_clock.s = s;
+    ui::Tokens tk = ui::MakeTokens(th);
+    ui::g_tokens = tk;
     float H = tk.sp_8 * 8.0f * s, M = docked ? 0 : tk.sp_3 * s * 1.166f, fpx = (float)g_clock.fontPx;
     bool pomo = g_clock.phase != 0;
     UINT pc = kPomoPairs[min(2ul, (unsigned long)g_clock.pomoColors)][g_clock.phase == 1 ? 0 : 1];
@@ -408,8 +412,6 @@ static void ClockRender() {
     ID2D1RenderTarget* rt = cv.rt;
     rt->Clear(D2D1::ColorF(0, 0));
     rt->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
-    ui::Tokens tk = ui::MakeTokens(th);
-    ui::g_tokens = tk;
     ui::Painter p(rt, g_dw, th, tk, s);
     D2D1_RECT_F card = D2D1::RectF(M, M, M + Wc, M + H);
     float rad = tk.r_card * s;
@@ -686,7 +688,6 @@ static LRESULT CALLBACK ClockProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     case WM_DISPLAYCHANGE: case WM_SETTINGCHANGE: ClockRender(); break;
     case WM_DESTROY:
         KillTimer(h, 1);
-        g_clock.surf.Release();
         g_clock.wnd = nullptr;
         return 0;
     }

@@ -17,6 +17,7 @@ static const wchar_t* WDockKey(int k) { return k == kWBat ? L"BatDocked" : L"Per
 static const wchar_t* WDockXKey(int k) { return k == kWBat ? L"BatDockX" : L"PerfDockX"; }
 static bool WCanDock(int k) { return k == kWPerf || k == kWBat; }
 
+static void WidgetSetTimer(HWND h, int k, bool visible);
 struct ProcUse { std::wstring exe; double cpu = 0; ULONGLONG mem = 0, io = 0; bool window = false; };
 
 struct Widget {
@@ -445,14 +446,14 @@ static void BatRenderDocked(Widget& wd, const RECT& tb, const std::vector<BatDev
     D2D1_COLOR_F text = dk ? ui::Rgba(0xFFFFFF, 0.95f) : ui::Rgba(0x1D1D1F), text2 = dk ? ui::Rgba(0xFFFFFF, 0.62f) : ui::Rgba(0x000000, 0.58f);
     D2D1_COLOR_F hi = g_cfg.themeMode == ui::kThemeWindows ? g_theme.accent : ui::Rgba(0xFF6633);
     size_t n = min(bat.size(), (size_t)4);
+    ui::Tokens tk = ui::MakeTokens(g_theme);
+    ui::g_tokens = tk;
     UINT Wt = (UINT)((n ? tk.sp_3 + n * (tk.sp_6 + tk.sp_4) : tk.sp_6 * 3) * s), Ht = (UINT)((tb.bottom - tb.top) * 0.86f);
     fmt::Canvas cv(Wt, Ht);
     if (!cv.rt) return;
     ID2D1RenderTarget* rt = cv.rt;
     rt->Clear(D2D1::ColorF(0, 0));
     rt->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
-    ui::Tokens tk = ui::MakeTokens(g_theme);
-    ui::g_tokens = tk;
     ui::Painter p(rt, g_dw, g_theme, tk, s);
     p.Fill(D2D1::RectF(0, 0, (float)Wt, (float)Ht), tk.r_chip * s, wd.hot || wd.open ? ui::Rgba(dk ? 0xFFFFFF : 0x000000, 0.08f) : ui::Rgba(0x000000, 0.006f));
     float cy = Ht / 2.0f, x = tk.sp_2 * s * 1.25f;
@@ -697,6 +698,7 @@ static void WidgetEnable(int k, bool on) {
     if (x == 0x80000000 || !MonitorFromPoint(pt, MONITOR_DEFAULTTONULL)) { // canto de cima, à direita; o de desempenho logo abaixo
         MONITORINFO mi = {sizeof(mi)}; GetMonitorInfoW(MonitorFromPoint({0, 0}, MONITOR_DEFAULTTOPRIMARY), &mi);
         float s = GetDpiForSystem() / 96.0f;
+        const ui::Tokens& tk = ui::g_tokens;
         size_t n = ReadDword(L"DiskAll", 0) ? max((size_t)1, clean::AllDisks().size()) : 1; // o de desempenho fica logo abaixo do de disco
         float below = WidgetOn(kWDisk) ? 20 + 56 + (n - 1) * 30 + 16 : 20;
         if (k >= kWAi) below = (WidgetOn(kWPerf) ? below + 76 : below); // a bateria fica embaixo dos outros

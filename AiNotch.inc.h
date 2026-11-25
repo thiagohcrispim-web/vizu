@@ -5,6 +5,7 @@
 
 enum { kEdgeRight, kEdgeLeft, kEdgeTop, kEdgeBottom };
 
+static void NotchSetTimer(HWND h, bool visible);
 struct Notch {
     HWND wnd = nullptr;
     int edge = kEdgeRight;

@@ -321,7 +321,7 @@ static void ClSpinner(ui::Painter& p, const ClColors& c, D2D1_RECT_F r, float s)
 
 // Barra do disco: usado (sem o que vai sair) · a limpar · liberado agora · livre.
 static void ClDiskBar(ui::Painter& p, const ClColors& c, D2D1_RECT_F r, ULONGLONG total, ULONGLONG free, ULONGLONG toClean, ULONGLONG freed) {
-    float h = r.bottom - r.top, w = r.right - r.left;
+    float h = r.bottom - r.top, w = r.right - r.left, s = p.s;
     p.Fill(r, p.tk.r_chip, c.track);
     if (!total) return;
     ULONGLONG used = total > free ? total - free : 0;
