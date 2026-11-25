@@ -805,6 +805,8 @@ inline std::vector<HBITMAP> Raster(const Drawing& d, const std::vector<int>& pag
     return out;
 }
 
+} // namespace cdrv
+
 // ---------------- Integração com engines::VectorSink ----------------
 
 namespace engines {
@@ -920,5 +922,3 @@ inline void ConvertDrawingToVectorSink(const cdrv::Drawing& drawing, VectorSink*
 }
 
 } // namespace engines
-
-} // namespace cdrv
