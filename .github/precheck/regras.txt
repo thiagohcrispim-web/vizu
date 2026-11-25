@@ -63,3 +63,9 @@ arquivos: Ui.h
 exigido: ~Painter\(\) \{ if \(fac\) fac->Release\(\); \}
 motivo: o Painter pega a fábrica D2D com GetFactory e precisa devolver no destrutor
 origem: v19.5.2
+
+id: versao-interna-da-atualizacao
+arquivos: Update.h
+proibido: kVersion = L"9\.14\.5"
+motivo: a versão interna ficou 9.14.5 na série 19.5 e o Vizu oferecia atualizar sem parar. O pré-teste também compara kVersion com o Vizu.rc
+origem: v19.5.0

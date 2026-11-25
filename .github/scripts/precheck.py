@@ -118,6 +118,9 @@ def check_version():
     lj = read(ROOT / 'latest.json')
     if f'"{v}"' not in lj:
         warn(f"[versao] latest.json ainda não aponta para {v} (normal antes de gerar o instalador)")
+    m2 = re.search(r'kVersion\s*=\s*L"([0-9.]+)"', read(ROOT / 'Update.h'))
+    if not m2 or m2.group(1) != v:
+        err(f"[versao] Update.h kVersion = {m2.group(1) if m2 else '?'}, mas a versão é {v}: a atualização ofereceria versão nova para sempre")
     for f in ('InstallerUi.h',):
         for old in re.findall(r'L"(\d+\.\d+\.\d+)"', read(ROOT / f)):
             if old != v: err(f"[versao] {f} mostra a versão fixa {old}, mas a versão é {v}")

@@ -1268,7 +1268,7 @@ static void Paint() {
         p.Text(pmsLine, D2D1::RectF(px + 36 * s, py + 43 * s, pr.right - 10 * s, py + 58 * s), 11, ui::Rgba(0x4A4F57));
     }
 
-    if (bars) { PaintClassicBars(p, size, s); if (g_rt->EndDraw() == D2DERR_RECREATE_TARGET) DiscardDeviceResources(); return; }
+    if (bars) { PaintClassicBars(p, size, s); HRESULT ehr = g_rt->EndDraw(); if (ehr == D2DERR_RECREATE_TARGET) DiscardDeviceResources(); else if (FAILED(ehr)) DIAG_HR("desenho falhou", ehr); return; }
     // barra de cima: engrenagem, nome, zoom/página
     p.CircleButton(GearRectF(), L"", g_gearHot, 0x10);
     float side = 170 * s;
@@ -1320,7 +1320,7 @@ static void Paint() {
     }
 
     PaintFontStrip(p, size.width, orn.top - 8 * s, padX, maxW, false, th.text, th.text2, th.danger);
-    if (g_rt->EndDraw() == D2DERR_RECREATE_TARGET) DiscardDeviceResources();
+    { HRESULT ehr = g_rt->EndDraw(); if (ehr == D2DERR_RECREATE_TARGET) DiscardDeviceResources(); else if (FAILED(ehr)) DIAG_HR("desenho falhou", ehr); }
     g_pvAnim.Pump(g_wnd, ui::kAnimTick);
 }
 
@@ -2795,7 +2795,7 @@ enum { kTogSpace = 1, kTogAlt, kDelayMinus, kDelayPlus, kDpi72, kDpi300, kPdfSma
        kClockOn, kClockFont, kPomoT0, kPomoT1, kPomoT2, kPomoC0, kPomoC1, kPomoC2, kPomoC3, kTheftHist, kUiFont, kOcrOn, kOcrKeep, kOcrJoin, kOcrLang, kClk100, kClk90, kClk70, kClockDock, kSte, kTheme4, kTheftOn, kFocoOn, kAgendaOn, kVecText, kVecCurves, kSysToggle,
        kClOpen, kAge1, kAge7, kAge30, kTogCleanBin, kTogDiskW, kTogDiskWarn, kDiskLimMinus, kDiskLimPlus, kDiskAll0, kDiskAll1, kTogPerfW, kTogAiW, kTogBatW, kAiInstall, kAiEdge0, kAiEdge1, kAiEdge2, kAiEdge3, kAiRecenter, kAiShowLeft, kAiWarnMinus, kAiWarnPlus, kAiCritMinus, kAiCritPlus, kAiLimReset,
        kAiWeek0, kAiWeek1, kAiWeek2, kAiShow0, kAiShow1, kAiShow2, kAiHideFull, kAiNotify, kAiSound, kAiPreview, kAiSize0, kAiSize1, kAiSize2, kTogBatDock, kTogClockClean, kPrimao,
-       kPreset0, kPreset1, kPreset2, kTogOcrBtn, kHkOcr, kHkClean, kAdv0, kAdv1, kAdv2, kAdv3, kAdv4, kAdv5, kLinkAbout, kLinkThanks, kBack, kBtnUninstall, kBtnLiteUpgrade, kTogChat, kChatEdit, kRingReset, kInspect,
+       kPreset0, kPreset1, kPreset2, kTogOcrBtn, kHkOcr, kHkClean, kAdv0, kAdv1, kAdv2, kAdv3, kAdv4, kAdv5, kLinkAbout, kLinkThanks, kBack, kBtnUninstall, kBtnLiteUpgrade, kTogChat, kChatEdit, kRingReset, kInspect, kTogReports,
        // Chuva digital (tema Classic) - PLANO-CHUVA-DIGITAL
        kRainEnabled, kRainColor0, kRainColor1, kRainColor2, kRainColor3, kRainColor4, kRainColorCustom,
        kRainOpacityMinus, kRainOpacityPlus, kRainCycleMinus, kRainCyclePlus,
@@ -3158,6 +3158,7 @@ static void SettingsAction(int id) {
     case kWebpPlus: g_cfg.webpQuality = min(100ul, (unsigned long)g_cfg.webpQuality + 5); break;
     case kTogTray: g_cfg.tray = !g_cfg.tray; SaveConfig(); UpdateTrayIcon(); return;
     case kTogUpdate: g_cfg.autoUpdate = !g_cfg.autoUpdate; break;
+    case kTogReports: diag::SetConsent(!diag::Consent()); diag::Log(diag::Consent() ? "envio de relatórios: aceito" : "envio de relatórios: recusado"); break;
     case kBtnUpdate: CheckForUpdates(true); return;
     case kBtnFolders: ShellExecuteW(nullptr, L"open", L"notepad.exe", (L"\"" + FolderListPath(true) + L"\"").c_str(), nullptr, SW_SHOWNORMAL); return;
     case kLangPt: case kLangEn: case kLangEs: {
@@ -3681,6 +3682,10 @@ static void PaintSettings(HWND h) {
         {SH, 1, [&](D2D1_RECT_F r) {
             std::wstring ver = std::wstring(T(L"Versão ", L"Version ", L"Versión ")) + upd::kVersion;
             rlabel(r, T(L"Atualizar automaticamente", L"Update automatically", L"Actualizar automáticamente"), ver.c_str()); rtoggle(kTogUpdate, r, g_cfg.autoUpdate); }},
+        {SH, 1, [&](D2D1_RECT_F r) {
+            rlabel(r, T(L"Enviar relatórios de erro anônimos", L"Send anonymous error reports", L"Enviar informes de error anónimos"),
+                   T(L"Versão, Windows, tema e onde deu erro. Nunca arquivos, pastas ou nomes.", L"Version, Windows, theme and where it failed. Never files, folders or names.", L"Versión, Windows, tema y dónde falló. Nunca archivos, carpetas ni nombres."));
+            rtoggle(kTogReports, r, diag::Consent()); }},
     });
     drawSection(T(L"Sistema", L"System", L"Sistema"), rows);
 
@@ -4567,6 +4572,75 @@ static LONG WINAPI CrashFilter(EXCEPTION_POINTERS* e) {
     return EXCEPTION_EXECUTE_HANDLER;
 }
 
+// ---------- autoteste na abertura (≈ 50 ms, invisível) ----------
+// Desenha fora da tela como o relógio e as Configurações desenham, em duas superfícies com fábricas diferentes
+// (foi assim que a v19.5.2 ficou com as Configurações pretas), e confere registro e versão.
+static std::wstring DiagContext() {
+    static const wchar_t* themes[] = {L"Windows", L"Claro", L"Escuro", L"Crispy", L"Classic"};
+    std::wstring c = L"tema=" + std::wstring(themes[min(4ul, (unsigned long)g_cfg.themeMode)]);
+    c += L" escala=" + std::to_wstring(GetDpiForSystem() * 100 / 96) + L"%";
+    DWORD ed = vec::Edition(); c += ed == vec::kLite ? L" edicao=Lite" : ed == vec::kUltra ? L" edicao=Ultra" : L" edicao=Vizu";
+    c += std::wstring(L" idioma=") + (i18n::Current() == 0 ? L"pt" : i18n::Current() == 1 ? L"en" : L"es");
+    c += L" recursos=";
+    if (g_clock.on) c += L"relogio,"; if (g_cfg.space) c += L"espaco,"; if (g_cfg.alt) c += L"alt,";
+    for (int k = 0; k < kWCount; ++k) if (WidgetOn(k)) c += std::wstring(WKey(k)) + L",";
+    if (g_cfg.rainEnabled) c += L"chuva,";
+    return c;
+}
+static bool SelfTestDraw(const char* name, std::string& out) {
+    fmt::Canvas cv(160, 120);
+    if (!cv.rt) { out += std::string(name) + "=sem-superficie "; return false; }
+    cv.rt->Clear(D2D1::ColorF(0, 0));
+    ui::Tokens tk = ui::MakeTokens(g_theme);
+    { ui::Painter p(cv.rt, g_dw, g_theme, tk, 1.0f);
+      p.Fill(D2D1::RectF(10, 10, 150, 110), tk.r_card, ui::Rgba(0xFF6633));      // cartão (squircle)
+      p.Fill(D2D1::RectF(20, 20, 60, 40), tk.r_chip * 0.5f, ui::Rgba(0x111111));   // canto pequeno
+      p.Stroke(D2D1::RectF(70, 20, 140, 44), tk.r_control, ui::Rgba(0xFFFFFF), 2);
+      p.Text(L"Vizu 123", D2D1::RectF(20, 60, 150, 100), 16, ui::Rgba(0xFFFFFF)); }
+    HBITMAP bmp = nullptr;
+    HRESULT hr = cv.Finish(&bmp);
+    if (FAILED(hr) || !bmp) { char b[64]; sprintf(b, "%s=falhou(0x%08lX) ", name, (unsigned long)hr); out += b; return false; }
+    DIBSECTION ds = {}; bool ok = GetObjectW(bmp, sizeof(ds), &ds) && ds.dsBm.bmBits;
+    if (ok) { // o centro do cartão precisa ter cor (não pode sair transparente/preto)
+        const BYTE* px = (const BYTE*)ds.dsBm.bmBits + (ds.dsBm.bmHeight > 0 ? (ds.dsBm.bmHeight - 1 - 100) : 100) * ds.dsBm.bmWidthBytes + 140 * 4;
+        ok = px[3] > 0 && (px[0] + px[1] + px[2]) > 0;
+    }
+    DeleteObject(bmp);
+    out += std::string(name) + (ok ? "=ok " : "=vazio ");
+    return ok;
+}
+static void RunSelfTest() {
+    std::string out; std::vector<const char*> failed;
+    // 1-2) duas superfícies seguidas (fábricas diferentes), com formas do mesmo tamanho
+    if (!SelfTestDraw("desenho1", out)) failed.push_back("desenho1");
+    if (!SelfTestDraw("desenho2", out)) failed.push_back("desenho2");
+    // 3) configurações: gravar e ler de volta
+    { DWORD v = GetTickCount() | 1, r = 0, sz = sizeof(r);
+      RegSetKeyValueW(HKEY_CURRENT_USER, kCfgKey, L"SelfTest", REG_DWORD, &v, sizeof(v));
+      bool ok = RegGetValueW(HKEY_CURRENT_USER, kCfgKey, L"SelfTest", RRF_RT_REG_DWORD, nullptr, &r, &sz) == ERROR_SUCCESS && r == v;
+      out += ok ? "registro=ok " : "registro=falhou "; if (!ok) failed.push_back("registro"); }
+    // 4) a versão interna (usada pela atualização) é a mesma do arquivo? (v19.5.x dizia 9.14.5 e atualizava sem fim)
+    { bool ok = false;
+      if (HRSRC r = FindResourceW(nullptr, MAKEINTRESOURCEW(1), RT_VERSION)) if (HGLOBAL g = LoadResource(nullptr, r)) {
+          const BYTE* d = (const BYTE*)LockResource(g); DWORD n = SizeofResource(nullptr, r);
+          for (DWORD i = 0; d && i + sizeof(VS_FIXEDFILEINFO) <= n; i += 4) {
+              auto* fi = (const VS_FIXEDFILEINFO*)(d + i);
+              if (fi->dwSignature != 0xFEEF04BD) continue;
+              wchar_t v[32]; swprintf(v, 32, L"%u.%u.%u", HIWORD(fi->dwFileVersionMS), LOWORD(fi->dwFileVersionMS), HIWORD(fi->dwFileVersionLS));
+              ok = upd::Compare(v, upd::kVersion) == 0; break;
+          } }
+      out += ok ? "versao=ok " : "versao=diferente "; if (!ok) failed.push_back("versao"); }
+    // 5) fontes da interface
+    { IDWriteTextFormat* f = nullptr; bool ok = SUCCEEDED(g_dw->CreateTextFormat(L"Inter", nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 12, L"pt-br", &f));
+      if (f) f->Release(); out += ok ? "fonte=ok" : "fonte=falhou"; if (!ok) failed.push_back("fonte"); }
+    diag::Log("autoteste: " + out);
+    for (const char* f : failed) {
+        diag::Log(std::string("autoteste falhou: ") + f);
+        if (diag::Consent() && diag::kReportHost[0] && diag::FirstToday(std::string("autoteste|") + f))
+            diag::Send(diag::Report("autoteste", f, "", out));
+    }
+}
+
 int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmd, int) {
     g_inst = inst;
     g_mainThread = GetCurrentThreadId();
@@ -4687,6 +4761,11 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmd, int) {
     RegisterGlobalHotkeys(); // OCR funciona mesmo com o relógio desligado
     g_taskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
     UpdateTrayIcon();
+    diag::g_version = upd::kVersion;
+    diag::g_context = DiagContext;
+    diag::SendPendingCrash();   // fechou sozinho da última vez? registra (e envia, com aceite)
+    RunSelfTest();
+    diag::StartWatchdog(g_wnd, g_mainThread);
 
     std::thread(WorkerLoop).detach();
     g_focusHook = SetWinEventHook(EVENT_OBJECT_FOCUS, EVENT_OBJECT_FOCUS, nullptr, FocusEvent, 0, 0, WINEVENT_OUTOFCONTEXT);

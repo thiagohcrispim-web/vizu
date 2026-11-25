@@ -1,6 +1,7 @@
 // PaletteFont.h - paletas de cor (.ase, .aco) e fontes (.ttf, .otf, .ttc): desenhadas em bitmap com Direct2D/DirectWrite.
 // Incluído por Formats.h (depende de CreateDib, Bytes e BE de lá).
 #pragma once
+#include "Diag.h"
 #include <dwrite_3.h>
 
 namespace fmt {
@@ -149,7 +150,7 @@ public:
     HRESULT Finish(HBITMAP* out) {
         if (!rt) return E_FAIL;
         HRESULT hr = rt->EndDraw();
-        if (FAILED(hr)) return hr;
+        if (FAILED(hr)) { DIAG_HR("desenho falhou (relógio/widget)", hr); return hr; }
         BYTE* bits; HBITMAP dib = CreateDib(w, h, &bits);
         if (!dib) return E_OUTOFMEMORY;
         hr = bmp_->CopyPixels(nullptr, w * 4, w * h * 4, bits);

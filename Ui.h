@@ -1,5 +1,6 @@
 // Ui.h - visual "vidro" inspirado no visionOS: tema do Windows, desfoque acrylic e desenho em Direct2D.
 #pragma once
+#include "Diag.h"
 #include <windows.h>
 #include <dwmapi.h>
 #include <d2d1_1.h>
@@ -514,7 +515,9 @@ struct Surface {
         return true;
     }
     bool End() { // false: recurso perdido, recriar bitmaps
-        if (rt->EndDraw() == D2DERR_RECREATE_TARGET) { rt->Release(); rt = nullptr; return false; }
+        HRESULT hr = rt->EndDraw();
+        if (hr == D2DERR_RECREATE_TARGET) { rt->Release(); rt = nullptr; return false; }
+        if (FAILED(hr)) DIAG_HR("desenho falhou", hr); // ex.: v19.5.2, Configurações pretas
         return true;
     }
     void Resize(UINT w, UINT h) { if (rt) rt->Resize(D2D1::SizeU(w, h)); }
