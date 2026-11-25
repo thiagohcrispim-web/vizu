@@ -62,7 +62,7 @@ jobs:
           vcpkgDirectory: '${{ env.VCPKG_ROOT }}'
           vcpkgTriplet: '${{ matrix.triplet }}'
           vcpkgArguments: '--feature-flags=versions,manifests'
-          appendedCacheKey: '${{ matrix.triplet }}-${{ hashFiles('vcpkg.json') }}'
+          appendedCacheKey: "${{ matrix.triplet }}-${{ hashFiles('vcpkg.json') }}"
 
       - name: Install dependencies (Linux)
         if: runner.os == 'Linux'
