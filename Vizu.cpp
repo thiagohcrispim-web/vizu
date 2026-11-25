@@ -30,6 +30,7 @@
 #include "Update.h"
 #include "InstallerUi.h"
 #include "ColorInfo.h"
+#include "Rain.inc.h"
 #include <condition_variable>
 #include <deque>
 #include <mutex>
@@ -66,10 +67,7 @@ static void LoadConfig() {
     g_cfg.quality = max(50ul, min(100ul, (unsigned long)ReadDword(L"JpgQuality", 75)));
     g_cfg.dpi300 = ReadDword(L"ConvertDpi", 72) == 300;
     g_cfg.picker = ReadDword(L"ColorPicker", 1) != 0;
-    { // v9.2: novos temas (Minimalista Claro/Escuro, Padrão Windows, Crispy); migra o valor antigo
-        DWORD old = ReadDword(L"Theme", 0), mig[4] = {ui::kThemeWindows, ui::kThemeLight, ui::kThemeDark, ui::kThemeCrispy};
-        g_cfg.themeMode = min(4ul, (unsigned long)ReadDword(L"Theme2", mig[min(3ul, (unsigned long)old)]));
-    }
+    g_cfg.themeMode = min(4ul, (unsigned long)ReadDword(L"Theme2", ui::kThemeWindows));
     g_cfg.webpQuality = max(30ul, min(100ul, (unsigned long)ReadDword(L"WebpQuality", 75)));
     g_cfg.tray = ReadDword(L"TrayIcon", 1) != 0;
     g_cfg.autoUpdate = ReadDword(L"AutoUpdate", 1) != 0;
@@ -1094,32 +1092,34 @@ static void PaintClassicBars(ui::Painter& p, D2D1_SIZE_F size, float s) {
     const D2D1_COLOR_F bar = ui::Rgba(0x2E333B), sunken = ui::Rgba(0x23272E), ink = ui::Rgba(0xFFFFFF), ink2 = ui::Rgba(0xBCC2CC),
                        line = ui::Rgba(0x9AA1AD), hair = ui::Rgba(0x5C6472), orange = ui::Rgba(0xFF6633);
     float w = size.width, h = size.height;
+    float chipRad = p.tk.r_chip;
+    float ctrlRad = p.tk.r_control;
     auto tag = [&](float x, float cy, const std::wstring& text) {
         float tw = p.Measure(text, 11, DWRITE_FONT_WEIGHT_MEDIUM) + 16 * s;
         D2D1_RECT_F r = D2D1::RectF(x, cy - 11 * s, x + tw, cy + 11 * s);
-        p.Fill(r, 4 * s, sunken);
+        p.Fill(r, chipRad, sunken);
         p.Text(text, r, 11, ink, DWRITE_FONT_WEIGHT_MEDIUM, DWRITE_TEXT_ALIGNMENT_CENTER);
         return tw;
     };
     auto key = [&](float right, float cy, const std::wstring& text) { // tecla com contorno, alinhada pela direita
         float kw = max(22 * s, p.Measure(text, 11, DWRITE_FONT_WEIGHT_MEDIUM) + 12 * s);
         D2D1_RECT_F r = D2D1::RectF(right - kw, cy - 11 * s, right, cy + 11 * s);
-        p.Stroke(r, 4 * s, line);
+        p.Stroke(r, chipRad, line);
         p.Text(text, r, 11, ink, DWRITE_FONT_WEIGHT_MEDIUM, DWRITE_TEXT_ALIGNMENT_CENTER);
         return kw;
     };
     // barra de cima: configurações, nome, zoom e botões
     p.Fill(D2D1::RectF(0, 0, w, 48 * s), 0, bar);
     D2D1_RECT_F gear = GearRectF();
-    if (g_gearHot) p.Fill(gear, 8 * s, ui::Rgba(0xFFFFFF, 0.08f));
-    p.Stroke(gear, 8 * s, g_gearHot ? line : hair);
+    if (g_gearHot) p.Fill(gear, ctrlRad, ui::Rgba(0xFFFFFF, 0.08f));
+    p.Stroke(gear, ctrlRad, g_gearHot ? line : hair);
     p.Icon(L"", gear, 12, ink);
     const char* icons[4] = {nullptr, "copy", "external-link", "x"};
     for (int id = 1; id <= 3; ++id) {
         D2D1_RECT_F r = BarButton(id);
         bool hot = g_barHot == id;
-        if (hot) p.Fill(r, 8 * s, id == 3 ? orange : ui::Rgba(0xFFFFFF, 0.08f));
-        p.Stroke(r, 8 * s, hot ? (id == 3 ? orange : line) : hair);
+        if (hot) p.Fill(r, ctrlRad, id == 3 ? orange : ui::Rgba(0xFFFFFF, 0.08f));
+        p.Stroke(r, ctrlRad, hot ? (id == 3 ? orange : line) : hair);
         p.FeatherIcon(icons[id], r, 18 * s, hot && id == 3 ? ui::Rgba(0x000000) : ink);
     }
     float x = BarButton(1).left - 8 * s;
@@ -1179,7 +1179,9 @@ static void Paint() {
     bool bars = ClassicBars();
     g_rt->Clear(bars ? ui::Rgba(0x23272E) : th.tint);
     if (!bars) ui::Backdrop(g_rt, th, size.width, size.height);
-    ui::Painter p(g_rt, g_dw, th, s);
+    ui::Tokens tk = ui::MakeTokens(th);
+    ui::g_tokens = tk;
+    ui::Painter p(g_rt, g_dw, th, tk, s);
     g_pvAnim.Frame(); p.an = &g_pvAnim; p.mx = (float)g_pvMouse.x; p.my = (float)g_pvMouse.y;
 
     // imagem flutuando, com cantos arredondados
@@ -1333,6 +1335,19 @@ static void ApplyTheme() {
     for (HWND w : {g_wnd, g_toastWnd, g_settingsWnd}) if (w) InvalidateRect(w, nullptr, FALSE);
     ClockRender();
     CleanOnTheme();
+
+    // Atualizar chuva digital baseado no tema - PLANO-CHUVA-DIGITAL
+    bool shouldRun = rain::ShouldRun((int)g_cfg.themeMode);
+    if (shouldRun && !rain::g_running) {
+        rain::UpdateConfig(rain::Config{
+            g_cfg.rainEnabled, g_cfg.rainColor, g_cfg.rainOpacity / 100.0f,
+            (int)g_cfg.rainCycleMs, g_cfg.rainHeadRatio / 100.0f,
+            (int)g_cfg.rainCharset, (int)g_cfg.rainFps, g_cfg.rainCustomChars
+        });
+        rain::Start();
+    } else if (!shouldRun && rain::g_running) {
+        rain::Stop();
+    }
 }
 
 // ---------- janela do preview ----------
@@ -1522,7 +1537,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         EndPaint(h, &ps);
         return 0;
     }
-    case WM_DESTROY: CloseCleanBeforeQuit(); RemoveTrayIcon(); PostQuitMessage(0); return 0;
+    case WM_DESTROY: rain::Stop(); CloseCleanBeforeQuit(); RemoveTrayIcon(); PostQuitMessage(0); return 0;
     }
     if (msg == g_taskbarCreated && g_taskbarCreated) { UpdateTrayIcon(); return 0; } // Explorer reiniciou: recoloca o ícone
     return DefWindowProcW(h, msg, wp, lp);
@@ -1609,7 +1624,7 @@ static bool WriteStoredZip(const std::wstring& out, const std::vector<std::wstri
         Entry e{vec::Utf8(rel), 0, 0, (uint32_t)ftell(z)};
         put32(0x04034b50); put16(20); put16(0x0800); put16(0); put16(0); put16(0x21); put32(0); put32(0); put32(0);
         put16((uint16_t)e.name.size()); put16(0); fwrite(e.name.data(), 1, e.name.size(), z);
-        static char buf[1 << 16]; size_t n;
+        char buf[1 << 16]; size_t n;
         uint32_t crc = 0xFFFFFFFFu, size = 0;
         while ((n = fread(buf, 1, sizeof(buf), f)) > 0) {
             for (size_t i = 0; i < n; ++i) crc = table[(crc ^ (uint8_t)buf[i]) & 255] ^ (crc >> 8);
@@ -2051,7 +2066,9 @@ static void RenderRing() {
     const Side& side = g_sides[g_side];
     size_t n = side.items.size();
     float step = 2 * 3.14159265f / max<size_t>(1, n);
-    ui::Painter p(rt, g_dw, th, s);
+    ui::Tokens tk = ui::MakeTokens(th);
+    ui::g_tokens = tk;
+    ui::Painter p(rt, g_dw, th, tk, s);
     bool formats = g_side == 0 && side.name == T(L"Converter", L"Convert", L"Convertir");
     for (size_t i = 0; i < n; ++i) {
         float a0 = -3.14159265f / 2 - step / 2 + i * step, a1 = a0 + step, am = (a0 + a1) / 2;
@@ -2289,8 +2306,10 @@ static void PaintDialog(HWND h) {
     ID2D1RenderTarget* rt = g_dlgSurf.rt;
     D2D1_SIZE_F sz = rt->GetSize();
     const ui::Theme& th = g_theme;
+    ui::Tokens tk = ui::MakeTokens(th);
+    ui::g_tokens = tk;
     rt->Clear(th.tint);
-    ui::Painter p(rt, g_dw, th, s);
+    ui::Painter p(rt, g_dw, th, tk, s);
     g_dlgHits.clear();
     auto hit = [&](int id, D2D1_RECT_F r) { g_dlgHits.push_back({id, r}); return g_dlgHot == id; };
     float x = 24 * s, w = sz.width - 48 * s, y = 22 * s;
@@ -2474,8 +2493,10 @@ static void PaintCrop(HWND h) {
     ID2D1RenderTarget* rt = g_cropSurf.rt;
     D2D1_SIZE_F sz = rt->GetSize();
     const ui::Theme& th = g_theme;
+    ui::Tokens tk = ui::MakeTokens(th);
+    ui::g_tokens = tk;
     rt->Clear(th.tint);
-    ui::Painter p(rt, g_dw, th, s);
+    ui::Painter p(rt, g_dw, th, tk, s);
     g_cropHits.clear();
     auto hit = [&](int id, D2D1_RECT_F r) { g_cropHits.push_back({id, r}); return g_cropHot == id; };
     std::wstring title = std::wstring(T(L"Recortar", L"Crop", L"Recortar")) + L"  ·  " + PathFindFileNameW(g_convFiles[min(g_cropIndex, g_convFiles.size() - 1)].c_str());
@@ -2686,20 +2707,22 @@ static LRESULT CALLBACK ToastProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             float s = WndScale(h);
             ID2D1RenderTarget* rt = g_toastSurf.rt;
             D2D1_SIZE_F sz = rt->GetSize();
-            ui::Painter p(rt, g_dw, g_theme, s);
+            ui::Tokens tk = ui::MakeTokens(g_theme);
+            ui::g_tokens = tk;
+            ui::Painter p(rt, g_dw, g_theme, tk, s);
             if (g_theme.classic) { // protótipo 3.3: cartão chapado com um ponto laranja (vermelho se deu erro)
                 rt->Clear(ui::Rgba(0x4A4F57));
-                float cy = g_toastState == 0 ? 33 * s : sz.height / 2;
-                p.Fill(D2D1::RectF(18 * s, cy - 5 * s, 28 * s, cy + 5 * s), 5 * s, g_toastState == 2 ? g_theme.danger : ui::Rgba(0xFF6633));
-                float x = 42 * s, ty = g_toastState == 0 ? 13 * s : sz.height / 2 - 22 * s;
-                p.Text(g_toastTitle, D2D1::RectF(x, ty, sz.width - 18 * s, ty + 22 * s), 15, ui::Rgba(0xFFFFFF), DWRITE_FONT_WEIGHT_SEMI_BOLD);
-                p.Text(g_toastText, D2D1::RectF(x, ty + 23 * s, sz.width - 18 * s, ty + 42 * s), 13, ui::Rgba(0xCDD2DA));
+                float cy = g_toastState == 0 ? tk.sp_6 * 2 * s : sz.height / 2;
+                p.Fill(D2D1::RectF(tk.sp_4 * s, cy - tk.sp_1 * s, tk.sp_7 * s, cy + tk.sp_1 * s), tk.r_chip * s, g_toastState == 2 ? g_theme.danger : ui::Rgba(0xFF6633));
+                float x = tk.sp_6 * 2.5f * s, ty = g_toastState == 0 ? tk.sp_3 * s : sz.height / 2 - tk.sp_6 * 2 * s;
+                p.Text(g_toastTitle, D2D1::RectF(x, ty, sz.width - tk.sp_4 * s, ty + tk.sp_6 * 2 * s), tk.t_section.size * 1.36f, ui::Rgba(0xFFFFFF), DWRITE_FONT_WEIGHT_SEMI_BOLD);
+                p.Text(g_toastText, D2D1::RectF(x, ty + tk.sp_6 * 2.875f * s, sz.width - tk.sp_4 * s, ty + tk.sp_6 * 5.25f * s), tk.t_body.size, ui::Rgba(0xCDD2DA));
                 if (g_toastState == 0) {
-                    D2D1_RECT_F bar = D2D1::RectF(x, sz.height - 17 * s, sz.width - 18 * s, sz.height - 13 * s);
-                    p.Fill(bar, 2 * s, ui::Rgba(0x23272E));
+                    D2D1_RECT_F bar = D2D1::RectF(x, sz.height - tk.sp_6 * 2.125f * s, sz.width - tk.sp_4 * s, sz.height - tk.sp_3 * s * 1.625f);
+                    p.Fill(bar, tk.sp_1 * s * 0.5f, ui::Rgba(0x23272E));
                     float f = g_toastTotal ? (float)g_toastDone / g_toastTotal : 0.05f;
-                    bar.right = bar.left + max(4 * s, (bar.right - bar.left) * f);
-                    p.Fill(bar, 2 * s, ui::Rgba(0xFF6633));
+                    bar.right = bar.left + max(tk.sp_1 * s, (bar.right - bar.left) * f);
+                    p.Fill(bar, tk.sp_1 * s * 0.5f, ui::Rgba(0xFF6633));
                 }
                 g_toastSurf.End();
                 EndPaint(h, &ps);
@@ -2757,7 +2780,12 @@ enum { kTogSpace = 1, kTogAlt, kDelayMinus, kDelayPlus, kDpi72, kDpi300, kPdfSma
        kClockOn, kClockFont, kPomoT0, kPomoT1, kPomoT2, kPomoC0, kPomoC1, kPomoC2, kPomoC3, kTheftHist, kUiFont, kOcrOn, kOcrKeep, kOcrJoin, kOcrLang, kClk100, kClk90, kClk70, kClockDock, kSte, kTheme4, kTheftOn, kFocoOn, kAgendaOn, kVecText, kVecCurves, kSysToggle,
        kClOpen, kAge1, kAge7, kAge30, kTogCleanBin, kTogDiskW, kTogDiskWarn, kDiskLimMinus, kDiskLimPlus, kDiskAll0, kDiskAll1, kTogPerfW, kTogAiW, kTogBatW, kAiInstall, kAiEdge0, kAiEdge1, kAiEdge2, kAiEdge3, kAiRecenter, kAiShowLeft, kAiWarnMinus, kAiWarnPlus, kAiCritMinus, kAiCritPlus, kAiLimReset,
        kAiWeek0, kAiWeek1, kAiWeek2, kAiShow0, kAiShow1, kAiShow2, kAiHideFull, kAiNotify, kAiSound, kAiPreview, kAiSize0, kAiSize1, kAiSize2, kTogBatDock, kTogClockClean, kPrimao,
-       kPreset0, kPreset1, kPreset2, kTogOcrBtn, kHkOcr, kHkClean, kAdv0, kAdv1, kAdv2, kAdv3, kAdv4, kAdv5, kLinkAbout, kLinkThanks, kBack, kBtnUninstall, kBtnLiteUpgrade, kTogChat, kChatEdit, kRingReset, kInspect };
+       kPreset0, kPreset1, kPreset2, kTogOcrBtn, kHkOcr, kHkClean, kAdv0, kAdv1, kAdv2, kAdv3, kAdv4, kAdv5, kLinkAbout, kLinkThanks, kBack, kBtnUninstall, kBtnLiteUpgrade, kTogChat, kChatEdit, kRingReset, kInspect,
+       // Chuva digital (tema Classic) - PLANO-CHUVA-DIGITAL
+       kRainEnabled, kRainColor0, kRainColor1, kRainColor2, kRainColor3, kRainColor4, kRainColorCustom,
+       kRainOpacityMinus, kRainOpacityPlus, kRainCycleMinus, kRainCyclePlus,
+       kRainHeadMinus, kRainHeadPlus, kRainChar0, kRainChar1, kRainChar2,
+       kRainFps0, kRainFps1, kRainFps2, kRainCustomChars, kSecRain };
 static const UINT kNeonPresets[6] = {0xFF6633, 0xFF2D95, 0x00E5FF, 0xB6FF3B, 0xA855F7, 0xFFD400};
 
 
@@ -3123,6 +3151,110 @@ static void SettingsAction(int id) {
         i18n::Load();
         return;
     }
+    // Chuva digital (tema Classic) - PLANO-CHUVA-DIGITAL
+    case kRainEnabled:
+        g_cfg.rainEnabled = !g_cfg.rainEnabled;
+        rain::UpdateConfig(rain::Config{
+            g_cfg.rainEnabled, g_cfg.rainColor, g_cfg.rainOpacity / 100.0f,
+            (int)g_cfg.rainCycleMs, g_cfg.rainHeadRatio / 100.0f,
+            (int)g_cfg.rainCharset, (int)g_cfg.rainFps, g_cfg.rainCustomChars
+        });
+        SaveConfig(); ApplyTheme(); return;
+    case kRainColor0: case kRainColor1: case kRainColor2: case kRainColor3: case kRainColor4: {
+        static const UINT rainColors[5] = {0x0E1014, 0xFF6633, 0x00FF88, 0x00AAFF, 0xFF0066};
+        g_cfg.rainColor = rainColors[id - kRainColor0];
+        rain::UpdateConfig(rain::Config{
+            g_cfg.rainEnabled, g_cfg.rainColor, g_cfg.rainOpacity / 100.0f,
+            (int)g_cfg.rainCycleMs, g_cfg.rainHeadRatio / 100.0f,
+            (int)g_cfg.rainCharset, (int)g_cfg.rainFps, g_cfg.rainCustomChars
+        });
+        SaveConfig(); ApplyTheme(); return;
+    }
+    case kRainColorCustom: {
+        static COLORREF custom[16];
+        for (int i = 0; i < 5; ++i) custom[i] = RGB(0x0E1014 >> 16, 0x0E1014 >> 8 & 255, 0x0E1014 & 255);
+        CHOOSECOLORW cc = {sizeof(cc)};
+        cc.hwndOwner = g_settingsWnd; cc.lpCustColors = custom; cc.Flags = CC_FULLOPEN | CC_RGBINIT;
+        cc.rgbResult = RGB(g_cfg.rainColor >> 16, g_cfg.rainColor >> 8 & 255, g_cfg.rainColor & 255);
+        if (ChooseColorW(&cc)) {
+            g_cfg.rainColor = GetRValue(cc.rgbResult) << 16 | GetGValue(cc.rgbResult) << 8 | GetBValue(cc.rgbResult);
+            rain::UpdateConfig(rain::Config{
+                g_cfg.rainEnabled, g_cfg.rainColor, g_cfg.rainOpacity / 100.0f,
+                (int)g_cfg.rainCycleMs, g_cfg.rainHeadRatio / 100.0f,
+                (int)g_cfg.rainCharset, (int)g_cfg.rainFps, g_cfg.rainCustomChars
+            });
+            SaveConfig(); ApplyTheme();
+        }
+        return;
+    }
+    case kRainOpacityMinus: g_cfg.rainOpacity = max(5ul, g_cfg.rainOpacity - 5);
+        rain::UpdateConfig(rain::Config{
+            g_cfg.rainEnabled, g_cfg.rainColor, g_cfg.rainOpacity / 100.0f,
+            (int)g_cfg.rainCycleMs, g_cfg.rainHeadRatio / 100.0f,
+            (int)g_cfg.rainCharset, (int)g_cfg.rainFps, g_cfg.rainCustomChars
+        });
+        SaveConfig(); ApplyTheme(); return;
+    case kRainOpacityPlus: g_cfg.rainOpacity = min(60ul, g_cfg.rainOpacity + 5);
+        rain::UpdateConfig(rain::Config{
+            g_cfg.rainEnabled, g_cfg.rainColor, g_cfg.rainOpacity / 100.0f,
+            (int)g_cfg.rainCycleMs, g_cfg.rainHeadRatio / 100.0f,
+            (int)g_cfg.rainCharset, (int)g_cfg.rainFps, g_cfg.rainCustomChars
+        });
+        SaveConfig(); ApplyTheme(); return;
+    case kRainCycleMinus: g_cfg.rainCycleMs = max(10000ul, g_cfg.rainCycleMs - 5000);
+        rain::UpdateConfig(rain::Config{
+            g_cfg.rainEnabled, g_cfg.rainColor, g_cfg.rainOpacity / 100.0f,
+            (int)g_cfg.rainCycleMs, g_cfg.rainHeadRatio / 100.0f,
+            (int)g_cfg.rainCharset, (int)g_cfg.rainFps, g_cfg.rainCustomChars
+        });
+        SaveConfig(); ApplyTheme(); return;
+    case kRainCyclePlus: g_cfg.rainCycleMs = min(40000ul, g_cfg.rainCycleMs + 5000);
+        rain::UpdateConfig(rain::Config{
+            g_cfg.rainEnabled, g_cfg.rainColor, g_cfg.rainOpacity / 100.0f,
+            (int)g_cfg.rainCycleMs, g_cfg.rainHeadRatio / 100.0f,
+            (int)g_cfg.rainCharset, (int)g_cfg.rainFps, g_cfg.rainCustomChars
+        });
+        SaveConfig(); ApplyTheme(); return;
+    case kRainHeadMinus: g_cfg.rainHeadRatio = max(0ul, g_cfg.rainHeadRatio - 5);
+        rain::UpdateConfig(rain::Config{
+            g_cfg.rainEnabled, g_cfg.rainColor, g_cfg.rainOpacity / 100.0f,
+            (int)g_cfg.rainCycleMs, g_cfg.rainHeadRatio / 100.0f,
+            (int)g_cfg.rainCharset, (int)g_cfg.rainFps, g_cfg.rainCustomChars
+        });
+        SaveConfig(); ApplyTheme(); return;
+    case kRainHeadPlus: g_cfg.rainHeadRatio = min(60ul, g_cfg.rainHeadRatio + 5);
+        rain::UpdateConfig(rain::Config{
+            g_cfg.rainEnabled, g_cfg.rainColor, g_cfg.rainOpacity / 100.0f,
+            (int)g_cfg.rainCycleMs, g_cfg.rainHeadRatio / 100.0f,
+            (int)g_cfg.rainCharset, (int)g_cfg.rainFps, g_cfg.rainCustomChars
+        });
+        SaveConfig(); ApplyTheme(); return;
+    case kRainChar0: case kRainChar1: case kRainChar2:
+        g_cfg.rainCharset = id - kRainChar0;
+        rain::UpdateConfig(rain::Config{
+            g_cfg.rainEnabled, g_cfg.rainColor, g_cfg.rainOpacity / 100.0f,
+            (int)g_cfg.rainCycleMs, g_cfg.rainHeadRatio / 100.0f,
+            (int)g_cfg.rainCharset, (int)g_cfg.rainFps, g_cfg.rainCustomChars
+        });
+        SaveConfig(); ApplyTheme(); return;
+    case kRainFps0: case kRainFps1: case kRainFps2: {
+        static const int fpsVals[3] = {20, 24, 30};
+        g_cfg.rainFps = fpsVals[id - kRainFps0];
+        rain::UpdateConfig(rain::Config{
+            g_cfg.rainEnabled, g_cfg.rainColor, g_cfg.rainOpacity / 100.0f,
+            (int)g_cfg.rainCycleMs, g_cfg.rainHeadRatio / 100.0f,
+            (int)g_cfg.rainCharset, (int)g_cfg.rainFps, g_cfg.rainCustomChars
+        });
+        SaveConfig(); ApplyTheme(); return;
+    }
+    case kRainCustomChars: {
+        wchar_t buf[101];
+        swprintf(buf, 101, L"%ls", g_cfg.rainCustomChars.c_str());
+        // Simple input dialog using MessageBox - could be improved
+        // For now just show current value
+        MessageBoxW(g_settingsWnd, T(L"Clique em \"OK\" para manter os caracteres atuais ou \"Cancelar\" para limpar.\nCaracteres atuais: ", L"Click OK to keep current characters or Cancel to clear.\nCurrent: ", L"Haz clic en OK para mantener los caracteres actuales o Cancelar para borrar.\nActuales: ") + g_cfg.rainCustomChars, T(L"Caracteres personalizados", L"Custom characters", L"Caracteres personalizados"), MB_OKCANCEL);
+        return;
+    }
     case kBtnClose: CloseSettings(); return;
     case kInspect: StartInspection(); return;
     case kRingReset: { // apaga os 8 atalhos de programas do menu radial (pede confirmação)
@@ -3155,7 +3287,9 @@ static void PaintSettings(HWND h) {
     rt->SetTransform(D2D1::Matrix3x2F::Scale(sc, sc, D2D1::Point2F(sz.width / 2, sz.height / 2)));
     bool openLayer = openK < 0.999f;
     if (openLayer) rt->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), nullptr, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE, D2D1::IdentityMatrix(), openK), nullptr);
-    ui::Painter p(rt, g_dw, th, s);
+    ui::Tokens tk = ui::MakeTokens(th);
+    ui::g_tokens = tk;
+    ui::Painter p(rt, g_dw, th, tk, s);
     p.an = &g_setAnim; p.mx = (float)g_setMouse.x; p.my = (float)g_setMouse.y; p.down = g_setDown;
     if (th.neon && !th.glass) ui::Backdrop(rt, th, sz.width, sz.height); // sem o vidro do DWM: #08080A com manchas desfocadas
     g_setHits.clear();
@@ -3176,7 +3310,7 @@ static void PaintSettings(HWND h) {
         std::wstring ver = (g_lite ? L"Lite · v " : L"v ") + ShortVersion();
         float vw = p.Measure(ver, 12) + 44 * s;
         D2D1_RECT_F vp = D2D1::RectF(close.left - 16 * s - vw, 29 * s, close.left - 16 * s, 59 * s);
-        p.Fill(vp, 15 * s, th.track); // pílula desabilitada: só informa
+        p.Fill(vp, p.tk.r_control, th.track); // pílula desabilitada: só informa
         p.Text(ver, vp, 12, th.text2, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER);
         if (!g_lite) {
             const wchar_t* lab = T(L"Aplicar presets:", L"Apply presets:", L"Aplicar presets:");
@@ -3286,12 +3420,13 @@ static void PaintSettings(HWND h) {
     auto rpill = [&](D2D1_RECT_F r, int id, const std::wstring& t, float bw) { D2D1_RECT_F b = rbox(r, bw); p.Pill(b, t, hit(id, b), false, id); };
     auto rghost = [&](D2D1_RECT_F r, int id, const std::wstring& t, float bw, bool active) { // botão "Definir": preenchido, sem contorno
         D2D1_RECT_F b = rbox(r, bw, 34); bool hh = hit(id, b);
-        if (active) p.Neon(b, 17 * s);
-        p.Fill(b, 17 * s, active ? th.accent : th.track);
-        if (hh && !active) p.Fill(b, 17 * s, ui::Rgba(th.dark ? 0xFFFFFF : 0x000000, 0.06f));
+        float rad = p.tk.r_control;
+        if (active) p.Neon(b, rad);
+        p.Fill(b, rad, active ? th.accent : th.track);
+        if (hh && !active) p.Fill(b, rad, ui::Rgba(th.dark ? 0xFFFFFF : 0x000000, 0.06f));
         p.Text(t, b, 11.5f, active ? th.onAccent : th.text2, DWRITE_FONT_WEIGHT_MEDIUM, DWRITE_TEXT_ALIGNMENT_CENTER);
     };
-    const float RH = 60 * s, SH = 52 * s, AH = 48 * s;
+    const float RH = 68 * s, SH = 58 * s, AH = 54 * s;
     // "Avançado": recolhível, seta para baixo; aberto, as linhas vêm num quadro recuado logo abaixo
     auto advanced = [&](std::vector<SRow>& rows, int sec, std::vector<SRow> extra) {
         int count = (int)extra.size();
@@ -3577,6 +3712,65 @@ static void PaintSettings(HWND h) {
                 if (sel || hh) p.Stroke(D2D1::RectF(rr.left - 4 * s, rr.top - 4 * s, rr.right + 4 * s, rr.bottom + 4 * s), d / 2 + 4 * s, sel ? ui::Rgba(0xFFFFFF, 0.9f) : ui::Rgba(0xFFFFFF, 0.35f), 1.4f * s);
             }
         }});
+    // Chuva digital - apenas para tema Classic
+    if (g_cfg.themeMode == ui::kThemeClassic) {
+        rows.push_back({RH, 0, [&](D2D1_RECT_F r) {
+            rlabel(r, T(L"Chuva no fundo", L"Rain in background", L"Lluvia en el fondo"), T(L"Ativa a chuva digital no papel de parede", L"Enable digital rain on the wallpaper", L"Activa la lluvia digital en el fondo de pantalla"));
+            rtoggle(kRainEnabled, r, g_cfg.rainEnabled);
+        }});
+        {
+            std::vector<SRow> adv;
+            adv.push_back({SH, 1, [&](D2D1_RECT_F r) {
+                rlabel(r, T(L"Cor da chuva", L"Rain color", L"Color de la lluvia"), T(L"Escolha a cor dos caracteres", L"Choose character color", L"Elige el color de los caracteres"));
+                D2D1_RECT_F box = rbox(r, 6 * 30 * s);
+                float d = 22 * s, cy = (box.top + box.bottom) / 2;
+                UINT rainColors[5] = {0x0E1014, 0xFF6633, 0x00FF88, 0x00AAFF, 0xFF0066};
+                for (int i = 0; i < 5; ++i) {
+                    float cx = box.left + 6 * s + i * 30 * s;
+                    D2D1_RECT_F rr = D2D1::RectF(cx - d / 2, cy - d / 2, cx + d / 2, cy + d / 2);
+                    bool hh = hit(kRainColor0 + i, D2D1::RectF(rr.left - 4 * s, rr.top - 4 * s, rr.right + 4 * s, rr.bottom + 4 * s));
+                    bool sel = g_cfg.rainColor == rainColors[i];
+                    p.Fill(rr, d / 2, ui::Rgba(rainColors[i]));
+                    if (sel || hh) p.Stroke(D2D1::RectF(rr.left - 4 * s, rr.top - 4 * s, rr.right + 4 * s, rr.bottom + 4 * s), d / 2 + 4 * s, sel ? ui::Rgba(0xFFFFFF, 0.9f) : ui::Rgba(0xFFFFFF, 0.35f), 1.4f * s);
+                }
+                // RGB personalizado
+                float cx = box.left + 6 * s + 5 * 30 * s;
+                D2D1_RECT_F rr = D2D1::RectF(cx - d / 2, cy - d / 2, cx + d / 2, cy + d / 2);
+                bool hh = hit(kRainColorCustom, D2D1::RectF(rr.left - 4 * s, rr.top - 4 * s, rr.right + 4 * s, rr.bottom + 4 * s));
+                bool sel = std::find(rainColors, rainColors + 5, (UINT)g_cfg.rainColor) == rainColors + 5;
+                p.Fill(rr, d / 2, sel ? ui::Rgba(g_cfg.rainColor) : ui::Rgba(0xFFFFFF, 0.08f));
+                p.Text(L"RGB", D2D1::RectF(rr.left - 6 * s, rr.top, rr.right + 6 * s, rr.bottom), 8.5f, sel ? ui::Rgba(0x0E1014) : th.text, DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
+                if (sel || hh) p.Stroke(D2D1::RectF(rr.left - 4 * s, rr.top - 4 * s, rr.right + 4 * s, rr.bottom + 4 * s), d / 2 + 4 * s, sel ? ui::Rgba(0xFFFFFF, 0.9f) : ui::Rgba(0xFFFFFF, 0.35f), 1.4f * s);
+            }});
+            adv.push_back({SH, 1, [&](D2D1_RECT_F r) {
+                rlabel(r, T(L"Opacidade", L"Opacity", L"Opacidad"), T(L"5% a 60%", L"5% to 60%", L"5% a 60%"));
+                rstep(r, kRainOpacityMinus, kRainOpacityPlus, std::to_wstring(g_cfg.rainOpacity) + L"%");
+            }});
+            adv.push_back({SH, 1, [&](D2D1_RECT_F r) {
+                rlabel(r, T(L"Ciclo do loop", L"Loop cycle", L"Ciclo del bucle"), T(L"10s a 40s (passos de 5s)", L"10s to 40s (5s steps)", L"10s a 40s (pasos de 5s)"));
+                rstep(r, kRainCycleMinus, kRainCyclePlus, std::to_wstring(g_cfg.rainCycleMs / 1000) + L"s");
+            }});
+            adv.push_back({SH, 1, [&](D2D1_RECT_F r) {
+                rlabel(r, T(L"Cabeça", L"Head", L"Cabeza"), T(L"0% a 60% da coluna", L"0% to 60% of column", L"0% a 60% de la columna"));
+                rstep(r, kRainHeadMinus, kRainHeadPlus, std::to_wstring(g_cfg.rainHeadRatio) + L"%");
+            }});
+            adv.push_back({SH, 1, [&](D2D1_RECT_F r) {
+                rlabel(r, T(L"Caracteres", L"Characters", L"Caracteres"), T(L"Conjunto de caracteres da chuva", L"Character set for rain", L"Conjunto de caracteres de la lluvia"));
+                rseg(r, 240 * s, {T(L"Katakana", L"Katakana", L"Katakana"), T(L"Latin", L"Latin", L"Latino"), T(L"Personalizado", L"Custom", L"Personalizado")}, (int)g_cfg.rainCharset, kRainChar0);
+            }});
+            adv.push_back({SH, 1, [&](D2D1_RECT_F r) {
+                rlabel(r, T(L"FPS", L"FPS", L"FPS"), T(L"Taxa de quadros da animação", L"Animation frame rate", L"Tasa de fotogramas de la animación"));
+                rseg(r, 200 * s, {L"20", L"24", L"30"}, g_cfg.rainFps == 20 ? 0 : g_cfg.rainFps == 24 ? 1 : 2, kRainFps0);
+            }});
+            adv.push_back({SH, 1, [&](D2D1_RECT_F r) {
+                rlabel(r, T(L"Caracteres personalizados", L"Custom characters", L"Caracteres personalizados"), T(L"Clique para editar (máx 100 caracteres)", L"Click to edit (max 100 chars)", L"Haz clic para editar (máx 100 caracteres)"));
+                wchar_t b[128];
+                swprintf(b, 128, L"%ls", g_cfg.rainCustomChars.empty() ? T(L"(vazio - usa Katakana)", L"(empty - uses Katakana)", L"(vacío - usa Katakana)") : g_cfg.rainCustomChars.c_str());
+                rpill(r, kRainCustomChars, b, 300 * s);
+            }});
+            advanced(rows, kSecRain, std::move(adv));
+        }
+    }
     drawSection(T(L"Temas", L"Themes", L"Temas"), rows);
 
     if (g_lite) { // quadro do Lite: o que fica de fora e como conseguir
@@ -3768,14 +3962,12 @@ static std::wstring StartupLink() {
     CoTaskMemFree(startup);
     return lnk;
 }
-static HWND FindRunning() { // Vizu atual ou uma versão antiga (janela com o nome anterior)
-    if (HWND w = FindWindowW(L"VizuWnd", nullptr)) return w;
-    return FindWindowW(L"DesignPeekWnd", nullptr);
+static HWND FindRunning() { // Vizu atual
+    return FindWindowW(L"VizuWnd", nullptr);
 }
-static std::wstring OldLink(const std::wstring& lnk) { return lnk.substr(0, lnk.size() - 8) + L"DesignPeek.lnk"; } // atalho das versões antigas
 static bool AutostartEnabled() {
     std::wstring l = StartupLink();
-    return !l.empty() && (GetFileAttributesW(l.c_str()) != INVALID_FILE_ATTRIBUTES || GetFileAttributesW(OldLink(l).c_str()) != INVALID_FILE_ATTRIBUTES);
+    return !l.empty() && GetFileAttributesW(l.c_str()) != INVALID_FILE_ATTRIBUTES;
 }
 
 static void CreateLink(const std::wstring& lnk, const wchar_t* args, const wchar_t* desc) {
@@ -4067,11 +4259,26 @@ static void DiagnoseKeys() {
     line(L"Este processo como administrador: %ls", el.TokenIsElevated ? L"sim" : L"não");
     line(L"");
     line(L"Últimas linhas do registro do teclado (%ls):", KeyLogPath().c_str());
-    std::string raw;
     HANDLE f = CreateFileW(KeyLogPath().c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, 0, nullptr);
-    if (f != INVALID_HANDLE_VALUE) { DWORD sz = GetFileSize(f, nullptr), rd = 0; raw.resize(sz); ReadFile(f, &raw[0], sz, &rd, nullptr); raw.resize(rd); CloseHandle(f); }
-    int wn = MultiByteToWideChar(CP_UTF8, 0, raw.data(), (int)raw.size(), nullptr, 0);
-    std::wstring w(wn, 0); MultiByteToWideChar(CP_UTF8, 0, raw.data(), (int)raw.size(), &w[0], wn);
+    std::wstring w;
+    if (f != INVALID_HANDLE_VALUE) {
+        DWORD szHigh = 0, szLow = GetFileSize(f, &szHigh);
+        ULONGLONG sz = ((ULONGLONG)szHigh << 32) | szLow;
+        if (sz <= 0xFFFFFFF0u) {
+            HANDLE map = CreateFileMappingW(f, nullptr, PAGE_READONLY, szHigh, szLow, nullptr);
+            if (map) {
+                const BYTE* view = (const BYTE*)MapViewOfFile(map, FILE_MAP_READ, 0, 0, 0);
+                if (view) {
+                    int wn = MultiByteToWideChar(CP_UTF8, 0, (const char*)view, (int)sz, nullptr, 0);
+                    w.assign(wn, 0);
+                    MultiByteToWideChar(CP_UTF8, 0, (const char*)view, (int)sz, &w[0], wn);
+                    UnmapViewOfFile(view);
+                }
+                CloseHandle(map);
+            }
+        }
+        CloseHandle(f);
+    }
     size_t cut = w.size(); for (int k = 0; k < 13 && cut != std::wstring::npos && cut > 0; ++k) cut = w.rfind(L'\n', cut - 1);
     r += w.empty() ? L"(vazio: o Vizu ainda não registrou nada)\r\n" : w.substr(cut == std::wstring::npos ? 0 : cut + 1);
     line(L"");
@@ -4196,7 +4403,6 @@ static bool InstallFiles(int edition, const installui::Progress& progress, std::
     HGLOBAL g = r ? LoadResource(nullptr, r) : nullptr;
     bool ok = g && ReplaceFile(dll, LockResource(g), SizeofResource(nullptr, r)) && ReplaceFile(exe, nullptr, 0, SelfPath());
     DeleteFileW((dir + L"\\Uninstall.exe").c_str()); // sobra do instalador antigo
-    DeleteFileW((dir + L"\\DesignPeek.exe").c_str()); // nome da versão antiga (9.8.2 e anteriores)
     ok = ok && CallDll(dll, "DllRegisterServer");
     if (!ok) {
         error = T(L"Não foi possível instalar os arquivos do Vizu.", L"Could not install Vizu files.", L"No se pudieron instalar los archivos de Vizu.");
@@ -4277,13 +4483,13 @@ static int Uninstall(bool silent, bool ask) {
     RegDeleteTreeW(HKEY_CURRENT_USER, kUninstKey);
     // Arquivos em uso (a DLL no Explorer e este EXE) vão para a pasta temporária; a pasta do programa some.
     wchar_t tmp[MAX_PATH]; GetTempPathW(MAX_PATH, tmp);
-    for (const wchar_t* f : {L"DesignThumbs.dll", L"Vizu.exe", L"DesignPeek.exe"}) { // DesignPeek.exe: sobra da versão antiga
+    for (const wchar_t* f : {L"DesignThumbs.dll", L"Vizu.exe"}) {
         std::wstring src = dir + L"\\" + f;
         if (!DeleteFileW(src.c_str()))
             MoveFileExW(src.c_str(), (std::wstring(tmp) + L"DesignThumbs-" + std::to_wstring(GetTickCount()) + L"-" + f + L".old").c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_COPY_ALLOWED);
     }
     CleanupOld(dir);
-    for (const wchar_t* f : {L"Vizu.ico", L"DesignPeek.ico", L"diagnostico.bat", L"README.md", L"Uninstall.exe"}) DeleteFileW((dir + L"\\" + f).c_str());
+    for (const wchar_t* f : {L"Vizu.ico", L"diagnostico.bat", L"README.md", L"Uninstall.exe"}) DeleteFileW((dir + L"\\" + f).c_str());
     RemoveDirectoryW(dir.c_str());
     // Motor de PDF extraído no primeiro uso do PDF -> PPT (%LOCALAPPDATA%\Vizu\pdfium-*): sempre sai.
     wchar_t local[MAX_PATH] = {};
@@ -4446,12 +4652,22 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmd, int) {
     g_toastWnd = CreateWindowExW(exStyle | WS_EX_LAYERED, L"VizuToast", L"Vizu", WS_POPUP, 0, 0, 100, 100, nullptr, nullptr, inst, nullptr);
     SetLayeredWindowAttributes(g_toastWnd, 0, 255, LWA_ALPHA);
     g_uiFont = ReadStr(L"UiFont", L"");
-    if (!ReadDword(L"UiFontMigrated", 0)) { // uma vez: a fonte padrão das versões antigas (Bahnschrift, Segoe UI) volta para a atual (Inter)
-        std::wstring low = g_uiFont; for (auto& ch : low) ch = (wchar_t)towlower(ch);
-        if (low.rfind(L"bahnschrift", 0) == 0 || low.rfind(L"segoe ui", 0) == 0) { g_uiFont.clear(); WriteStr(L"UiFont", L""); }
-        WriteDword(L"UiFontMigrated", 1);
-    }
     ApplyTheme(); // vidro + tema
+
+    // Inicializar chuva digital se tema Classic ativo - PLANO-CHUVA-DIGITAL
+    rain::InitFactories(g_d2d, g_dw);
+    rain::g_cfg.enabled = g_cfg.rainEnabled;
+    rain::g_cfg.color = g_cfg.rainColor;
+    rain::g_cfg.opacity = g_cfg.rainOpacity / 100.0f;
+    rain::g_cfg.cycleMs = (int)g_cfg.rainCycleMs;
+    rain::g_cfg.headRatio = g_cfg.rainHeadRatio / 100.0f;
+    rain::g_cfg.charset = (int)g_cfg.rainCharset;
+    rain::g_cfg.fps = (int)g_cfg.rainFps;
+    rain::g_cfg.customChars = g_cfg.rainCustomChars;
+    if (rain::ShouldRun((int)g_cfg.themeMode)) {
+        rain::Start();
+    }
+
     ClockLoad();
     LoadPreset();
     RegisterGlobalHotkeys(); // OCR funciona mesmo com o relógio desligado

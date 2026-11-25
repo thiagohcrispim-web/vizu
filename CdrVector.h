@@ -24,6 +24,7 @@
 #include <libcdr/libcdr.h>
 #include <zlib.h>
 #include "PdfPptx.h"
+#include "engines/VectorSink.h"
 
 namespace cdrv {
 static const double M_PI_ = 3.14159265358979323846;
@@ -803,5 +804,121 @@ inline std::vector<HBITMAP> Raster(const Drawing& d, const std::vector<int>& pag
     a.CloseDocument(doc);
     return out;
 }
+
+// ---------------- Integração com engines::VectorSink ----------------
+
+namespace engines {
+
+// Converte cdrv::Drawing para VectorSink (SVG/EPS/PDF/IDML)
+inline void ConvertDrawingToVectorSink(const cdrv::Drawing& drawing, VectorSink* sink, bool flipY = true) {
+    using namespace cdrv;
+
+    for (size_t pageIdx = 0; pageIdx < drawing.pages.size(); ++pageIdx) {
+        const Page& pg = drawing.pages[pageIdx];
+        Size pageSize{ (float)pg.w, (float)pg.h };
+
+        if (pageIdx == 0) {
+            sink->BeginDocument(pageSize);
+        }
+
+        double H = pg.h;
+        int gradId = 0;
+
+        for (const Item& it : pg.items) {
+            if (it.image) {
+                if (it.w <= 0 || it.h <= 0) continue;
+
+                EmbeddedBitmap bmp;
+                bmp.size = { (float)it.w, (float)it.h };
+                bmp.data = it.rgba;
+                bmp.opacity = 1.0f;
+
+                // Calcular matriz de transformação da imagem
+                Pt br{ it.tr.x + it.bl.x - it.tl.x, it.tr.y + it.bl.y - it.tl.y };
+                Matrix m;
+                m.m11 = (float)(it.tr.x - it.tl.x);
+                m.m12 = (float)(it.tr.y - it.tl.y);
+                m.m21 = (float)(it.bl.x - it.tl.x);
+                m.m22 = (float)(it.bl.y - it.tl.y);
+                m.dx = (float)it.tl.x;
+                m.dy = flipY ? (float)(H - it.bl.y) : (float)it.tl.y;
+
+                sink->PushState();
+                sink->MultiplyTransform(m);
+                Rect destRect{ 0, 0, 1, 1 };
+                sink->DrawBitmap(bmp, destRect);
+                sink->PopState();
+                continue;
+            }
+
+            // Converter segmentos para path
+            sink->BeginPath();
+            for (const Seg& s : it.segs) {
+                if (s.op == 'M') {
+                    float x = (float)s.p[0].x;
+                    float y = flipY ? (float)(H - s.p[0].y) : (float)s.p[0].y;
+                    sink->MoveTo({ x, y });
+                } else if (s.op == 'L') {
+                    float x = (float)s.p[0].x;
+                    float y = flipY ? (float)(H - s.p[0].y) : (float)s.p[0].y;
+                    sink->LineTo({ x, y });
+                } else if (s.op == 'C') {
+                    Point c1{ (float)s.p[0].x, flipY ? (float)(H - s.p[0].y) : (float)s.p[0].y };
+                    Point c2{ (float)s.p[1].x, flipY ? (float)(H - s.p[1].y) : (float)s.p[1].y };
+                    Point p{ (float)s.p[2].x, flipY ? (float)(H - s.p[2].y) : (float)s.p[2].y };
+                    sink->CubicTo(c1, c2, p);
+                } else if (s.op == 'Z') {
+                    sink->ClosePath();
+                }
+            }
+
+            // Configurar fill
+            if (it.fill.kind == Paint::Solid) {
+                sink->SetFillSolid(Color::FromUINT(it.fill.rgb, (float)it.fill.opacity));
+            } else if (it.fill.kind == Paint::Linear) {
+                LinearGradient lg;
+                lg.start = { (float)(it.fill.x1 * (pg.w)), (float)(it.fill.y1 * (pg.h)) };
+                lg.end = { (float)(it.fill.x2 * (pg.w)), (float)(it.fill.y2 * (pg.h)) };
+                for (const Stop& st : it.fill.stops) {
+                    lg.stops.push_back({ (float)st.offset, Color::FromUINT(st.rgb, (float)(st.opacity * it.fill.opacity)) });
+                }
+                sink->SetFillLinearGradient(lg);
+            } else if (it.fill.kind == Paint::Radial) {
+                RadialGradient rg;
+                rg.center = { (float)(it.fill.cx * pg.w), (float)(it.fill.cy * pg.h) };
+                rg.radiusX = (float)(it.fill.r * std::max(pg.w, pg.h));
+                rg.radiusY = rg.radiusX;
+                rg.focalPoint = rg.center;
+                for (const Stop& st : it.fill.stops) {
+                    rg.stops.push_back({ (float)st.offset, Color::FromUINT(st.rgb, (float)(st.opacity * it.fill.opacity)) });
+                }
+                sink->SetFillRadialGradient(rg);
+            } else {
+                sink->SetFillNone();
+            }
+
+            // Configurar stroke
+            if (it.stroke.on) {
+                StrokeStyle ss;
+                ss.width = (float)it.stroke.width;
+                ss.cap = it.stroke.cap == 1 ? StrokeStyle::LineCap::Round : (it.stroke.cap == 2 ? StrokeStyle::LineCap::Square : StrokeStyle::LineCap::Flat);
+                ss.join = it.stroke.join == 1 ? StrokeStyle::LineJoin::Round : (it.stroke.join == 2 ? StrokeStyle::LineJoin::Bevel : StrokeStyle::LineJoin::Miter);
+                ss.dashPattern.clear();
+                for (double d : it.stroke.dash) ss.dashPattern.push_back((float)d);
+                ss.dashOffset = 0;
+                sink->SetStroke(ss, Color::FromUINT(it.stroke.rgb, (float)it.stroke.opacity));
+            } else {
+                sink->SetStrokeNone();
+            }
+
+            // Desenhar path
+            sink->EndPath(it.fill.kind != Paint::None, it.stroke.on);
+        }
+    }
+
+    sink->EndDocument();
+}
+
+} // namespace engines
 
 } // namespace cdrv

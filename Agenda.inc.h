@@ -76,12 +76,14 @@ static void PaintAgenda(HWND h) {
     if (!g_ag.surf.Begin(g_d2d)) return;
     ID2D1RenderTarget* rt = g_ag.surf.rt;
     const ui::Theme& th = g_theme;
+    ui::Tokens tk = ui::MakeTokens(th);
+    ui::g_tokens = tk;
     float s = WndScale(h);
     D2D1_SIZE_F sz = rt->GetSize();
     float W = sz.width, H = sz.height;
     rt->Clear(th.tint);
     ui::Backdrop(rt, th, W, H);
-    ui::Painter p(rt, g_dw, th, s);
+    ui::Painter p(rt, g_dw, th, tk, s);
     static ui::Anim an; static HWND last; an.Frame(); p.an = &an;
     if (last != h) { last = h; an.m.clear(); an.Start(1, 0, 1, 220); } // janela nova: fade + escala 0,98 -> 1
     p.mx = (float)g_agMouse.x; p.my = (float)g_agMouse.y; p.down = g_agDown;
@@ -100,18 +102,18 @@ static void PaintAgenda(HWND h) {
     SYSTEMTIME today; GetLocalTime(&today);
 
     // cabeçalho
-    float x = 26 * s, y = 22 * s;
-    p.Text(T(L"AGENDA", L"AGENDA", L"AGENDA"), D2D1::RectF(x, y, x + 300 * s, y + 16 * s), 11, th.text2, DWRITE_FONT_WEIGHT_SEMI_BOLD);
+    float x = tk.sp_6 * s + tk.sp_2 * s, y = tk.sp_5 * s + tk.sp_1 * s * 0.5f; // 26, 22
+    p.Text(T(L"AGENDA", L"AGENDA", L"AGENDA"), D2D1::RectF(x, y, x + 300 * s, y + 16 * s), tk.t_section.size, th.text2, DWRITE_FONT_WEIGHT_SEMI_BOLD);
     wchar_t title[96];
     int dow = DayOfWeek(g_ag.day);
     if (i18n::Current() == 1) swprintf(title, 96, L"%ls, %ls %d", WeekName(dow, false), MonthName(g_ag.day.wMonth), g_ag.day.wDay);
     else swprintf(title, 96, L"%ls, %d de %ls", WeekName(dow, false), g_ag.day.wDay, MonthName(g_ag.day.wMonth));
-    p.Text(title, D2D1::RectF(x, y + 16 * s, W - 260 * s, y + 52 * s), 24, th.text, DWRITE_FONT_WEIGHT_SEMI_BOLD);
-    float bx = W - 26 * s;
+    p.Text(title, D2D1::RectF(x, y + 16 * s, W - 260 * s, y + 52 * s), tk.t_title.size, th.text, DWRITE_FONT_WEIGHT_SEMI_BOLD);
+    float bx = W - (tk.sp_6 * s + tk.sp_2 * s);
     {
         D2D1_RECT_F r = D2D1::RectF(bx - 34 * s, y + 10 * s, bx, y + 44 * s);
-        if (hit(kAgClose, r)) p.Fill(r, 17 * s, hov);
-        p.FeatherIcon("x", r, 16 * s, th.text2);
+        if (hit(kAgClose, r)) p.Fill(r, ui::InnerRadius(tk.r_card, tk.sp_2) * s * 1.2f, hov);
+        p.FeatherIcon("x", r, tk.t_caption.size, th.text2);
         bx -= 48 * s;
         r = D2D1::RectF(bx - 34 * s, y + 10 * s, bx, y + 44 * s);
         p.CircleButton(r, L"", hit(kAgNext, r), kAgNext); bx -= 42 * s;
@@ -125,12 +127,12 @@ static void PaintAgenda(HWND h) {
     auto items = LoadAgenda();
     // semana (segunda a domingo)
     SYSTEMTIME mon = AddDays(g_ag.day, -((dow + 6) % 7));
-    float cw = (W - 52 * s - 6 * 8 * s) / 7;
+    float cw = (W - 2 * x - 6 * tk.sp_2 * s) / 7;
     for (int i = 0; i < 7; ++i) {
         SYSTEMTIME d = AddDays(mon, i);
-        D2D1_RECT_F r = D2D1::RectF(x + i * (cw + 8 * s), y, x + i * (cw + 8 * s) + cw, y + 62 * s);
+        D2D1_RECT_F r = D2D1::RectF(x + i * (cw + tk.sp_2 * s), y, x + i * (cw + tk.sp_2 * s) + cw, y + 62 * s);
         bool sel = SameDay(d, g_ag.day), isToday = SameDay(d, today), hv = hit(kAgWeek0 + i, r);
-        if (sel) p.Fill(r, 14 * s, acc); else if (hv) p.Fill(r, 14 * s, hov);
+        if (sel) p.Fill(r, ui::InnerRadius(tk.r_card, tk.sp_2) * s, acc); else if (hv) p.Fill(r, ui::InnerRadius(tk.r_card, tk.sp_2) * s, hov);
         D2D1_COLOR_F tc = sel ? onAcc : th.text, t2 = sel ? onAcc : th.text2;
         if (sel) t2.a = 0.8f;
         p.Text(WeekName(DayOfWeek(d), true), D2D1::RectF(r.left, r.top + 6 * s, r.right, r.top + 20 * s), 10.5f, t2, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
@@ -139,11 +141,11 @@ static void PaintAgenda(HWND h) {
         if (has) { float cx = (r.left + r.right) / 2; p.Fill(D2D1::RectF(cx - 2.5f * s, r.top + 48 * s, cx + 2.5f * s, r.top + 53 * s), 2.5f * s, sel ? onAcc : acc); }
     }
     y += 76 * s;
-    p.Fill(D2D1::RectF(x, y, W - 26 * s, y + 1 * s), 0, sep);
-    y += 14 * s;
+    p.Fill(D2D1::RectF(x, y, W - x, y + 1 * s), 0, sep);
+    y += tk.sp_3 * s + tk.sp_1 * s * 0.5f;
 
     // linha do tempo (à esquerda) e formulário (à direita)
-    float formW = 300 * s, fx = W - formW, tlR = fx - 18 * s, top = y + 6 * s, bottom = H - 24 * s;
+    float formW = 300 * s, fx = W - formW, tlR = fx - tk.sp_4 * s + tk.sp_2 * s, top = y + 6 * s, bottom = H - tk.sp_6 * s;
     std::vector<int> dayIdx;
     for (int i = 0; i < (int)items.size(); ++i) if (SameDay(items[i].when, g_ag.day)) dayIdx.push_back(i);
     std::sort(dayIdx.begin(), dayIdx.end(), [&](int a, int b) { return Minutes(items[a].when) < Minutes(items[b].when); });
@@ -155,12 +157,12 @@ static void PaintAgenda(HWND h) {
         float yy = top + (hh - h0) * hourH;
         p.Fill(D2D1::RectF(x, yy, tlR, yy + 1 * s), 0, sep);
         wchar_t b[8]; swprintf(b, 8, L"%02d:00", hh);
-        p.Text(b, D2D1::RectF(x, yy + 2 * s, x + 50 * s, yy + 16 * s), 10, th.text2);
+        p.Text(b, D2D1::RectF(x, yy + 2 * s, x + 50 * s, yy + 16 * s), tk.t_caption.size, th.text2);
     }
     LONGLONG nowM = Minutes(today);
     int nextIdx = -1;
     for (int i : dayIdx) if (Minutes(items[i].when) >= nowM) { nextIdx = i; break; }
-    float ex = x + 52 * s;
+    float ex = x + tk.sp_6 * s + tk.sp_4 * s;
     // eventos que se sobrepõem (na tela) ficam lado a lado, em colunas
     std::vector<float> ys0(items.size()), ys1(items.size());
     std::vector<int> col(items.size(), 0), ncol(items.size(), 1);
@@ -185,15 +187,15 @@ static void PaintAgenda(HWND h) {
     for (int i : dayIdx) {
         const AgendaItem& a = items[i];
         float y0 = ys0[i], y1 = ys1[i];
-        float cwid = (tlR - ex - (ncol[i] - 1) * 4 * s) / ncol[i];
-        D2D1_RECT_F r = D2D1::RectF(ex + col[i] * (cwid + 4 * s), y0 + 1 * s, ex + col[i] * (cwid + 4 * s) + cwid, y1);
+        float cwid = (tlR - ex - (ncol[i] - 1) * tk.sp_1 * s) / ncol[i];
+        D2D1_RECT_F r = D2D1::RectF(ex + col[i] * (cwid + tk.sp_1 * s), y0 + 1 * s, ex + col[i] * (cwid + tk.sp_1 * s) + cwid, y1);
         bool past = Minutes(a.when) + a.dur < nowM, next = i == nextIdx, editing = i == g_ag.editIdx, hv = hit(kAgEvent0 + i, r);
         D2D1_COLOR_F bg = next || editing ? (th.neon ? ui::Rgba(ui::NeonColor(), 0.14f) : th.dark ? ui::Rgba(0xFFFFFF, 0.10f) : ui::Rgba(0x000000, 0.07f)) : field;
         if (hv) bg = th.dark ? ui::Rgba(0xFFFFFF, 0.12f) : ui::Rgba(0x000000, 0.08f);
-        if (next && th.neon) p.Glow(r, 10 * s);
-        p.Fill(r, 10 * s, bg);
+        if (next && th.neon) p.Glow(r, tk.r_control * s * 1.25f);
+        p.Fill(r, ui::InnerRadius(tk.r_card, tk.sp_2) * s, bg);
         D2D1_COLOR_F bar = next || editing ? acc : (th.dark ? ui::Rgba(0xFFFFFF, 0.25f) : ui::Rgba(0x000000, 0.25f));
-        p.Fill(D2D1::RectF(r.left, r.top + 4 * s, r.left + 3 * s, r.bottom - 4 * s), 1.5f * s, bar);
+        p.Fill(D2D1::RectF(r.left, r.top + 4 * s, r.left + 3 * s, r.bottom - 4 * s), tk.sp_1 * s * 0.375f, bar);
         D2D1_COLOR_F tc = th.text, t2 = th.text2;
         if (past) { tc.a *= 0.5f; t2.a *= 0.5f; }
         wchar_t when[48];
@@ -201,8 +203,8 @@ static void PaintAgenda(HWND h) {
         swprintf(when, 48, L"%02d:%02d – %02d:%02d", a.when.wHour, a.when.wMinute, e.wHour, e.wMinute);
         bool tall = r.bottom - r.top > 40 * s;
         p.Text(a.title, D2D1::RectF(r.left + 12 * s, r.top + 4 * s, r.right - (r.right - r.left > 260 * s ? 112 : 8) * s, r.top + (tall ? 22 : r.bottom - r.top - 4) * s), 13, tc, next ? DWRITE_FONT_WEIGHT_BOLD : DWRITE_FONT_WEIGHT_SEMI_BOLD);
-        if (tall) p.Text(when, D2D1::RectF(r.left + 12 * s, r.top + 22 * s, r.right - 12 * s, r.top + 38 * s), 11, t2);
-        else if (r.right - r.left > 260 * s) p.Text(when, D2D1::RectF(r.right - 110 * s, r.top, r.right - 10 * s, r.bottom), 11, t2, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_TRAILING);
+        if (tall) p.Text(when, D2D1::RectF(r.left + 12 * s, r.top + 22 * s, r.right - 12 * s, r.top + 38 * s), tk.t_section.size, t2);
+        else if (r.right - r.left > 260 * s) p.Text(when, D2D1::RectF(r.right - 110 * s, r.top, r.right - 10 * s, r.bottom), tk.t_section.size, t2, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_TRAILING);
         if (next) {
             LONGLONG left = Minutes(a.when) - nowM;
             wchar_t b[32];
@@ -211,26 +213,26 @@ static void PaintAgenda(HWND h) {
         }
     }
     if (dayIdx.empty())
-        p.Text(T(L"Nenhum evento neste dia.", L"No events on this day.", L"Ningún evento este día."), D2D1::RectF(ex, top + 20 * s, tlR, top + 44 * s), 13, th.text2);
+        p.Text(T(L"Nenhum evento neste dia.", L"No events on this day.", L"Ningún evento este día."), D2D1::RectF(ex, top + 20 * s, tlR, top + 44 * s), tk.t_body.size, th.text2);
     if (SameDay(g_ag.day, today)) { // agora
         float yy = top + ((today.wHour - h0) * 60 + today.wMinute) / 60.0f * hourH;
         D2D1_COLOR_F red = ui::Rgba(0xFF3B30);
-        p.Fill(D2D1::RectF(ex - 6 * s, yy - 4.5f * s, ex + 3 * s, yy + 4.5f * s), 4.5f * s, red);
-        p.Fill(D2D1::RectF(ex, yy - 0.75f * s, tlR, yy + 0.75f * s), 0, red);
+        p.Fill(D2D1::RectF(ex - tk.sp_1 * s * 1.5f, yy - tk.sp_1 * s * 1.125f, ex + tk.sp_1 * s * 0.75f, yy + tk.sp_1 * s * 1.125f), tk.sp_1 * s * 1.125f, red);
+        p.Fill(D2D1::RectF(ex, yy - tk.sp_1 * s * 0.1875f, tlR, yy + tk.sp_1 * s * 0.1875f), 0, red);
     }
 
     // formulário
-    p.Fill(D2D1::RectF(fx, top - 6 * s, fx + 1 * s, bottom), 0, sep);
-    float fx0 = fx + 22 * s, fx1 = W - 22 * s, fy = top + 4 * s;
+    p.Fill(D2D1::RectF(fx, top - tk.sp_1 * s * 1.5f, fx + 1 * s, bottom), 0, sep);
+    float fx0 = fx + tk.sp_5 * s + tk.sp_2 * s * 0.5f, fx1 = W - tk.sp_5 * s - tk.sp_2 * s * 0.5f, fy = top + 4 * s;
     p.Text(g_ag.editIdx >= 0 ? T(L"EDITAR EVENTO", L"EDIT EVENT", L"EDITAR EVENTO") : T(L"NOVO EVENTO", L"NEW EVENT", L"NUEVO EVENTO"),
-           D2D1::RectF(fx0, fy, fx1, fy + 16 * s), 11, th.text2, DWRITE_FONT_WEIGHT_SEMI_BOLD);
-    fy += 26 * s;
+           D2D1::RectF(fx0, fy, fx1, fy + 16 * s), tk.t_section.size, th.text2, DWRITE_FONT_WEIGHT_SEMI_BOLD);
+    fy += tk.sp_6 * s + tk.sp_2 * s;
     bool caretOn = (GetTickCount() / 530) % 2 == 0;
     auto input = [&](int idx, const wchar_t* label, D2D1_RECT_F r) {
-        p.Text(label, D2D1::RectF(r.left, r.top - 18 * s, r.right, r.top - 2 * s), 11.5f, th.text2);
+        p.Text(label, D2D1::RectF(r.left, r.top - 18 * s, r.right, r.top - 2 * s), tk.t_caption.size + 0.5f, th.text2);
         bool focus = g_ag.field == idx, hv = hit(kAgField0 + idx, r);
-        p.Fill(r, 12 * s, hv && !focus ? hov : field);
-        if (focus) p.Stroke(r, 12 * s, acc, 1.2f * s);
+        p.Fill(r, ui::InnerRadius(tk.r_card, tk.sp_2) * s * 0.85f, hv && !focus ? hov : field);
+        if (focus) p.Stroke(r, ui::InnerRadius(tk.r_card, tk.sp_2) * s * 0.85f, acc, 1.2f * s);
         std::wstring t = g_ag.f[idx];
         float tw = p.Measure(t, 13.5f);
         D2D1_RECT_F tr = D2D1::RectF(r.left + 12 * s, r.top, r.right - 10 * s, r.bottom);
@@ -239,13 +241,13 @@ static void PaintAgenda(HWND h) {
     };
     fy += 18 * s;
     input(0, T(L"Título", L"Title", L"Título"), D2D1::RectF(fx0, fy, fx1, fy + 38 * s));
-    fy += 38 * s + 30 * s;
-    float half = (fx1 - fx0 - 10 * s) / 2;
+    fy += 38 * s + tk.sp_6 * s + tk.sp_2 * s;
+    float half = (fx1 - fx0 - tk.sp_2 * s * 1.25f) / 2;
     input(1, T(L"Dia (dd/mm)", L"Day (dd/mm)", L"Día (dd/mm)"), D2D1::RectF(fx0, fy, fx0 + half, fy + 38 * s));
-    input(2, T(L"Hora", L"Time", L"Hora"), D2D1::RectF(fx0 + half + 10 * s, fy, fx1, fy + 38 * s));
-    fy += 38 * s + 30 * s;
+    input(2, T(L"Hora", L"Time", L"Hora"), D2D1::RectF(fx0 + half + tk.sp_2 * s * 1.25f, fy, fx1, fy + 38 * s));
+    fy += 38 * s + tk.sp_6 * s + tk.sp_2 * s;
     {
-        p.Text(T(L"Duração", L"Duration", L"Duración"), D2D1::RectF(fx0, fy - 18 * s, fx1, fy - 2 * s), 11.5f, th.text2);
+        p.Text(T(L"Duração", L"Duration", L"Duración"), D2D1::RectF(fx0, fy - 18 * s, fx1, fy - 2 * s), tk.t_caption.size + 0.5f, th.text2);
         D2D1_RECT_F r = D2D1::RectF(fx0, fy, fx1, fy + 34 * s), parts[3];
         std::wstring l[3] = {L"15 min", L"30 min", L"1 h"};
         int sel = g_ag.dur == 15 ? 0 : g_ag.dur == 60 ? 2 : 1;
@@ -253,20 +255,20 @@ static void PaintAgenda(HWND h) {
         p.Segmented(r, l, 3, sel, hv, parts, 0x6000 + (int)(r.top / 8)); // o indicador desliza até a nova opção
         for (int i = 0; i < 3; ++i) hit(kAgDur0 + i, parts[i]);
     }
-    fy += 34 * s + 30 * s;
+    fy += 34 * s + tk.sp_6 * s + tk.sp_2 * s;
     {
-        p.Text(T(L"Avisar antes", L"Remind me", L"Avisar antes"), D2D1::RectF(fx0, fy - 18 * s, fx1, fy - 2 * s), 11.5f, th.text2);
+        p.Text(T(L"Avisar antes", L"Remind me", L"Avisar antes"), D2D1::RectF(fx0, fy - 18 * s, fx1, fy - 2 * s), tk.t_caption.size + 0.5f, th.text2);
         const wchar_t* l[3] = {L"10 min", L"5 min", T(L"Na hora", L"On time", L"A la hora")};
         int bits[3] = {kAlert10, kAlert5, kAlert0};
         float cx = fx0;
         for (int i = 0; i < 3; ++i) {
-            float wdt = p.Measure(l[i], 12.5f, DWRITE_FONT_WEIGHT_SEMI_BOLD) + 26 * s;
+            float wdt = p.Measure(l[i], tk.t_caption.size + 0.5f, DWRITE_FONT_WEIGHT_SEMI_BOLD) + tk.sp_6 * s + tk.sp_2 * s;
             D2D1_RECT_F r = D2D1::RectF(cx, fy, cx + wdt, fy + 30 * s);
             bool on = (g_ag.alerts & bits[i]) != 0, hv = hit(kAgAl0 + i, r);
-            if (on) p.Fill(r, 15 * s, acc);
-            else { if (hv) p.Fill(r, 15 * s, hov); p.Stroke(r, 15 * s, th.neon ? ui::Rgba(ui::NeonColor(), 0.5f) : th.dark ? ui::Rgba(0xFFFFFF, 0.16f) : ui::Rgba(0x000000, 0.12f), 1 * s); }
-            p.Text(l[i], r, 12.5f, on ? onAcc : th.text2, on ? DWRITE_FONT_WEIGHT_BOLD : DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
-            cx += wdt + 6 * s;
+            if (on) p.Fill(r, ui::InnerRadius(tk.r_card, tk.sp_2) * s * 1.07f, acc);
+            else { if (hv) p.Fill(r, ui::InnerRadius(tk.r_card, tk.sp_2) * s * 1.07f, hov); p.Stroke(r, ui::InnerRadius(tk.r_card, tk.sp_2) * s * 1.07f, th.neon ? ui::Rgba(ui::NeonColor(), 0.5f) : th.dark ? ui::Rgba(0xFFFFFF, 0.16f) : ui::Rgba(0x000000, 0.12f), tk.sp_1 * s * 0.25f); }
+            p.Text(l[i], r, tk.t_caption.size + 0.5f, on ? onAcc : th.text2, on ? DWRITE_FONT_WEIGHT_BOLD : DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
+            cx += wdt + tk.sp_1 * s * 1.5f;
         }
     }
     fy += 30 * s + 22 * s;
@@ -275,16 +277,16 @@ static void PaintAgenda(HWND h) {
         p.Pill(r, g_ag.editIdx >= 0 ? T(L"Salvar alterações", L"Save changes", L"Guardar cambios") : T(L"Adicionar à agenda", L"Add to agenda", L"Añadir a la agenda"), hit(kAgSave, r), true, kAgSave);
         fy += 48 * s;
         if (g_ag.editIdx >= 0) {
-            float hw = (fx1 - fx0 - 8 * s) / 2;
-            D2D1_RECT_F d = D2D1::RectF(fx0, fy, fx0 + hw, fy + 34 * s), c = D2D1::RectF(fx0 + hw + 8 * s, fy, fx1, fy + 34 * s);
+            float hw = (fx1 - fx0 - tk.sp_2 * s) / 2;
+            D2D1_RECT_F d = D2D1::RectF(fx0, fy, fx0 + hw, fy + 34 * s), c = D2D1::RectF(fx0 + hw + tk.sp_2 * s, fy, fx1, fy + 34 * s);
             p.Pill(d, T(L"Excluir", L"Delete", L"Eliminar"), hit(kAgDelete, d), false, kAgDelete);
             p.Pill(c, T(L"Cancelar", L"Cancel", L"Cancelar"), hit(kAgCancel, c), false, kAgCancel);
             fy += 42 * s;
         }
     }
-    if (!g_ag.msg.empty()) { p.Text(g_ag.msg, D2D1::RectF(fx0, fy, fx1, fy + 18 * s), 11.5f, ui::Rgba(0xFF453A), DWRITE_FONT_WEIGHT_SEMI_BOLD); fy += 22 * s; }
+    if (!g_ag.msg.empty()) { p.Text(g_ag.msg, D2D1::RectF(fx0, fy, fx1, fy + 18 * s), tk.t_caption.size + 0.5f, ui::Rgba(0xFF453A), DWRITE_FONT_WEIGHT_SEMI_BOLD); fy += 22 * s; }
     p.Paragraph(T(L"Clique num evento para editar ou excluir. Tab passa de campo, Enter salva.", L"Click an event to edit or delete it. Tab moves between fields, Enter saves.",
-                  L"Haz clic en un evento para editarlo o eliminarlo. Tab cambia de campo, Enter guarda."), fx0, fy, fx1 - fx0, 11.5f, th.text2);
+                  L"Haz clic en un evento para editarlo o eliminarlo. Tab cambia de campo, Enter guarda."), fx0, fy, fx1 - fx0, tk.t_caption.size + 0.5f, th.text2);
     if (th.neon) { // a janela é o cartão: luz suave que segue o cursor (apaga em ~250 ms ao sair)
         D2D1_RECT_F all = D2D1::RectF(0, 0, W, H);
         bool over = p.Over(all);
@@ -414,7 +416,7 @@ static LRESULT CALLBACK AgendaProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     case WM_KEYDOWN:
         if (wp == VK_ESCAPE) { if (g_ag.editIdx >= 0) { AgResetForm(); InvalidateRect(h, nullptr, FALSE); } else AgClose(h); }
         return 0;
-    case WM_TIMER: if (wp == ui::kAnimTick) KillTimer(h, wp); InvalidateRect(h, nullptr, FALSE); return 0; // cursor piscando e "agora"
+    case WM_TIMER: if (wp == ui::kAnimTick) KillTimer(h, wp); else { AgSetTimer(h); InvalidateRect(h, nullptr, FALSE); } return 0; // caret blink when focused, "agora" line once/min
     case WM_SIZE: g_ag.surf.Resize(LOWORD(lp), HIWORD(lp)); return 0;
     case WM_ERASEBKGND: return 1;
     case WM_PAINT: { PAINTSTRUCT ps; BeginPaint(h, &ps); PaintAgenda(h); EndPaint(h, &ps); return 0; }
@@ -422,6 +424,21 @@ static LRESULT CALLBACK AgendaProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     case WM_DESTROY: g_agClosing = false; g_agDown = false; KillTimer(h, ui::kAnimTick); g_ag.surf.Release(); g_ag.hits.clear(); g_ag.wnd = nullptr; return 0;
     }
     return DefWindowProcW(h, msg, wp, lp);
+}
+
+static void AgSetTimer(HWND h) {
+    if (!h) return;
+    bool hasFocus = (g_ag.field >= 0) && (GetFocus() == h || GetForegroundWindow() == h);
+    if (hasFocus) {
+        // Caret blink: ~530ms when editing
+        SetTimer(h, 1, 530, nullptr);
+    } else {
+        // "Now" line update: once per minute
+        ULONGLONG now = GetTickCount64();
+        ULONGLONG nextMin = ((now + 59999) / 60000) * 60000 - now + 1;
+        if (nextMin > 60000) nextMin = 60000;
+        SetTimer(h, 1, (UINT)nextMin, nullptr);
+    }
 }
 
 static void OpenAgendaWindow() {
@@ -448,7 +465,7 @@ static void OpenAgendaWindow() {
     ui::EnableGlass(g_ag.wnd, g_theme.dark);
     ShowWindow(g_ag.wnd, SW_SHOW);
     SetForegroundWindow(g_ag.wnd);
-    SetTimer(g_ag.wnd, 1, 530, nullptr);
+    AgSetTimer(g_ag.wnd);
 }
 
 // ---------- avisos (10 e 5 min antes) ----------
@@ -470,43 +487,45 @@ static void ReminderRender() {
     HWND w = g_rem.wnd;
     if (!w) return;
     const ui::Theme& th = g_theme;
-    float s = g_rem.s, W = 400 * s, H = 118 * s, M = 16 * s;
+    ui::Tokens tk = ui::MakeTokens(th);
+    ui::g_tokens = tk;
+    float s = g_rem.s, W = 400 * s, H = 118 * s, M = tk.r_card * s;
     UINT CW = (UINT)(W + 2 * M), CH = (UINT)(H + 2 * M);
     fmt::Canvas cv(CW, CH);
     if (!cv.rt) return;
     ID2D1RenderTarget* rt = cv.rt;
     rt->Clear(D2D1::ColorF(0, 0));
     rt->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
-    ui::Painter p(rt, g_dw, th, s);
+    ui::Painter p(rt, g_dw, th, tk, s);
     D2D1_COLOR_F acc = AccentOf(th), onAcc = OnAccentOf(th);
     bool urgent = g_rem.level <= 5;
     D2D1_RECT_F card = D2D1::RectF(M, M, M + W, M + H);
-    float rad = 22 * s;
+    float rad = tk.r_card * s;
     p.Shadow(card, rad);
     p.Fill(card, rad, th.classic ? ui::Rgba(0x4A4F57) : th.neon ? ui::Rgba(0x0E0E10, 0.97f) : th.dark ? ui::Rgba(0x161618, 0.98f) : ui::Rgba(0xFAFAFC, 0.98f));
     p.Stroke(card, rad, urgent ? acc : th.classic ? ui::Rgba(0x5C6472) : th.neon ? ui::Rgba(ui::NeonColor(), 0.42f) : th.stroke, (urgent ? 1.3f : 1) * s);
-    float x = card.left + 18 * s, y = card.top + 16 * s;
+    float x = card.left + tk.sp_4 * s + tk.sp_2 * s * 0.5f, y = card.top + tk.sp_4 * s;
     D2D1_RECT_F ic = D2D1::RectF(x, y, x + 42 * s, y + 42 * s);
-    p.Fill(ic, 21 * s, urgent ? acc : (th.classic ? ui::Rgba(0x23272E) : th.neon ? ui::Rgba(ui::NeonColor(), 0.14f) : th.dark ? ui::Rgba(0xFFFFFF, 0.08f) : ui::Rgba(0x000000, 0.06f)));
-    p.FeatherIcon(urgent ? "timer" : "calendar", ic, 20 * s, urgent ? onAcc : acc);
-    float tx = x + 56 * s;
+    p.Fill(ic, tk.r_card * s * 1.5f, urgent ? acc : (th.classic ? ui::Rgba(0x23272E) : th.neon ? ui::Rgba(ui::NeonColor(), 0.14f) : th.dark ? ui::Rgba(0xFFFFFF, 0.08f) : ui::Rgba(0x000000, 0.06f)));
+    p.FeatherIcon(urgent ? "timer" : "calendar", ic, tk.t_title.size - 4, urgent ? onAcc : acc);
+    float tx = x + tk.sp_6 * s + tk.sp_4 * s;
     SYSTEMTIME now; GetLocalTime(&now);
     LONGLONG left = Minutes(g_rem.item.when) - Minutes(now);
     wchar_t lab[64];
     if (left <= 0) swprintf(lab, 64, T(L"AGORA · %02d:%02d", L"NOW · %02d:%02d", L"AHORA · %02d:%02d"), g_rem.item.when.wHour, g_rem.item.when.wMinute);
     else if (left == 1) swprintf(lab, 64, T(L"EM 1 MINUTO · %02d:%02d", L"IN 1 MINUTE · %02d:%02d", L"EN 1 MINUTO · %02d:%02d"), g_rem.item.when.wHour, g_rem.item.when.wMinute);
     else swprintf(lab, 64, T(L"EM %d MINUTOS · %02d:%02d", L"IN %d MINUTES · %02d:%02d", L"EN %d MINUTOS · %02d:%02d"), (int)left, g_rem.item.when.wHour, g_rem.item.when.wMinute);
-    p.Text(lab, D2D1::RectF(tx, y, card.right - 44 * s, y + 16 * s), 10.5f, acc, DWRITE_FONT_WEIGHT_BOLD);
-    p.Text(g_rem.item.title, D2D1::RectF(tx, y + 18 * s, card.right - 20 * s, y + 42 * s), 15.5f, th.text, DWRITE_FONT_WEIGHT_SEMI_BOLD);
-    g_rem.r[2] = D2D1::RectF(card.right - 40 * s, card.top + 10 * s, card.right - 14 * s, card.top + 36 * s);
-    if (g_rem.hot == 2) p.Fill(g_rem.r[2], 13 * s, th.dark ? ui::Rgba(0xFFFFFF, 0.1f) : ui::Rgba(0x000000, 0.06f));
-    p.FeatherIcon("x", g_rem.r[2], 14 * s, th.text2);
+    p.Text(lab, D2D1::RectF(tx, y, card.right - tk.sp_4 * s * 2.75f, y + 16 * s), tk.t_caption.size - 1.5f, acc, DWRITE_FONT_WEIGHT_BOLD);
+    p.Text(g_rem.item.title, D2D1::RectF(tx, y + 18 * s, card.right - tk.sp_5 * s, y + 42 * s), tk.t_title.size - 4.5f, th.text, DWRITE_FONT_WEIGHT_SEMI_BOLD);
+    g_rem.r[2] = D2D1::RectF(card.right - tk.sp_5 * s, card.top + tk.sp_2 * s * 1.25f, card.right - tk.sp_3 * s - tk.sp_1 * s * 0.5f, card.top + tk.sp_8 * s + tk.sp_1 * s * 0.5f);
+    if (g_rem.hot == 2) p.Fill(g_rem.r[2], ui::InnerRadius(tk.r_card, tk.sp_2) * s * 0.9f, th.dark ? ui::Rgba(0xFFFFFF, 0.1f) : ui::Rgba(0x000000, 0.06f));
+    p.FeatherIcon("x", g_rem.r[2], tk.t_caption.size + 2, th.text2);
     float by = y + 52 * s;
     const wchar_t* b1 = urgent ? L"Ok" : T(L"Dispensar", L"Dismiss", L"Descartar");
     const wchar_t* b2 = urgent ? T(L"Adiar 5 min", L"Snooze 5 min", L"Posponer 5 min") : T(L"Abrir agenda", L"Open agenda", L"Abrir agenda");
-    float w1 = p.Measure(b1, 12.5f, DWRITE_FONT_WEIGHT_BOLD) + 30 * s, w2 = p.Measure(b2, 12.5f, DWRITE_FONT_WEIGHT_SEMI_BOLD) + 30 * s;
+    float w1 = p.Measure(b1, tk.t_caption.size + 0.5f, DWRITE_FONT_WEIGHT_BOLD) + tk.sp_6 * s + tk.sp_2 * s, w2 = p.Measure(b2, tk.t_caption.size + 0.5f, DWRITE_FONT_WEIGHT_SEMI_BOLD) + tk.sp_6 * s + tk.sp_2 * s;
     g_rem.r[0] = D2D1::RectF(tx, by, tx + w1, by + 30 * s);
-    g_rem.r[1] = D2D1::RectF(tx + w1 + 8 * s, by, tx + w1 + 8 * s + w2, by + 30 * s);
+    g_rem.r[1] = D2D1::RectF(tx + w1 + tk.sp_2 * s, by, tx + w1 + tk.sp_2 * s + w2, by + 30 * s);
     if (urgent) p.Pill(g_rem.r[0], b1, g_rem.hot == 0, true); else p.Pill(g_rem.r[0], b1, g_rem.hot == 0);
     p.Pill(g_rem.r[1], b2, g_rem.hot == 1);
     if (!urgent) { // tempo até sumir (20 s)
@@ -529,7 +548,7 @@ static void ReminderRender() {
     MONITORINFO mi = {sizeof(mi)};
     GetMonitorInfoW(MonitorFromPoint({0, 0}, MONITOR_DEFAULTTOPRIMARY), &mi);
     float t = min(1.0f, (GetTickCount64() - g_rem.shownAt) / 220.0f), e = 1 - (1 - t) * (1 - t) * (1 - t); // desliza para cima
-    POINT pos = {mi.rcWork.right - (LONG)CW - (LONG)(4 * s), mi.rcWork.bottom - (LONG)CH - (LONG)(4 * s) + (LONG)((1 - e) * 40 * s)}, zero = {0, 0};
+    POINT pos = {mi.rcWork.right - (LONG)CW - (LONG)(tk.sp_1 * s), mi.rcWork.bottom - (LONG)CH - (LONG)(tk.sp_1 * s) + (LONG)((1 - e) * 40 * s)}, zero = {0, 0};
     HDC screen = GetDC(nullptr), mem = CreateCompatibleDC(screen);
     HGDIOBJ old = SelectObject(mem, bmp);
     SIZE size = {(LONG)CW, (LONG)CH};

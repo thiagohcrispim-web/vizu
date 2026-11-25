@@ -90,11 +90,24 @@ static std::wstring ProcessList(std::initializer_list<const wchar_t*> names) {
 }
 
 static std::wstring ReadTail(const std::wstring& path, int lines) {
-    std::string raw;
     HANDLE f = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, 0, nullptr);
-    if (f != INVALID_HANDLE_VALUE) { DWORD sz = GetFileSize(f, nullptr), rd = 0; raw.resize(sz); ReadFile(f, &raw[0], sz, &rd, nullptr); raw.resize(rd); CloseHandle(f); }
-    int wn = MultiByteToWideChar(CP_UTF8, 0, raw.data(), (int)raw.size(), nullptr, 0);
-    std::wstring w(wn, 0); MultiByteToWideChar(CP_UTF8, 0, raw.data(), (int)raw.size(), &w[0], wn);
+    if (f == INVALID_HANDLE_VALUE) return L"";
+    DWORD szHigh = 0, szLow = GetFileSize(f, &szHigh);
+    ULONGLONG sz = ((ULONGLONG)szHigh << 32) | szLow;
+    if (sz > 0xFFFFFFF0u) { CloseHandle(f); return L""; } // too large
+    HANDLE map = CreateFileMappingW(f, nullptr, PAGE_READONLY, szHigh, szLow, nullptr);
+    std::wstring w;
+    if (map) {
+        const BYTE* view = (const BYTE*)MapViewOfFile(map, FILE_MAP_READ, 0, 0, 0);
+        if (view) {
+            int wn = MultiByteToWideChar(CP_UTF8, 0, (const char*)view, (int)sz, nullptr, 0);
+            w.assign(wn, 0);
+            MultiByteToWideChar(CP_UTF8, 0, (const char*)view, (int)sz, &w[0], wn);
+            UnmapViewOfFile(view);
+        }
+        CloseHandle(map);
+    }
+    CloseHandle(f);
     size_t cut = w.size();
     for (int k = 0; k < lines && cut != std::wstring::npos && cut > 0; ++k) cut = w.rfind(L'\n', cut - 1);
     return w.substr(cut == std::wstring::npos ? 0 : cut + 1);

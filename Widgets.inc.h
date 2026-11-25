@@ -220,27 +220,31 @@ static void WidgetEnable(int k, bool on);
 static void WidgetRenderDocked(Widget& wd, const RECT& tb) {
     float s = (tb.bottom - tb.top) / 48.0f;
     bool dk = TaskbarDark();
-    D2D1_COLOR_F text = dk ? ui::Rgba(0xFFFFFF, 0.95f) : ui::Rgba(0x1D1D1F), text2 = dk ? ui::Rgba(0xFFFFFF, 0.62f) : ui::Rgba(0x000000, 0.58f);
-    D2D1_COLOR_F hi = g_cfg.themeMode == ui::kThemeDark ? text : ui::Rgba(g_theme.classic ? 0xFF6633 : 0xFF6633);
+    ui::Tokens tk = ui::MakeTokens(g_theme);
+    D2D1_COLOR_F text = dk ? ui::Rgba(0xFFFFFF, 0.95f) : ui::Rgba(0x1D1D1F);
+    D2D1_COLOR_F text2 = dk ? ui::Rgba(0xFFFFFF, 0.62f) : ui::Rgba(0x000000, 0.58f);
+    D2D1_COLOR_F hi = g_cfg.themeMode == ui::kThemeDark ? text : (g_theme.classic ? ui::Rgba(0xFF6633) : ui::Rgba(0xFF6633));
     if (g_cfg.themeMode == ui::kThemeWindows) hi = g_theme.accent;
     std::wstring line1 = g_perf.slow ? T(L"Lento", L"Slow", L"Lento") : T(L"Tudo leve", L"All smooth", L"Todo fluido"), line2 = g_perf.slow ? PerfCulprit() : L"";
     wchar_t b[120];
     if (line2.empty()) { swprintf(b, 120, T(L"CPU %.0f%% · Mem. %.0f%%", L"CPU %.0f%% · Mem %.0f%%", L"CPU %.0f%% · Mem. %.0f%%"), g_perf.cpu, g_perf.mem); line2 = b; }
-    UINT Wt = (UINT)(176 * s), Ht = (UINT)((tb.bottom - tb.top) * 0.86f);
+    UINT Wt = (UINT)((tk.sp_6 * 4 + tk.sp_6 * 2) * s), Ht = (UINT)((tb.bottom - tb.top) * 0.86f);
     fmt::Canvas cv(Wt, Ht);
     if (!cv.rt) return;
     ID2D1RenderTarget* rt = cv.rt;
     rt->Clear(D2D1::ColorF(0, 0));
     rt->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
-    ui::Painter p(rt, g_dw, g_theme, s);
+    ui::g_tokens = tk;
+    ui::Painter p(rt, g_dw, g_theme, tk, s);
     D2D1_RECT_F card = D2D1::RectF(0, 0, (float)Wt, (float)Ht);
-    p.Fill(card, 8 * s, wd.hot || wd.open ? ui::Rgba(dk ? 0xFFFFFF : 0x000000, 0.08f) : ui::Rgba(0x000000, 0.006f)); // quase invisível: a barra aparece por trás e o clique funciona
-    float cy = Ht / 2.0f, x = 10 * s;
-    p.Feather("M22 12h-4l-3 9L9 3l-3 9H2", D2D1::RectF(x, cy - 9 * s, x + 18 * s, cy + 9 * s), 17 * s, g_perf.slow ? hi : text2);
-    x += 26 * s;
-    p.Fill(D2D1::RectF(x, cy - 10 * s, x + 7 * s, cy - 3 * s), 3.5f * s, g_perf.slow ? hi : text2);
-    ClText(p, line1, D2D1::RectF(x + 12 * s, cy - 16 * s, (float)Wt - 6 * s, cy + 1 * s), 12.5f, text, DWRITE_FONT_WEIGHT_SEMI_BOLD);
-    ClText(p, line2, D2D1::RectF(x, cy + 1 * s, (float)Wt - 6 * s, cy + 17 * s), 11.5f, text2);
+    float rad = ui::InnerRadius(tk.r_card, tk.sp_2);
+    p.Fill(card, rad, wd.hot || wd.open ? ui::Rgba(dk ? 0xFFFFFF : 0x000000, 0.08f) : ui::Rgba(0x000000, 0.006f));
+    float cy = Ht / 2.0f, x = tk.sp_2 * s * 2.5f;
+    p.Feather("M22 12h-4l-3 9L9 3l-3 9H2", D2D1::RectF(x, cy - tk.sp_6 * s * 1.125f, x + tk.r_control * s, cy + tk.sp_6 * s * 1.125f), tk.r_control * s, g_perf.slow ? hi : text2);
+    x += tk.sp_6 * s * 1.166f;
+    p.Fill(D2D1::RectF(x, cy - tk.sp_3 * s * 2.5f, x + tk.sp_2 * s * 1.75f, cy - tk.sp_1 * s * 0.75f), tk.sp_1 * s * 0.875f, g_perf.slow ? hi : text2);
+    ClText(p, line1, D2D1::RectF(x + tk.sp_6 * s * 1.166f, cy - tk.sp_4 * s, (float)Wt - tk.sp_2 * s * 1.5f, cy + tk.sp_1 * s * 0.25f), tk.t_body.size, text, DWRITE_FONT_WEIGHT_SEMI_BOLD);
+    ClText(p, line2, D2D1::RectF(x, cy + tk.sp_1 * s * 0.25f, (float)Wt - tk.sp_2 * s * 1.5f, cy + tk.sp_4 * s), tk.t_caption.size, text2);
     HBITMAP bmp = nullptr;
     if (FAILED(cv.Finish(&bmp)) || !bmp) return;
     LONG px = max(tb.left + 4, min(tb.right - (LONG)Wt - 4, wd.ax)), py = tb.top + ((tb.bottom - tb.top) - (LONG)Ht) / 2;
@@ -260,120 +264,122 @@ static void WidgetRender(int k) {
     const ui::Theme& th = g_theme;
     ClColors c = ClPalette(th);
     float s = GetDpiForWindow(wd.wnd) / 96.0f;
+    ui::Tokens tk = ui::MakeTokens(th);
     D2D1_COLOR_F surface = th.classic ? ui::Rgba(0x353A42) : th.neon ? ui::Rgba(0x121215, 0.96f) : th.dark ? ui::Rgba(0x1F1F22, 0.97f) : ui::Rgba(0xFFFFFF, 0.97f);
     D2D1_COLOR_F hi = g_cfg.themeMode == ui::kThemeDark ? th.text : c.accent;
-    float M = 14 * s; // margem para a sombra
+    float M = tk.sp_3 * s * 1.166f; // margem para a sombra (14 * s)
     std::vector<clean::Disk> disks;
     if (k == kWDisk) { disks = ReadDword(L"DiskAll", 0) ? clean::AllDisks() : std::vector<clean::Disk>{clean::SystemDisk()}; if (disks.empty()) disks.push_back(clean::SystemDisk()); }
     bool alert = g_perf.slow;
     if (k == kWDisk) { alert = false; for (auto& d : disks) alert |= DiskLow(d); }
-    float W = (wd.open ? (k == kWPerf ? 280 : 260) : 220) * s, H;
-    if (!wd.open) H = (k == kWDisk ? 56 + (disks.size() - 1) * 30 : 60) * s; // "Todos": uma linha por disco
-    else if (k == kWDisk) H = (16 + disks.size() * 44 + 12 + 22 + 10 + 36 + 16) * s;
-    else if (wd.mode == 1) H = (16 + 48 + (g_opt.empty() ? 40 : g_opt.size() * 54) + 14 + 36 + 16) * s;
-    else H = (16 + 48 + 4 * 40 + 22 + g_perf.top.size() * 32 + 14 + 36 + 16) * s;
+    float W = (wd.open ? (k == kWPerf ? tk.sp_8 * 17.5f : tk.sp_8 * 16.25f) : tk.sp_8 * 13.75f) * s, H;
+    if (!wd.open) H = (k == kWDisk ? tk.sp_6 + tk.sp_6 * 1.5f + (disks.size() - 1) * (tk.sp_6 + tk.sp_6 * 1.5f) : tk.sp_6 * 1.5f + tk.sp_6) * s; // "Todos": uma linha por disco
+    else if (k == kWDisk) H = (tk.sp_4 + disks.size() * (tk.sp_6 + tk.sp_4) + tk.sp_3 + tk.sp_6 + tk.sp_2 + tk.sp_6 * 1.5f + tk.sp_4) * s;
+    else if (wd.mode == 1) H = (tk.sp_4 + tk.sp_6 * 1.5f * 2 + (g_opt.empty() ? tk.sp_6 * 1.5f : g_opt.size() * (tk.sp_6 + tk.sp_6)) + tk.sp_2 + tk.sp_6 * 1.5f + tk.sp_4) * s;
+    else H = (tk.sp_4 + tk.sp_6 * 1.5f * 2 + 4 * (tk.sp_6 + tk.sp_4) + tk.sp_6 + g_perf.top.size() * (tk.sp_6 + tk.sp_4) + tk.sp_2 + tk.sp_6 * 1.5f + tk.sp_4) * s;
     UINT Wt = (UINT)(W + 2 * M), Ht = (UINT)(H + 2 * M);
     fmt::Canvas cv(Wt, Ht);
     if (!cv.rt) return;
     ID2D1RenderTarget* rt = cv.rt;
     rt->Clear(D2D1::ColorF(0, 0));
     rt->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
-    ui::Painter p(rt, g_dw, th, s);
+    ui::g_tokens = tk;
+    ui::Painter p(rt, g_dw, th, tk, s);
     D2D1_RECT_F card = D2D1::RectF(M, M, M + W, M + H);
-    float rad = (wd.open ? 14 : 12) * s;
+    float rad = (wd.open ? tk.r_card : ui::InnerRadius(tk.r_card, tk.sp_2)) * s;
     p.Shadow(card, rad);
     p.Fill(card, rad, surface);
-    if (alert) p.Stroke(card, rad, hi, 1.5f * s); // Crispy: sem neon como sombra do cartão else p.Stroke(card, rad, c.line, 1 * s);
+    if (alert) p.Stroke(card, rad, hi, 1.5f * s); // Crispy: sem neon como sombra do cartão else p.Stroke(card, rad, c.line, tk.sp_1 * s);
     auto bar = [&](D2D1_RECT_F r, double pct, D2D1_COLOR_F col) {
         float hh = r.bottom - r.top; p.Fill(r, hh / 2, c.track);
         float wv = (float)((r.right - r.left) * max(0.0, min(1.0, pct / 100)));
         if (wv > 0) { p.rt->PushAxisAlignedClip(D2D1::RectF(r.left, r.top, r.left + max(wv, hh), r.bottom), D2D1_ANTIALIAS_MODE_ALIASED); p.Fill(r, hh / 2, col); p.rt->PopAxisAlignedClip(); }
     };
-    float x = card.left + 14 * s, xr = card.right - 14 * s, y = card.top;
+    float x = card.left + tk.sp_3 * s * 1.166f, xr = card.right - tk.sp_3 * s * 1.166f, y = card.top;
     wd.rBtn = wd.rClose = wd.rOpt = wd.rApply = wd.rBack = D2D1::RectF(0, 0, 0, 0);
     wd.rItems.clear();
     const char* icoDisk = "M22 12H2M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11zM6 16h.01M10 16h.01";
     const char* icoAct = "M22 12h-4l-3 9L9 3l-3 9H2";
     wchar_t b[160];
     if (k == kWDisk && !wd.open) {
-        p.Feather(icoDisk, D2D1::RectF(x, card.top, x + 16 * s, card.top + 56 * s), 16 * s, alert ? hi : th.text2);
-        float tx = x + 28 * s;
+        p.Feather(icoDisk, D2D1::RectF(x, card.top, x + tk.r_control * s, card.top + tk.sp_8 * s * 1.75f), tk.r_control * s, alert ? hi : th.text2);
+        float tx = x + tk.sp_6 * s * 1.166f;
         for (size_t i = 0; i < disks.size(); ++i) {
             const clean::Disk& d = disks[i];
             bool low = DiskLow(d);
-            float ry = card.top + i * 30 * s;
+            float ry = card.top + i * (tk.sp_6 + tk.sp_6 * 1.5f) * s;
             swprintf(b, 160, L"%lc:", d.letter);
-            ClText(p, b, D2D1::RectF(tx, ry + 11 * s, xr, ry + 29 * s), 13, th.text, DWRITE_FONT_WEIGHT_SEMI_BOLD);
+            ClText(p, b, D2D1::RectF(tx, ry + tk.sp_3 * s * 2.75f, xr, ry + (tk.sp_6 + tk.sp_6 * 1.5f - tk.sp_1 * s * 0.25f) * s), tk.t_body.size, th.text, DWRITE_FONT_WEIGHT_SEMI_BOLD);
             swprintf(b, 160, T(L"%ls livres", L"%ls free", L"%ls libres"), CleanSize(d.free).c_str());
-            ClText(p, b, D2D1::RectF(tx, ry + 11 * s, xr, ry + 29 * s), 13, low ? th.text : th.text2, low ? DWRITE_FONT_WEIGHT_SEMI_BOLD : DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_TRAILING);
-            bar(D2D1::RectF(tx, ry + 35 * s, xr, ry + 41 * s), d.total ? 100.0 * (d.total - d.free) / d.total : 0, low ? hi : c.used);
+            ClText(p, b, D2D1::RectF(tx, ry + tk.sp_3 * s * 2.75f, xr, ry + (tk.sp_6 + tk.sp_6 * 1.5f - tk.sp_1 * s * 0.25f) * s), tk.t_body.size, low ? th.text : th.text2, low ? DWRITE_FONT_WEIGHT_SEMI_BOLD : DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_TRAILING);
+            bar(D2D1::RectF(tx, ry + (tk.sp_6 + tk.sp_6 * 1.5f + tk.sp_2 * s * 0.25f) * s, xr, ry + (tk.sp_6 + tk.sp_6 * 1.5f + tk.sp_2 * s * 0.75f) * s), d.total ? 100.0 * (d.total - d.free) / d.total : 0, low ? hi : c.used);
         }
     } else if (k == kWDisk) {
-        y += 16 * s;
+        y += tk.sp_4 * s;
         for (auto& d : disks) {
             swprintf(b, 160, L"%lc:", d.letter);
-            ClText(p, b, D2D1::RectF(x, y, xr, y + 18 * s), 13, th.text, DWRITE_FONT_WEIGHT_SEMI_BOLD);
+            ClText(p, b, D2D1::RectF(x, y, xr, y + tk.sp_4 * s * 1.125f), tk.t_body.size, th.text, DWRITE_FONT_WEIGHT_SEMI_BOLD);
             swprintf(b, 160, T(L"%ls livres de %ls", L"%ls free of %ls", L"%ls libres de %ls"), CleanSize(d.free).c_str(), CleanSize(d.total).c_str());
-            ClText(p, b, D2D1::RectF(x, y, xr, y + 18 * s), 13, th.text2, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_TRAILING);
-            bar(D2D1::RectF(x, y + 24 * s, xr, y + 30 * s), d.total ? 100.0 * (d.total - d.free) / d.total : 0, DiskLow(d) ? hi : c.used);
-            y += 44 * s;
+            ClText(p, b, D2D1::RectF(x, y, xr, y + tk.sp_4 * s * 1.125f), tk.t_body.size, th.text2, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_TRAILING);
+            bar(D2D1::RectF(x, y + tk.sp_6 * s, xr, y + tk.sp_6 * s * 1.25f), d.total ? 100.0 * (d.total - d.free) / d.total : 0, DiskLow(d) ? hi : c.used);
+            y += (tk.sp_6 + tk.sp_4) * s;
         }
-        y += 2 * s; p.Fill(D2D1::RectF(x, y, xr, y + 1 * s), 0, c.line); y += 10 * s;
+        y += tk.sp_1 * s * 0.5f; p.Fill(D2D1::RectF(x, y, xr, y + tk.sp_1 * s), 0, c.line); y += tk.sp_2 * s * 1.25f;
         DWORD found = ReadDword(L"CleanLastFound", 0xFFFFFFFF);
         if (found == 0xFFFFFFFF) wcscpy_s(b, T(L"Ainda sem análise", L"Not scanned yet", L"Aún sin análisis"));
         else if (found) swprintf(b, 160, T(L"Última análise: %ls para liberar", L"Last scan: %ls to free up", L"Último análisis: %ls para liberar"), CleanSize((ULONGLONG)found << 20).c_str());
         else wcscpy_s(b, T(L"Tudo limpo na última análise", L"All clean at the last scan", L"Todo limpio en el último análisis"));
-        ClText(p, b, D2D1::RectF(x, y, xr, y + 20 * s), 12.5f, th.text2);
-        y += 32 * s;
-        wd.rBtn = D2D1::RectF(x, y, xr, y + 36 * s);
+        ClText(p, b, D2D1::RectF(x, y, xr, y + tk.sp_6 * s * 1.25f), tk.t_caption.size, th.text2);
+        y += tk.sp_6 * s * 2;
+        wd.rBtn = D2D1::RectF(x, y, xr, y + tk.sp_6 * s * 1.5f);
         ClButton(p, c, wd.rBtn, T(L"Abrir a Limpeza", L"Open Cleanup", L"Abrir Limpieza"), true, wd.hot == 1, s);
     } else if (k == kWPerf && wd.open && wd.mode == 1) {
-        y += 16 * s;
-        ClText(p, T(L"Otimizar", L"Optimize", L"Optimizar"), D2D1::RectF(x, y, xr, y + 20 * s), 16, th.text, DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_LEADING, L"Space Grotesk");
-        ClText(p, T(L"Marque o que fazer agora.", L"Choose what to do now.", L"Marca qué hacer ahora."), D2D1::RectF(x, y + 24 * s, xr, y + 42 * s), 12.5f, th.text2);
-        y += 48 * s;
+        y += tk.sp_4 * s;
+        ClText(p, T(L"Otimizar", L"Optimize", L"Optimizar"), D2D1::RectF(x, y, xr, y + tk.sp_6 * s * 1.25f), tk.t_title.size, th.text, DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_LEADING, L"Space Grotesk");
+        ClText(p, T(L"Marque o que fazer agora.", L"Choose what to do now.", L"Marca qué hacer ahora."), D2D1::RectF(x, y + tk.sp_6 * s * 1.5f, xr, y + tk.sp_6 * s * 2.625f), tk.t_caption.size, th.text2);
+        y += tk.sp_6 * s * 3;
         if (g_opt.empty()) {
-            ClText(p, T(L"Nada a melhorar agora.", L"Nothing to improve right now.", L"Nada que mejorar ahora."), D2D1::RectF(x, y, xr, y + 30 * s), 13, th.text);
-            y += 40 * s;
+            ClText(p, T(L"Nada a melhorar agora.", L"Nothing to improve right now.", L"Nada que mejorar ahora."), D2D1::RectF(x, y, xr, y + tk.sp_6 * s * 1.875f), tk.t_body.size, th.text);
+            y += tk.sp_6 * s * 2.5f;
         }
         for (size_t i = 0; i < g_opt.size(); ++i) {
-            D2D1_RECT_F r = D2D1::RectF(x - 6 * s, y, xr + 6 * s, y + 50 * s);
+            D2D1_RECT_F r = D2D1::RectF(x - tk.sp_1 * s * 1.5f, y, xr + tk.sp_1 * s * 1.5f, y + (tk.sp_6 + tk.sp_4) * s);
             wd.rItems.push_back(r);
-            if (wd.hot == 10 + (int)i) p.Fill(r, 8 * s, c.hover);
-            ClCheckbox(p, c, D2D1::RectF(x, y + 9 * s, x + 18 * s, y + 27 * s), g_opt[i].on ? 1 : 0, s);
-            ClText(p, g_opt[i].title, D2D1::RectF(x + 28 * s, y + 6 * s, xr, y + 26 * s), 13.5f, th.text, DWRITE_FONT_WEIGHT_MEDIUM);
-            ClText(p, g_opt[i].sub, D2D1::RectF(x + 28 * s, y + 26 * s, xr, y + 44 * s), 12, th.text2);
-            y += 54 * s;
+            if (wd.hot == 10 + (int)i) p.Fill(r, tk.r_chip * s, c.hover);
+            ClCheckbox(p, c, D2D1::RectF(x, y + tk.sp_2 * s * 1.125f, x + (tk.sp_4 + tk.sp_1) * s, y + (tk.sp_6 + tk.sp_2) * s), g_opt[i].on ? 1 : 0, s);
+            ClText(p, g_opt[i].title, D2D1::RectF(x + (tk.sp_6 + tk.sp_4) * s, y + tk.sp_1 * s * 1.5f, xr, y + (tk.sp_6 + tk.sp_2) * s), tk.t_section.size, th.text, DWRITE_FONT_WEIGHT_MEDIUM);
+            ClText(p, g_opt[i].sub, D2D1::RectF(x + (tk.sp_6 + tk.sp_4) * s, y + (tk.sp_6 + tk.sp_2) * s, xr, y + (tk.sp_6 * 2) * s), tk.t_caption.size, th.text2);
+            y += (tk.sp_6 + tk.sp_6) * s;
         }
-        y += 14 * s;
-        float half = g_opt.empty() ? xr - x : (xr - x - 8 * s) / 2; // nada a fazer: só Voltar
-        wd.rBack = D2D1::RectF(x, y, x + half, y + 36 * s);
+        y += tk.sp_3 * s * 1.166f;
+        float half = g_opt.empty() ? xr - x : (xr - x - tk.sp_2 * s) / 2; // nada a fazer: só Voltar
+        wd.rBack = D2D1::RectF(x, y, x + half, y + tk.sp_6 * s * 1.5f);
         ClButton(p, c, wd.rBack, T(L"Voltar", L"Back", L"Volver"), false, wd.hot == 5, s);
         bool any = false; for (auto& o : g_opt) any |= o.on;
         if (!g_opt.empty()) {
-        wd.rApply = D2D1::RectF(x + half + 8 * s, y, xr, y + 36 * s);
+        wd.rApply = D2D1::RectF(x + half + tk.sp_2 * s, y, xr, y + tk.sp_6 * s * 1.5f);
         ClButton(p, c, wd.rApply, T(L"Aplicar", L"Apply", L"Aplicar"), true, wd.hot == 4 && any, s, any);
         if (!any) wd.rApply = D2D1::RectF(0, 0, 0, 0);
         }
     } else if (!wd.open) {
-        p.Feather(icoAct, D2D1::RectF(x, card.top, x + 16 * s, card.bottom), 16 * s, alert ? hi : th.text2);
-        float tx = x + 28 * s;
-        p.Fill(D2D1::RectF(tx, card.top + 17 * s, tx + 8 * s, card.top + 25 * s), 4 * s, alert ? hi : th.text2);
-        ClText(p, alert ? T(L"Lento", L"Slow", L"Lento") : T(L"Tudo leve", L"All smooth", L"Todo fluido"), D2D1::RectF(tx + 14 * s, card.top + 11 * s, xr, card.top + 31 * s), 13, th.text, DWRITE_FONT_WEIGHT_SEMI_BOLD);
+        p.Feather(icoAct, D2D1::RectF(x, card.top, x + tk.r_control * s, card.bottom), tk.r_control * s, alert ? hi : th.text2);
+        float tx = x + tk.sp_6 * s * 1.166f;
+        p.Fill(D2D1::RectF(tx, card.top + tk.sp_4 * s * 1.0625f, tx + tk.sp_1 * s, card.top + tk.sp_6 * s * 1.5625f), tk.sp_1 * s, alert ? hi : th.text2);
+        ClText(p, alert ? T(L"Lento", L"Slow", L"Lento") : T(L"Tudo leve", L"All smooth", L"Todo fluido"), D2D1::RectF(tx + tk.sp_3 * s * 1.166f, card.top + tk.sp_2 * s * 1.375f, xr, card.top + (tk.sp_6 + tk.sp_4) * s), tk.t_body.size, th.text, DWRITE_FONT_WEIGHT_SEMI_BOLD);
         std::wstring sub = alert ? PerfCulprit() : L"";
         if (sub.empty()) { swprintf(b, 160, T(L"CPU %.0f%% · Memória %.0f%%", L"CPU %.0f%% · Memory %.0f%%", L"CPU %.0f%% · Memoria %.0f%%"), g_perf.cpu, g_perf.mem); sub = b; }
-        ClText(p, sub, D2D1::RectF(tx, card.top + 31 * s, xr, card.top + 49 * s), 12.5f, th.text2);
+        ClText(p, sub, D2D1::RectF(tx, card.top + (tk.sp_6 + tk.sp_4) * s * 1.0625f, xr, card.top + (tk.sp_6 * 2 + tk.sp_2) * s), tk.t_caption.size, th.text2);
     } else {
-        y += 16 * s;
-        p.Fill(D2D1::RectF(x, y + 6 * s, x + 8 * s, y + 14 * s), 4 * s, alert ? hi : th.text2);
+        y += tk.sp_4 * s;
+        p.Fill(D2D1::RectF(x, y + tk.sp_1 * s * 1.5f, x + tk.sp_2 * s, y + tk.sp_3 * s), tk.sp_1 * s, alert ? hi : th.text2);
         ClText(p, alert ? T(L"O PC está lento", L"Your PC is slow", L"El PC está lento") : T(L"Tudo leve", L"All smooth", L"Todo fluido"),
-               D2D1::RectF(x + 16 * s, y, xr, y + 20 * s), 16, th.text, DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_LEADING, L"Space Grotesk");
+               D2D1::RectF(x + tk.sp_4 * s, y, xr, y + tk.sp_6 * s * 1.25f), tk.t_title.size, th.text, DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_LEADING, L"Space Grotesk");
         const wchar_t* why = !alert ? T(L"Nada pesando agora.", L"Nothing heavy right now.", L"Nada pesado ahora.")
                            : g_perf.cause == 2 ? T(L"A memória está quase cheia.", L"Memory is almost full.", L"La memoria está casi llena.")
                            : g_perf.cause == 3 ? T(L"O disco está ocupado o tempo todo.", L"The disk is busy all the time.", L"El disco está ocupado todo el tiempo.")
                                                : T(L"Um programa está usando quase toda a CPU.", L"An app is using almost all the CPU.", L"Un programa usa casi toda la CPU.");
-        ClText(p, why, D2D1::RectF(x, y + 24 * s, xr, y + 42 * s), 12.5f, th.text2);
-        y += 48 * s;
+        ClText(p, why, D2D1::RectF(x, y + tk.sp_6 * s, xr, y + tk.sp_6 * s * 2.625f), tk.t_caption.size, th.text2);
+        y += tk.sp_6 * s * 3;
         clean::Disk d = clean::SystemDisk();
         struct M2 { const wchar_t* n; std::wstring v; double pct; bool hot; } ms[] = {
             {L"CPU", std::to_wstring((int)(g_perf.cpu + 0.5)) + L"%", g_perf.cpu, alert && g_perf.cause == 1},
@@ -382,37 +388,37 @@ static void WidgetRender(int k) {
             {T(L"Espaço livre em C:", L"Free space on C:", L"Espacio libre en C:"), CleanSize(d.free), d.total ? 100.0 * d.free / d.total : 0, DiskLow(d)},
         };
         for (auto& m : ms) {
-            ClText(p, m.n, D2D1::RectF(x, y, xr, y + 18 * s), 13, th.text, m.hot ? DWRITE_FONT_WEIGHT_SEMI_BOLD : DWRITE_FONT_WEIGHT_MEDIUM);
-            ClText(p, m.v, D2D1::RectF(x, y, xr, y + 18 * s), 13, m.hot ? th.text : th.text2, m.hot ? DWRITE_FONT_WEIGHT_SEMI_BOLD : DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_TRAILING);
-            bar(D2D1::RectF(x, y + 24 * s, xr, y + 30 * s), m.pct, m.hot ? hi : c.used);
-            y += 40 * s;
+            ClText(p, m.n, D2D1::RectF(x, y, xr, y + tk.sp_4 * s * 1.125f), tk.t_body.size, th.text, m.hot ? DWRITE_FONT_WEIGHT_SEMI_BOLD : DWRITE_FONT_WEIGHT_MEDIUM);
+            ClText(p, m.v, D2D1::RectF(x, y, xr, y + tk.sp_4 * s * 1.125f), tk.t_body.size, m.hot ? th.text : th.text2, m.hot ? DWRITE_FONT_WEIGHT_SEMI_BOLD : DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_TRAILING);
+            bar(D2D1::RectF(x, y + tk.sp_6 * s, xr, y + tk.sp_6 * s * 1.25f), m.pct, m.hot ? hi : c.used);
+            y += tk.sp_6 * s * 1.666f;
         }
-        p.TextSpaced(T(L"O QUE ESTÁ PESANDO", L"WHAT'S HEAVY", L"LO QUE PESA"), D2D1::RectF(x, y, x + 150 * s, y + 18 * s), 11, th.text2, DWRITE_FONT_WEIGHT_SEMI_BOLD, 0.08f);
-        y += 22 * s;
+        p.TextSpaced(T(L"O QUE ESTÁ PESANDO", L"WHAT'S HEAVY", L"LO QUE PESA"), D2D1::RectF(x, y, x + tk.sp_8 * s * 4.6875f, y + tk.sp_4 * s * 1.125f), tk.t_caption.size, th.text2, DWRITE_FONT_WEIGHT_SEMI_BOLD, 0.08f);
+        y += tk.sp_6 * s * 0.916f;
         for (size_t i = 0; i < g_perf.top.size(); ++i) {
             const ProcUse& pu = g_perf.top[i];
-            p.Fill(D2D1::RectF(x, y, xr, y + 1 * s), 0, c.line);
+            p.Fill(D2D1::RectF(x, y, xr, y + tk.sp_1 * s), 0, c.line);
             int cause = g_perf.cause ? g_perf.cause : 1;
             std::wstring v = cause == 2 ? CleanSize(pu.mem) : cause == 3 ? CleanSize(pu.io) + L"/s" : std::to_wstring((int)(pu.cpu + 0.5)) + L"% CPU";
             float vr = xr;
             bool closable = PerfClosable(pu); // o Explorer tem janelas, mas fechar derrubaria a área de trabalho
             if (i == 0 && alert && closable) { // só programas com janela, nunca processos do Windows
-                float bw = ClMeasure(p, T(L"Fechar", L"Close", L"Cerrar"), 12.5f) + 20 * s;
-                wd.rClose = D2D1::RectF(xr - bw, y + 5 * s, xr, y + 27 * s);
-                if (wd.hot == 2) p.Fill(wd.rClose, 7 * s, c.hover);
-                p.Stroke(wd.rClose, 7 * s, c.line, 1 * s);
-                ClText(p, T(L"Fechar", L"Close", L"Cerrar"), wd.rClose, 12.5f, th.text, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER);
-                vr = wd.rClose.left - 10 * s;
+                float bw = ClMeasure(p, T(L"Fechar", L"Close", L"Cerrar"), tk.t_caption.size) + (tk.sp_4 + tk.sp_1) * s;
+                wd.rClose = D2D1::RectF(xr - bw, y + tk.sp_1 * s * 1.25f, xr, y + (tk.sp_6 + tk.sp_2) * s * 0.84375f);
+                if (wd.hot == 2) p.Fill(wd.rClose, tk.r_chip * s, c.hover);
+                p.Stroke(wd.rClose, tk.r_chip * s, c.line, tk.sp_1 * s);
+                ClText(p, T(L"Fechar", L"Close", L"Cerrar"), wd.rClose, tk.t_caption.size, th.text, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER);
+                vr = wd.rClose.left - tk.sp_2 * s * 1.25f;
             }
-            float vw = ClMeasure(p, v, 13) + 4 * s;
-            ClText(p, v, D2D1::RectF(vr - vw, y, vr, y + 32 * s), 13, th.text2, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_TRAILING);
-            ClText(p, CleanProgramName(pu.exe), D2D1::RectF(x, y, vr - vw - 8 * s, y + 32 * s), 13, th.text);
-            y += 32 * s;
+            float vw = ClMeasure(p, v, tk.t_caption.size) + tk.sp_1 * s;
+            ClText(p, v, D2D1::RectF(vr - vw, y, vr, y + (tk.sp_6 + tk.sp_2) * s), tk.t_body.size, th.text2, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_TRAILING);
+            ClText(p, CleanProgramName(pu.exe), D2D1::RectF(x, y, vr - vw - tk.sp_2 * s, y + (tk.sp_6 + tk.sp_2) * s), tk.t_body.size, th.text);
+            y += (tk.sp_6 + tk.sp_2) * s;
         }
-        y += 14 * s;
-        float half = (xr - x - 8 * s) / 2;
-        wd.rBtn = D2D1::RectF(x, y, x + half, y + 36 * s);
-        wd.rOpt = D2D1::RectF(x + half + 8 * s, y, xr, y + 36 * s);
+        y += tk.sp_3 * s * 1.166f;
+        float half = (xr - x - tk.sp_2 * s) / 2;
+        wd.rBtn = D2D1::RectF(x, y, x + half, y + tk.sp_6 * s * 1.5f);
+        wd.rOpt = D2D1::RectF(x + half + tk.sp_2 * s, y, xr, y + tk.sp_6 * s * 1.5f);
         ClButton(p, c, wd.rBtn, T(L"Limpeza", L"Cleanup", L"Limpieza"), false, wd.hot == 1, s);
         ClButton(p, c, wd.rOpt, T(L"Otimizar", L"Optimize", L"Optimizar"), true, wd.hot == 3, s);
     }
@@ -439,22 +445,25 @@ static void BatRenderDocked(Widget& wd, const RECT& tb, const std::vector<BatDev
     D2D1_COLOR_F text = dk ? ui::Rgba(0xFFFFFF, 0.95f) : ui::Rgba(0x1D1D1F), text2 = dk ? ui::Rgba(0xFFFFFF, 0.62f) : ui::Rgba(0x000000, 0.58f);
     D2D1_COLOR_F hi = g_cfg.themeMode == ui::kThemeWindows ? g_theme.accent : ui::Rgba(0xFF6633);
     size_t n = min(bat.size(), (size_t)4);
-    UINT Wt = (UINT)((n ? 14 + n * 70 : 120) * s), Ht = (UINT)((tb.bottom - tb.top) * 0.86f);
+    UINT Wt = (UINT)((n ? tk.sp_3 + n * (tk.sp_6 + tk.sp_4) : tk.sp_6 * 3) * s), Ht = (UINT)((tb.bottom - tb.top) * 0.86f);
     fmt::Canvas cv(Wt, Ht);
     if (!cv.rt) return;
     ID2D1RenderTarget* rt = cv.rt;
     rt->Clear(D2D1::ColorF(0, 0));
     rt->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
-    ui::Painter p(rt, g_dw, g_theme, s);
-    p.Fill(D2D1::RectF(0, 0, (float)Wt, (float)Ht), 8 * s, wd.hot || wd.open ? ui::Rgba(dk ? 0xFFFFFF : 0x000000, 0.08f) : ui::Rgba(0x000000, 0.006f));
-    float cy = Ht / 2.0f, x = 10 * s;
-    if (!n) ClText(p, T(L"Sem aparelhos", L"No devices", L"Sin dispositivos"), D2D1::RectF(x, cy - 9 * s, (float)Wt - 6 * s, cy + 9 * s), 12, text2);
+    ui::Tokens tk = ui::MakeTokens(g_theme);
+    ui::g_tokens = tk;
+    ui::Painter p(rt, g_dw, g_theme, tk, s);
+    p.Fill(D2D1::RectF(0, 0, (float)Wt, (float)Ht), tk.r_chip * s, wd.hot || wd.open ? ui::Rgba(dk ? 0xFFFFFF : 0x000000, 0.08f) : ui::Rgba(0x000000, 0.006f));
+    float cy = Ht / 2.0f, x = tk.sp_2 * s * 1.25f;
+    if (!n) ClText(p, T(L"Sem aparelhos", L"No devices", L"Sin dispositivos"), D2D1::RectF(x, cy - tk.sp_6 * s * 1.125f, (float)Wt - tk.sp_1 * s * 1.5f, cy + tk.sp_6 * s * 1.125f), tk.t_body.size, text2);
     for (size_t i = 0; i < n; ++i) {
         bool low = bat[i].pct <= 15;
-        p.Feather(BatIcon(bat[i].name), D2D1::RectF(x, cy - 9 * s, x + 18 * s, cy + 9 * s), 17 * s, low ? hi : text2);
+        p.Feather(BatIcon(bat[i].name), D2D1::RectF(x, cy - tk.r_control * s * 1.125f, x + tk.r_control * s, cy + tk.r_control * s * 1.125f), tk.r_control * s, low ? hi : text2);
         wchar_t b[16]; swprintf(b, 16, L"%d%%", bat[i].pct);
-        ClText(p, b, D2D1::RectF(x + 22 * s, cy - 9 * s, x + 66 * s, cy + 9 * s), 12.5f, low ? hi : text, DWRITE_FONT_WEIGHT_SEMI_BOLD);
-        x += 70 * s;
+        float bw = ClMeasure(p, L"100%", tk.t_caption.size) + tk.sp_2 * s;
+        ClText(p, b, D2D1::RectF(x + tk.sp_6 * s * 1.375f, cy - tk.sp_6 * s * 1.125f, x + tk.sp_6 * s * 1.375f + bw, cy + tk.sp_6 * s * 1.125f), tk.t_caption.size, low ? hi : text, DWRITE_FONT_WEIGHT_SEMI_BOLD);
+        x += tk.sp_6 * s * 1.375f + bw;
     }
     HBITMAP bmp = nullptr;
     if (FAILED(cv.Finish(&bmp)) || !bmp) return;
@@ -473,23 +482,25 @@ static void WidgetRenderInfo(int k) {
     const ui::Theme& th = g_theme;
     ClColors c = ClPalette(th);
     float s = GetDpiForWindow(wd.wnd) / 96.0f;
+    ui::Tokens tk = ui::MakeTokens(th);
     D2D1_COLOR_F surface = th.classic ? ui::Rgba(0x353A42) : th.neon ? ui::Rgba(0x121215, 0.96f) : th.dark ? ui::Rgba(0x1F1F22, 0.97f) : ui::Rgba(0xFFFFFF, 0.97f);
     D2D1_COLOR_F hi = g_cfg.themeMode == ui::kThemeDark ? th.text : c.accent;
-    float M = 14 * s;
+    float M = tk.sp_3 * s * 1.166f;
     size_t nb = wd.open ? bat.size() : min(bat.size(), (size_t)4);
     bool alert = false;
     for (auto& b : bat) alert |= b.pct >= 0 && b.pct <= 15;
-    float W = (wd.open ? 260 : 220) * s;
-    float H = (12 + (nb ? nb : 1) * 34 + 8 + (wd.open ? 8 + 36 + 8 : 0)) * s;
+    float W = (wd.open ? tk.sp_8 * 16.25f : tk.sp_8 * 13.75f) * s;
+    float H = (tk.sp_3 + (nb ? nb : 1) * (tk.sp_6 + tk.sp_4) + tk.sp_2 + (wd.open ? tk.sp_2 + tk.sp_6 * 1.5f + tk.sp_2 : 0)) * s;
     UINT Wt = (UINT)(W + 2 * M), Ht = (UINT)(H + 2 * M);
     fmt::Canvas cv(Wt, Ht);
     if (!cv.rt) return;
     ID2D1RenderTarget* rt = cv.rt;
     rt->Clear(D2D1::ColorF(0, 0));
     rt->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
-    ui::Painter p(rt, g_dw, th, s);
+    ui::g_tokens = tk;
+    ui::Painter p(rt, g_dw, th, tk, s);
     D2D1_RECT_F card = D2D1::RectF(M, M, M + W, M + H);
-    float rad = (wd.open ? 14 : 12) * s;
+    float rad = (wd.open ? tk.r_card : ui::InnerRadius(tk.r_card, tk.sp_2)) * s;
     p.Shadow(card, rad);
     p.Fill(card, rad, surface);
     if (alert) p.Stroke(card, rad, hi, 1.5f * s);
@@ -498,29 +509,29 @@ static void WidgetRenderInfo(int k) {
         float wv = (float)((r.right - r.left) * max(0.0, min(1.0, pct / 100)));
         if (wv > 0) { p.rt->PushAxisAlignedClip(D2D1::RectF(r.left, r.top, r.left + max(wv, hh), r.bottom), D2D1_ANTIALIAS_MODE_ALIASED); p.Fill(r, hh / 2, col); p.rt->PopAxisAlignedClip(); }
     };
-    float x = card.left + 14 * s, xr = card.right - 14 * s, y = card.top + 12 * s;
+    float x = card.left + tk.sp_3 * s * 1.166f, xr = card.right - tk.sp_3 * s * 1.166f, y = card.top + tk.sp_3 * s;
     wd.rBtn = wd.rClose = wd.rOpt = wd.rApply = wd.rBack = D2D1::RectF(0, 0, 0, 0);
     wd.rItems.clear();
     wchar_t b[160];
     if (bat.empty()) {
         ClText(p, g_batBusy ? T(L"Procurando aparelhos…", L"Looking for devices…", L"Buscando dispositivos…") : T(L"Nenhum aparelho Bluetooth com bateria", L"No Bluetooth device with a battery", L"Ningún dispositivo Bluetooth con batería"),
-               D2D1::RectF(x, y, xr, y + 34 * s), 12.5f, th.text2);
-        y += 34 * s;
+               D2D1::RectF(x, y, xr, y + (tk.sp_6 + tk.sp_4) * s), tk.t_caption.size, th.text2);
+        y += (tk.sp_6 + tk.sp_4) * s;
     }
     for (size_t i = 0; i < nb; ++i) {
         const BatDev& d = bat[i];
         bool low = d.pct <= 15;
-        p.Feather(BatIcon(d.name), D2D1::RectF(x, y + 1 * s, x + 15 * s, y + 16 * s), 15 * s, low ? hi : th.text2);
+        p.Feather(BatIcon(d.name), D2D1::RectF(x, y + tk.sp_1 * s * 0.25f, x + tk.r_control * s * 0.9375f, y + tk.r_control * s), tk.r_control * s * 0.9375f, low ? hi : th.text2);
         swprintf(b, 160, L"%d%%", d.pct);
-        float vw = ClMeasure(p, b, 13) + 4 * s;
-        ClText(p, b, D2D1::RectF(xr - vw, y, xr, y + 18 * s), 13, low ? th.text : th.text2, low ? DWRITE_FONT_WEIGHT_SEMI_BOLD : DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_TRAILING);
-        ClText(p, d.name, D2D1::RectF(x + 24 * s, y, xr - vw - 6 * s, y + 18 * s), 13, th.text, DWRITE_FONT_WEIGHT_MEDIUM);
-        bar(D2D1::RectF(x + 24 * s, y + 23 * s, xr, y + 28 * s), d.pct, low ? hi : c.used);
-        y += 34 * s;
+        float vw = ClMeasure(p, b, tk.t_caption.size) + tk.sp_1 * s;
+        ClText(p, b, D2D1::RectF(xr - vw, y, xr, y + tk.sp_4 * s * 1.125f), tk.t_body.size, low ? th.text : th.text2, low ? DWRITE_FONT_WEIGHT_SEMI_BOLD : DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_TRAILING);
+        ClText(p, d.name, D2D1::RectF(x + tk.sp_6 * s, y, xr - vw - tk.sp_1 * s * 1.5f, y + tk.sp_4 * s * 1.125f), tk.t_body.size, th.text, DWRITE_FONT_WEIGHT_MEDIUM);
+        bar(D2D1::RectF(x + tk.sp_6 * s, y + tk.sp_6 * s * 0.875f, xr, y + tk.sp_6 * s * 1.125f), d.pct, low ? hi : c.used);
+        y += (tk.sp_6 + tk.sp_4) * s;
     }
     if (wd.open) {
-        y += 16 * s;
-        wd.rBtn = D2D1::RectF(x, y, xr, y + 36 * s);
+        y += tk.sp_4 * s;
+        wd.rBtn = D2D1::RectF(x, y, xr, y + tk.sp_6 * s * 1.5f);
         ClButton(p, c, wd.rBtn, T(L"Atualizar", L"Refresh", L"Actualizar"), false, wd.hot == 1, s);
     }
     HBITMAP bmp = nullptr;
@@ -572,6 +583,22 @@ static LRESULT CALLBACK WidgetProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             if (wd.open && wd.leaveAt && GetTickCount64() > wd.leaveAt) { wd.open = false; wd.leaveAt = 0; wd.hot = 0; wd.mode = 0; }
             static int tick = 0;
             if (k == kWPerf || wd.open || ++tick % 30 == 0) WidgetRender(k); // disco: muda devagar
+            // Re-arm timer with visibility awareness
+            bool visible = IsWindowVisible(h) && !IsIconic(h);
+            // Check if fullscreen app is running (pause condition)
+            HWND fg = GetForegroundWindow();
+            bool fullscreen = false;
+            if (fg && fg != h) {
+                RECT fgRect;
+                MONITORINFO mi = {sizeof(mi)};
+                if (GetWindowRect(fg, &fgRect) && GetMonitorInfoW(MonitorFromWindow(fg, MONITOR_DEFAULTTONEAREST), &mi)) {
+                    if (fgRect.left <= mi.rcMonitor.left && fgRect.top <= mi.rcMonitor.top &&
+                        fgRect.right >= mi.rcMonitor.right && fgRect.bottom >= mi.rcMonitor.bottom) {
+                        fullscreen = true;
+                    }
+                }
+            }
+            WidgetSetTimer(h, k, visible && !fullscreen);
         }
         return 0;
     case WM_MOUSEMOVE: {
@@ -645,6 +672,17 @@ static LRESULT CALLBACK WidgetProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
 
 static bool WidgetOn(int k) { return !g_lite && ReadDword(WKey(k), 0) != 0; }
 
+static void WidgetSetTimer(HWND h, int k, bool visible) {
+    if (!h) return;
+    if (visible) {
+        // Perf: 1s for real-time; Bat/Disk: 60s is enough
+        UINT interval = (k == kWPerf) ? 1000 : 60000;
+        SetTimer(h, 1, interval, nullptr);
+    } else {
+        KillTimer(h, 1);
+    }
+}
+
 static void WidgetEnable(int k, bool on) {
     if (k == kWAi) { NotchEnable(on && !g_lite); return; }
     Widget& wd = g_wd[k];
@@ -662,7 +700,7 @@ static void WidgetEnable(int k, bool on) {
         size_t n = ReadDword(L"DiskAll", 0) ? max((size_t)1, clean::AllDisks().size()) : 1; // o de desempenho fica logo abaixo do de disco
         float below = WidgetOn(kWDisk) ? 20 + 56 + (n - 1) * 30 + 16 : 20;
         if (k >= kWAi) below = (WidgetOn(kWPerf) ? below + 76 : below); // a bateria fica embaixo dos outros
-        pt.x = mi.rcWork.right - (LONG)(240 * s); pt.y = mi.rcWork.top + (LONG)((k == kWDisk ? 20 : below) * s);
+        pt.x = mi.rcWork.right - (LONG)(tk.sp_8 * 15.0f * s); pt.y = mi.rcWork.top + (LONG)((k == kWDisk ? tk.sp_2 * 5.0f : below) * s);
     }
     wd.ax = pt.x; wd.ay = pt.y;
     RECT tb;
@@ -675,7 +713,7 @@ static void WidgetEnable(int k, bool on) {
     if (k == kWBat) BatRefresh(wd.wnd);
     WidgetRender(k);
     ShowWindow(wd.wnd, SW_SHOWNOACTIVATE);
-    SetTimer(wd.wnd, 1, 1000, nullptr);
+    WidgetSetTimer(wd.wnd, k, true); // visible = true initially
 }
 
 static void WidgetDock(int k, bool on) {

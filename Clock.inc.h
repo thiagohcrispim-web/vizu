@@ -186,7 +186,7 @@ static int TheftRows() {
     int n = 0; DaySum(LoadThefts(), now, &n);
     return n == 0 ? 1 : n <= 4 ? n : 4;
 }
-static float TheftHeight() { return 106 + TheftRows() * 30 + 14 + 34 + 20; }
+static float TheftHeight() { ui::Tokens tk = ui::MakeTokens(g_theme); float s = GetDpiForSystem() / 96.0f; return tk.sp_8 * 6.625f * s + TheftRows() * tk.sp_6 * 1.875f * s + tk.sp_2 * 3.5f * s + tk.sp_6 * 2.125f * s + tk.sp_2 * 5.0f * s; }
 static void TheftExport() {
     std::wstring src = DataPath(L"roubo-de-tempo.csv");
     if (GetFileAttributesW(src.c_str()) == INVALID_FILE_ATTRIBUTES) { MessageBoxW(g_tv.wnd, T(L"Ainda não há registros para exportar.", L"There are no records to export yet.", L"Todavía no hay registros para exportar."), L"Vizu", MB_ICONINFORMATION); return; }
@@ -205,12 +205,14 @@ static void PaintTheft(HWND h) {
     ID2D1RenderTarget* rt = g_tv.surf.rt;
     D2D1_SIZE_F sz = rt->GetSize();
     const ui::Theme& th = g_theme;
+    ui::Tokens tk = ui::MakeTokens(th);
+    ui::g_tokens = tk;
     bool classic = th.classic;
     D2D1_COLOR_F bg = classic ? ui::Rgba(0x4A4F57) : th.tint, ink = classic ? ui::Rgba(0xFFFFFF) : th.text, ink2 = classic ? ui::Rgba(0xCDD2DA) : th.text2,
                  track = classic ? ui::Rgba(0x5C6472) : th.track, sep = classic ? ui::Rgba(0x5C6472) : th.stroke, red = ui::Rgba(0xFF3B5C);
     rt->Clear(bg);
-    ui::Painter p(rt, g_dw, th, s);
-    if (!classic) p.Stroke(D2D1::RectF(0, 0, sz.width, sz.height), 12 * s, th.stroke);
+    ui::Painter p(rt, g_dw, th, tk, s);
+    if (!classic) p.Stroke(D2D1::RectF(0, 0, sz.width, sz.height), tk.r_control * s * 1.5f, th.stroke);
     auto R = [&](float x0, float y0, float x1, float y1) { return D2D1::RectF(x0 * s, y0 * s, x1 * s, y1 * s); };
     float W = sz.width / s, L = 20, Rt = W - 20;
     auto all = LoadThefts();
@@ -239,7 +241,7 @@ static void PaintTheft(HWND h) {
     for (int k = 0; k < 5; ++k) { days[k] = DaySum(all, DaysAgo(4 - k)); mx = max(mx, days[k]); }
     for (int k = 0; k < 5; ++k) {
         float bx = Rt - (5 - k) * 20 + 6, hh = max(4.0f, 56.0f * days[k] / mx);
-        p.Fill(R(bx, 82 - hh, bx + 14, 82), 4 * s, k == 4 ? red : track);
+        p.Fill(R(bx, 82 - hh, bx + 14, 82), tk.sp_1 * s, k == 4 ? red : track);
     }
     p.Fill(R(L, 96, Rt, 97), 0, sep);
     // lista: interrupções de hoje (as 3 mais recentes + o resto somado) ou os 7 dias
@@ -277,8 +279,8 @@ static void PaintTheft(HWND h) {
         float bx = L + (i - 1) * (bw + 8);
         D2D1_RECT_F r = R(bx, y, bx + bw, y + 34);
         g_tv.btn[i] = r;
-        if (g_tv.hot == i) p.Fill(r, 17 * s, classic ? ui::Rgba(0xFFFFFF, 0.10f) : th.panelHot);
-        p.Stroke(r, 17 * s, classic ? ui::Rgba(0x9AA1AD) : th.stroke);
+        if (g_tv.hot == i) p.Fill(r, tk.r_chip * s * 2.125f, classic ? ui::Rgba(0xFFFFFF, 0.10f) : th.panelHot);
+        p.Stroke(r, tk.r_chip * s * 2.125f, classic ? ui::Rgba(0x9AA1AD) : th.stroke);
         p.Text(labels[i], r, 12.5f, ink, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
     }
     g_tv.surf.End();
@@ -320,7 +322,7 @@ static void ShowTheftHistory() {
     if (!reg) { WNDCLASSW wc = {}; wc.lpfnWndProc = TheftProc; wc.hInstance = GetModuleHandleW(nullptr); wc.lpszClassName = L"VizuTheft"; wc.hCursor = LoadCursor(nullptr, IDC_ARROW); RegisterClassW(&wc); reg = true; }
     g_tv.week = false;
     float s = GetDpiForSystem() / 96.0f;
-    int w = (int)(380 * s), hgt = (int)(TheftHeight() * s);
+    int w = (int)(tk.sp_8 * 23.75f * s), hgt = (int)TheftHeight();
     RECT cr = {}; if (g_clock.wnd) GetWindowRect(g_clock.wnd, &cr);
     MONITORINFO mi = {sizeof(mi)}; GetMonitorInfoW(MonitorFromWindow(g_clock.wnd ? g_clock.wnd : GetDesktopWindow(), MONITOR_DEFAULTTOPRIMARY), &mi);
     int x = max((int)mi.rcWork.left + 8, min((int)mi.rcWork.right - w - 8, (int)cr.left));
@@ -381,7 +383,7 @@ static void ClockRender() {
         th.icon = th.text;
     }
     g_clock.s = s;
-    float H = 64 * s, M = docked ? 0 : 14 * s, fpx = (float)g_clock.fontPx;
+    float H = tk.sp_8 * 8.0f * s, M = docked ? 0 : tk.sp_3 * s * 1.166f, fpx = (float)g_clock.fontPx;
     bool pomo = g_clock.phase != 0;
     UINT pc = kPomoPairs[min(2ul, (unsigned long)g_clock.pomoColors)][g_clock.phase == 1 ? 0 : 1];
 
@@ -397,18 +399,20 @@ static void ClockRender() {
             f->Release();
         }
     }
-    float timeW = 2 * w2 + wc, chip = 40 * s, gap = 6 * s, theftW = g_clock.theft ? 104 * s : chip;
+    float timeW = 2 * w2 + wc, chip = tk.sp_6 * 2.5f * s, gap = tk.sp_2 * 1.5f * s, theftW = g_clock.theft ? tk.sp_8 * 6.5f * s : chip;
     bool showTri = pomo || g_clock.agendaOn;
-    float Wc = 14 * s + (showTri ? 20 * s + 12 * s : 0) + timeW + 12 * s + (g_clock.theftOn ? theftW + gap : 0) + (g_clock.pomoOn ? chip + gap : 0) + (pomo || g_clock.chat ? chip : -gap) + (g_clock.clean ? gap + chip : 0) + (g_clock.ocr && g_clock.ocrBtn ? gap + chip : 0) + 10 * s;
+    float Wc = tk.sp_3 * s * 1.166f + (showTri ? tk.r_control * s * 1.25f + tk.sp_3 * s * 1.5f : 0) + timeW + tk.sp_3 * s * 1.5f + (g_clock.theftOn ? theftW + gap : 0) + (g_clock.pomoOn ? chip + gap : 0) + (pomo || g_clock.chat ? chip : -gap) + (g_clock.clean ? gap + chip : 0) + (g_clock.ocr && g_clock.ocrBtn ? gap + chip : 0) + tk.sp_3 * s * 0.625f;
     UINT W = (UINT)(Wc + 2 * M), Ht = (UINT)(H + 2 * M);
     fmt::Canvas cv(W, Ht);
     if (!cv.rt) return;
     ID2D1RenderTarget* rt = cv.rt;
     rt->Clear(D2D1::ColorF(0, 0));
     rt->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
-    ui::Painter p(rt, g_dw, th, s);
+    ui::Tokens tk = ui::MakeTokens(th);
+    ui::g_tokens = tk;
+    ui::Painter p(rt, g_dw, th, tk, s);
     D2D1_RECT_F card = D2D1::RectF(M, M, M + Wc, M + H);
-    float rad = 22 * s;
+    float rad = tk.r_card * s;
     if (!docked && !th.neon) p.Shadow(card, rad); // Crispy: sem sombra atrás do cartão
     D2D1_COLOR_F base = docked ? ui::Rgba(0x000000, 0.006f) // quase invisível: a barra de tarefas aparece por trás (e o clique funciona)
                        : th.classic ? ui::Rgba(0x4A4F57) : th.neon ? ui::Rgba(0x0E0E10, 0.94f) : th.dark ? ui::Rgba(0x161618, 0.94f) : ui::Rgba(0xFAFAFC, 0.95f);
@@ -418,7 +422,7 @@ static void ClockRender() {
         p.Fill(card, rad, ui::Rgba(pc, 0.15f));
         if (g_clock.phase == 1 && !g_clock.paused)
             for (int i = 3; i >= 1; --i) { float g = i * 2.2f * s; p.Stroke(D2D1::RectF(card.left - g, card.top - g, card.right + g, card.bottom + g), rad + g, ui::Rgba(pc, 0.08f * (4 - i)), 1.6f * s); }
-        p.Stroke(card, rad, ui::Rgba(pc, 0.9f), 1 * s);
+        p.Stroke(card, rad, ui::Rgba(pc, 0.9f), tk.sp_1 * s);
         // barra de progresso embaixo, recortada pelo cartão
         float prog = 1.0f - (float)ClockLeft() / (float)max(1ull, g_clock.phaseLen);
         ID2D1RoundedRectangleGeometry* clip = nullptr; ID2D1Factory* fac = nullptr; rt->GetFactory(&fac);
@@ -426,25 +430,25 @@ static void ClockRender() {
             ID2D1Layer* layer = nullptr;
             if (SUCCEEDED(rt->CreateLayer(&layer))) {
                 rt->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), clip), layer);
-                p.Fill(D2D1::RectF(card.left, card.bottom - 3 * s, card.left + (card.right - card.left) * prog, card.bottom), 0, ui::Rgba(pc));
+                p.Fill(D2D1::RectF(card.left, card.bottom - tk.sp_1 * s * 0.75f, card.left + (card.right - card.left) * prog, card.bottom), 0, ui::Rgba(pc));
                 rt->PopLayer(); layer->Release();
             }
             clip->Release();
         }
         fac->Release();
-    } else if (!docked && !th.neon) p.Stroke(card, rad, th.stroke, 1 * s);
+    } else if (!docked && !th.neon) p.Stroke(card, rad, th.stroke, tk.sp_1 * s);
 
-    float x = card.left + 14 * s, cy = (card.top + card.bottom) / 2;
+    float x = card.left + tk.sp_3 * s * 1.166f, cy = (card.top + card.bottom) / 2;
     D2D1_COLOR_F hotBg = th.neon ? ui::Rgba(ui::NeonColor(), 0.18f) : th.dark ? ui::Rgba(0xFFFFFF, 0.14f) : ui::Rgba(0x000000, 0.09f), chipBg = th.classic ? ui::Rgba(0x23272E) : th.neon ? ui::Rgba(0xFFFFFF, 0.05f) : th.dark ? ui::Rgba(0xFFFFFF, 0.07f) : ui::Rgba(0x000000, 0.05f);
     if (th.classic) hotBg = ui::Rgba(0x5C6472);
     // 1) ícone da esquerda: agenda (triângulo) ou fase do Pomodoro
     g_clock.rTri = D2D1::RectF(0, 0, 0, 0);
     if (showTri) {
-        g_clock.rTri = D2D1::RectF(x - 6 * s, cy - 16 * s, x + 26 * s, cy + 16 * s);
-        if (g_clock.hot == kClkTri) { if (th.neon) p.Neon(g_clock.rTri, 10 * s, 0.7f); p.Fill(g_clock.rTri, 10 * s, hotBg); }
-        if (pomo) p.FeatherIcon(g_clock.phase == 1 ? "target" : "coffee", D2D1::RectF(x, cy - 10 * s, x + 20 * s, cy + 10 * s), 19 * s, ui::Rgba(pc));
-        else p.FeatherIcon("alert-triangle", D2D1::RectF(x, cy - 10 * s, x + 20 * s, cy + 10 * s), 19 * s, AgendaSoon(nullptr) ? ui::Rgba(0xFF3B30) : th.text2);
-        x += 20 * s + 12 * s;
+        g_clock.rTri = D2D1::RectF(x - tk.sp_2 * s * 1.5f, cy - tk.sp_4 * s, x + tk.r_control * s * 1.625f, cy + tk.sp_4 * s);
+        if (g_clock.hot == kClkTri) { if (th.neon) p.Neon(g_clock.rTri, tk.r_chip * s * 1.25f, 0.7f); p.Fill(g_clock.rTri, tk.r_chip * s * 1.25f, hotBg); }
+        if (pomo) p.FeatherIcon(g_clock.phase == 1 ? "target" : "coffee", D2D1::RectF(x, cy - tk.sp_3 * s * 1.25f, x + tk.r_control * s * 1.25f, cy + tk.sp_3 * s * 1.25f), tk.r_control * s * 1.1875f, ui::Rgba(pc));
+        else p.FeatherIcon("alert-triangle", D2D1::RectF(x, cy - tk.sp_3 * s * 1.25f, x + tk.r_control * s * 1.25f, cy + tk.sp_3 * s * 1.25f), tk.r_control * s * 1.1875f, AgendaSoon(nullptr) ? ui::Rgba(0xFF3B30) : th.text2);
+        x += tk.r_control * s * 1.25f + tk.sp_3 * s * 1.5f;
     }
 
     // 2) hora, ou contagem do Pomodoro
@@ -458,8 +462,8 @@ static void ClockRender() {
         const wchar_t* lab = g_clock.phase == 1 ? T(L"FOCO", L"FOCUS", L"ENFOQUE") : g_clock.phase == 2 ? T(L"PAUSA", L"BREAK", L"PAUSA") : T(L"PAUSA LONGA", L"LONG BREAK", L"PAUSA LARGA");
         wchar_t lb[48]; swprintf(lb, 48, g_clock.phase == 1 ? L"%ls · %d/4%ls" : L"%ls%ls%ls", lab, g_clock.phase == 1 ? g_clock.done % 4 + 1 : 0, g_clock.paused ? L"  ‖" : L"");
         if (g_clock.phase != 1) swprintf(lb, 48, L"%ls%ls", lab, g_clock.paused ? L"  ‖" : L"");
-        p.Text(lb, D2D1::RectF(x, card.top + 8 * s, x + timeW, card.top + 20 * s), 9.5f, ui::Rgba(pc), DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
-        ty = cy + 6 * s; tsz = fpx * 0.82f;
+        p.Text(lb, D2D1::RectF(x, card.top + tk.sp_2 * s, x + timeW, card.top + tk.sp_6 * s * 1.25f), tk.t_caption.size, ui::Rgba(pc), DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
+        ty = cy + tk.sp_2 * s * 1.5f; tsz = fpx * 0.82f;
     }
     {
         IDWriteTextFormat* f = nullptr;
@@ -471,13 +475,13 @@ static void ClockRender() {
             rt->DrawText(t1, 2, f, D2D1::RectF(x, ty - hh / 2, x + w2, ty + hh / 2), br);
             D2D1_COLOR_F cc = dig; cc.a = (now.wSecond % 2 == 0 || pomo) ? 0.55f : 0.18f; // ":" pisca a cada segundo
             br->SetColor(cc);
-            rt->DrawText(L":", 1, f, D2D1::RectF(x + w2, ty - hh / 2 - 2 * s, x + w2 + wc, ty + hh / 2 - 2 * s), br);
+            rt->DrawText(L":", 1, f, D2D1::RectF(x + w2, ty - hh / 2 - tk.sp_1 * s * 0.5f, x + w2 + wc, ty + hh / 2 - tk.sp_1 * s * 0.5f), br);
             br->SetColor(dig);
             rt->DrawText(t2, 2, f, D2D1::RectF(x + w2 + wc, ty - hh / 2, x + timeW, ty + hh / 2), br);
             br->Release(); f->Release();
         }
     }
-    x += timeW + 12 * s;
+    x += timeW + tk.sp_3 * s * 1.5f;
 
     // 3) três botões: caveira (roubo de tempo), Pomodoro/pausa, atalho/parar
     auto chipRect = [&](float wdt) { D2D1_RECT_F r = D2D1::RectF(x, cy - chip / 2, x + wdt, cy + chip / 2); x += wdt + gap; return r; };
@@ -488,39 +492,39 @@ static void ClockRender() {
         D2D1_RECT_F r = g_clock.rChip[0];
         for (int i = 3; i >= 1; --i) { float g = i * 1.8f * s; p.Stroke(D2D1::RectF(r.left - g, r.top - g, r.right + g, r.bottom + g), chip / 2 + g, ui::Rgba(0xFF3B5C, 0.09f * (4 - i)), 1.4f * s); }
         p.Fill(r, chip / 2, ui::Rgba(0xFF3B5C, g_clock.hot == kClkChip0 ? 0.26f : 0.16f));
-        p.Stroke(r, chip / 2, ui::Rgba(0xFF3B5C), 1 * s);
-        p.FilledIcon("skull", D2D1::RectF(r.left + 8 * s, r.top, r.left + 30 * s, r.bottom), 19 * s, ui::Rgba(0xFF3B5C));
+        p.Stroke(r, chip / 2, ui::Rgba(0xFF3B5C), tk.sp_1 * s);
+        p.FilledIcon("skull", D2D1::RectF(r.left + tk.sp_2 * s * 2.0f, r.top, r.left + tk.sp_8 * s * 1.875f, r.bottom), tk.r_chip * s * 2.375f, ui::Rgba(0xFF3B5C));
         int sec = (int)((GetTickCount64() - g_clock.theftStart) / 1000);
         wchar_t tb[16]; if (sec >= 3600) swprintf(tb, 16, L"%d:%02d:%02d", sec / 3600, sec / 60 % 60, sec % 60); else swprintf(tb, 16, L"%02d:%02d", sec / 60, sec % 60);
-        p.Text(tb, D2D1::RectF(r.left + 30 * s, r.top, r.right - 10 * s, r.bottom), 13, ui::Rgba(0xFF7A8F), DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
+        p.Text(tb, D2D1::RectF(r.left + tk.sp_8 * s * 1.875f, r.top, r.right - tk.sp_3 * s * 1.25f, r.bottom), tk.t_caption.size, ui::Rgba(0xFF7A8F), DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
     } else {
         { bool hv_ = g_clock.hot == kClkChip0; if (th.neon && hv_) p.Neon(g_clock.rChip[0], chip / 2, 0.7f); p.Fill(g_clock.rChip[0], chip / 2, hv_ ? hotBg : chipBg); if (th.neon) p.Stroke(g_clock.rChip[0], chip / 2, hv_ ? th.accent : ui::Rgba(0xFFFFFF, 0.10f)); }
-        p.FilledIcon("skull", g_clock.rChip[0], 20 * s, th.icon);
+        p.FilledIcon("skull", g_clock.rChip[0], tk.r_chip * s * 2.5f, th.icon);
     }
     if (g_clock.pomoOn) g_clock.rChip[1] = chipRect(chip);
     if (pomo || g_clock.chat) g_clock.rChip[2] = chipRect(chip); // no Pomodoro vira o botão de parar
     if (pomo) {
         p.Fill(g_clock.rChip[1], chip / 2, ui::Rgba(pc, g_clock.hot == kClkChip1 ? 0.8f : 1.0f));
         UINT on = (pc >> 16 & 255) * 3 + (pc >> 8 & 255) * 6 + (pc & 255) > 1700 ? 0x0B0B0C : 0xFFFFFF; // texto legível sobre a cor
-        p.FeatherIcon(g_clock.paused ? "play" : "pause", g_clock.rChip[1], 16 * s, ui::Rgba(on));
+        p.FeatherIcon(g_clock.paused ? "play" : "pause", g_clock.rChip[1], tk.r_chip * s * 2.0f, ui::Rgba(on));
         { bool hv_ = g_clock.hot == kClkChip2; if (th.neon && hv_) p.Neon(g_clock.rChip[2], chip / 2, 0.7f); p.Fill(g_clock.rChip[2], chip / 2, hv_ ? hotBg : chipBg); if (th.neon) p.Stroke(g_clock.rChip[2], chip / 2, hv_ ? th.accent : ui::Rgba(0xFFFFFF, 0.10f)); }
-        p.FeatherIcon("square", g_clock.rChip[2], 16 * s, th.icon);
+        p.FeatherIcon("square", g_clock.rChip[2], tk.r_chip * s * 2.0f, th.icon);
     } else {
-        if (g_clock.pomoOn) { { bool hv_ = g_clock.hot == kClkChip1; if (th.neon && hv_) p.Neon(g_clock.rChip[1], chip / 2, 0.7f); p.Fill(g_clock.rChip[1], chip / 2, hv_ ? hotBg : chipBg); if (th.neon) p.Stroke(g_clock.rChip[1], chip / 2, hv_ ? th.accent : ui::Rgba(0xFFFFFF, 0.10f)); } p.FilledIcon("timer", g_clock.rChip[1], 20 * s, th.icon); }
+        if (g_clock.pomoOn) { { bool hv_ = g_clock.hot == kClkChip1; if (th.neon && hv_) p.Neon(g_clock.rChip[1], chip / 2, 0.7f); p.Fill(g_clock.rChip[1], chip / 2, hv_ ? hotBg : chipBg); if (th.neon) p.Stroke(g_clock.rChip[1], chip / 2, hv_ ? th.accent : ui::Rgba(0xFFFFFF, 0.10f)); } p.FilledIcon("timer", g_clock.rChip[1], tk.r_chip * s * 2.5f, th.icon); }
         if (g_clock.chat) {
         { bool hv_ = g_clock.hot == kClkChip2; if (th.neon && hv_) p.Neon(g_clock.rChip[2], chip / 2, 0.7f); p.Fill(g_clock.rChip[2], chip / 2, hv_ ? hotBg : chipBg); if (th.neon) p.Stroke(g_clock.rChip[2], chip / 2, hv_ ? th.accent : ui::Rgba(0xFFFFFF, 0.10f)); }
-        p.FilledIcon("chat-ai", g_clock.rChip[2], 20 * s, th.icon);
+        p.FilledIcon("chat-ai", g_clock.rChip[2], tk.r_chip * s * 2.5f, th.icon);
         }
     }
     if (g_clock.clean) { // Limpeza (vem antes do OCR)
         g_clock.rChip[4] = chipRect(chip);
         { bool hv_ = g_clock.hot == kClkChip4; if (th.neon && hv_) p.Neon(g_clock.rChip[4], chip / 2, 0.7f); p.Fill(g_clock.rChip[4], chip / 2, hv_ ? hotBg : chipBg); if (th.neon) p.Stroke(g_clock.rChip[4], chip / 2, hv_ ? th.accent : ui::Rgba(0xFFFFFF, 0.10f)); }
-        p.FilledIcon("broom", g_clock.rChip[4], 20 * s, th.icon);
+        p.FilledIcon("broom", g_clock.rChip[4], tk.r_chip * s * 2.5f, th.icon);
     }
     if (g_clock.ocr && g_clock.ocrBtn) { // ler texto da tela (OCR)
         g_clock.rChip[3] = chipRect(chip);
         { bool hv_ = g_clock.hot == kClkChip3; if (th.neon && hv_) p.Neon(g_clock.rChip[3], chip / 2, 0.7f); p.Fill(g_clock.rChip[3], chip / 2, hv_ ? hotBg : chipBg); if (th.neon) p.Stroke(g_clock.rChip[3], chip / 2, hv_ ? th.accent : ui::Rgba(0xFFFFFF, 0.10f)); }
-        p.FilledIcon("scan-text", g_clock.rChip[3], 19 * s, th.icon);
+        p.FilledIcon("scan-text", g_clock.rChip[3], tk.r_chip * s * 2.375f, th.icon);
     }
 
     HBITMAP bmp = nullptr;
@@ -633,6 +637,8 @@ static LRESULT CALLBACK ClockProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             ClockRender();
             if (g_clock.agendaOn) CheckReminders();
         }
+        // Re-arm timer for next second boundary
+        SetClockTimer(h);
         return 0;
     }
     case WM_MOUSEMOVE: {
@@ -678,6 +684,11 @@ static LRESULT CALLBACK ClockProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         return 0;
     }
     case WM_DISPLAYCHANGE: case WM_SETTINGCHANGE: ClockRender(); break;
+    case WM_DESTROY:
+        KillTimer(h, 1);
+        g_clock.surf.Release();
+        g_clock.wnd = nullptr;
+        return 0;
     }
     return DefWindowProcW(h, msg, wp, lp);
 }
@@ -709,7 +720,7 @@ void ClockEnable(bool on) {
     ShowWindow(g_clock.wnd, SW_SHOWNOACTIVATE);
     if (g_clock.docked) ClockDock(true);
     ClockRender();
-    SetTimer(g_clock.wnd, 1, 200, nullptr);
+    SetClockTimer(g_clock.wnd);
 }
 
 // Relógio do Windows na bandeja ("Mostrar hora e data na bandeja do sistema", Windows 11): desligado enquanto o
@@ -750,6 +761,18 @@ void ClockDock(bool on) {
         else SetWindowPos(g_clock.wnd, nullptr, (int)x, (int)y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
     }
     ClockRender();
+}
+
+static ULONGLONG NextSecondBoundary() {
+    ULONGLONG now = GetTickCount64();
+    return ((now + 999) / 1000) * 1000 - now + 1; // +1 ms margin
+}
+
+static void SetClockTimer(HWND h) {
+    if (!g_clock.on || !h) return;
+    ULONGLONG delay = NextSecondBoundary();
+    if (delay > 1000) delay = 1000; // safety cap
+    SetTimer(h, 1, (UINT)delay, nullptr);
 }
 
 static void ClockLoad() {

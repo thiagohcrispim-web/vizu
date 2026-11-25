@@ -48,21 +48,27 @@ jobs:
           EDITION="${{ github.event.inputs.edition }}"
 
           # Atualiza CMakeLists.txt
-          sed -i "s/VERSION 9\.14\.4/VERSION $VERSION/" CMakeLists.txt
-          sed -i "s/VIZU_VERSION_MAJOR=9/VIZU_VERSION_MAJOR=$(echo $VERSION | cut -d. -f1)/" CMakeLists.txt
-          sed -i "s/VIZU_VERSION_MINOR=14/VIZU_VERSION_MINOR=$(echo $VERSION | cut -d. -f2)/" CMakeLists.txt
-          sed -i "s/VIZU_VERSION_PATCH=4/VIZU_VERSION_PATCH=$(echo $VERSION | cut -d. -f3)/" CMakeLists.txt
-          sed -i "s/VIZU_VERSION_STRING=\"9.14.4\"/VIZU_VERSION_STRING=\"$VERSION\"/" CMakeLists.txt
+          sed -i "s/VERSION 19\.5\.0/VERSION $VERSION/" CMakeLists.txt
+          sed -i "s/VIZU_VERSION_MAJOR=19/VIZU_VERSION_MAJOR=$(echo $VERSION | cut -d. -f1)/" CMakeLists.txt
+          sed -i "s/VIZU_VERSION_MINOR=5/VIZU_VERSION_MINOR=$(echo $VERSION | cut -d. -f2)/" CMakeLists.txt
+          sed -i "s/VIZU_VERSION_PATCH=0/VIZU_VERSION_PATCH=$(echo $VERSION | cut -d. -f3)/" CMakeLists.txt
+          sed -i "s/VIZU_VERSION_STRING=\"19.5.0\"/VIZU_VERSION_STRING=\"$VERSION\"/" CMakeLists.txt
 
           # Atualiza Vizu.rc (FILEVERSION e PRODUCTVERSION)
           IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
-          sed -i "s/FILEVERSION 9,14,4,0/FILEVERSION $MAJOR,$MINOR,$PATCH,0/" Vizu.rc
-          sed -i "s/PRODUCTVERSION 9,14,4,0/PRODUCTVERSION $MAJOR,$MINOR,$PATCH,0/" Vizu.rc
-          sed -i "s/VALUE \"FileVersion\", \"9.14.4\"/VALUE \"FileVersion\", \"$VERSION\"/" Vizu.rc
-          sed -i "s/VALUE \"ProductVersion\", \"9.14.4\"/VALUE \"ProductVersion\", \"$VERSION\"/" Vizu.rc
+          sed -i "s/FILEVERSION 19,5,0,0/FILEVERSION $MAJOR,$MINOR,$PATCH,0/" Vizu.rc
+          sed -i "s/PRODUCTVERSION 19,5,0,0/PRODUCTVERSION $MAJOR,$MINOR,$PATCH,0/" Vizu.rc
+          sed -i "s/VALUE \"FileVersion\", \"19.5.0\"/VALUE \"FileVersion\", \"$VERSION\"/" Vizu.rc
+          sed -i "s/VALUE \"ProductVersion\", \"19.5.0\"/VALUE \"ProductVersion\", \"$VERSION\"/" Vizu.rc
 
           # Atualiza vcpkg.json
-          sed -i "s/\"version\": \"9.14.4\"/\"version\": \"$VERSION\"/" vcpkg.json
+          sed -i "s/\"version\": \"19.5.0\"/\"version\": \"$VERSION\"/" vcpkg.json
+
+          # Atualiza DesignThumbs.rc
+          sed -i "s/FILEVERSION 19,5,0,0/FILEVERSION $MAJOR,$MINOR,$PATCH,0/" DesignThumbs.rc
+          sed -i "s/PRODUCTVERSION 19,5,0,0/PRODUCTVERSION $MAJOR,$MINOR,$PATCH,0/" DesignThumbs.rc
+          sed -i "s/VALUE \"FileVersion\", \"19.5.0\"/VALUE \"FileVersion\", \"$VERSION\"/" DesignThumbs.rc
+          sed -i "s/VALUE \"ProductVersion\", \"19.5.0\"/VALUE \"ProductVersion\", \"$VERSION\"/" DesignThumbs.rc
 
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11

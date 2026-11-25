@@ -141,7 +141,10 @@ static void CardRender() {
     HWND w = g_card.wnd;
     if (!w) return;
     const ui::Theme& th = g_theme;
-    float s = g_card.s, W = 440 * s, pad = 16 * s, M = 14 * s;
+    float s = g_card.s;
+    ui::Tokens tk = ui::MakeTokens(th);
+    ui::g_tokens = tk;
+    float W = 440 * s, pad = tk.sp_4 * s, M = tk.r_card * s;
     D2D1_COLOR_F accent = th.classic ? ui::Rgba(0xFF6633) : th.neon ? ui::Rgba(ui::NeonColor()) : g_cfg.themeMode == ui::kThemeWindows ? th.accent : th.dark ? ui::Rgba(0xE6E6E8) : ui::Rgba(0x1D1D1F);
     D2D1_COLOR_F onAccent = th.classic ? ui::Rgba(0x000000) : th.neon || (th.dark && g_cfg.themeMode != ui::kThemeWindows) ? ui::Rgba(0x0E0E10) : ui::Rgba(0xFFFFFF);
     std::wstring disp = g_card.shown.size() > 700 ? g_card.shown.substr(0, 700) + L"…" : g_card.shown;
@@ -149,18 +152,18 @@ static void CardRender() {
     float textW = W - 2 * pad - 24 * s, textH = 20 * s;
     {
         fmt::Canvas probe(8, 8);
-        if (probe.rt) { ui::Painter pp(probe.rt, g_dw, th, s); textH = min(pp.Paragraph(disp, 0, 0, textW, 13, th.text, false), 190 * s); }
+        if (probe.rt) { ui::Painter pp(probe.rt, g_dw, th, tk, s); textH = min(pp.Paragraph(disp, 0, 0, textW, tk.t_body.size, th.text, false), 190 * s); }
     }
-    float H = pad + 20 * s + 10 * s + textH + 24 * s + 12 * s + 32 * s + (g_card.state == 2 ? 22 * s : 0) + pad;
+    float H = pad + tk.t_title.size + 10 * s + textH + tk.sp_6 * s + 12 * s + tk.sp_6 * s * 1.5f + (g_card.state == 2 ? 22 * s : 0) + pad;
     UINT CW = (UINT)(W + 2 * M), CH = (UINT)(H + 2 * M);
     fmt::Canvas cv(CW, CH);
     if (!cv.rt) return;
     ID2D1RenderTarget* rt = cv.rt;
     rt->Clear(D2D1::ColorF(0, 0));
     rt->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
-    ui::Painter p(rt, g_dw, th, s);
+    ui::Painter p(rt, g_dw, th, tk, s);
     D2D1_RECT_F card = D2D1::RectF(M, M, M + W, M + H);
-    float rad = 22 * s;
+    float rad = ui::InnerRadius(tk.r_card, tk.sp_2) * s;
     p.Shadow(card, rad);
     p.Fill(card, rad, th.classic ? ui::Rgba(0x4A4F57) : th.neon ? ui::Rgba(0x0E0E10, 0.96f) : th.dark ? ui::Rgba(0x161618, 0.97f) : ui::Rgba(0xFAFAFC, 0.98f));
     p.Stroke(card, rad, th.classic ? ui::Rgba(0x5C6472) : th.neon ? ui::Rgba(ui::NeonColor(), 0.42f) : th.stroke, 1 * s);
@@ -169,15 +172,15 @@ static void CardRender() {
     // cabeçalho
     std::wstring st = g_card.status;
     D2D1_COLOR_F stc = g_card.state == 3 ? bad : g_card.state == 1 ? th.text2 : ok;
-    if (g_card.state != 1) p.FeatherIcon(g_card.state == 3 ? "alert-circle" : "check", D2D1::RectF(x, y, x + 18 * s, y + 20 * s), 16 * s, stc);
-    p.Text(st, D2D1::RectF(x + (g_card.state == 1 ? 0 : 24 * s), y, card.right - pad - 30 * s, y + 20 * s), 12.5f, stc, DWRITE_FONT_WEIGHT_SEMI_BOLD);
+    if (g_card.state != 1) p.FeatherIcon(g_card.state == 3 ? "alert-circle" : "check", D2D1::RectF(x, y, x + tk.t_title.size, y + tk.t_title.size), tk.r_control * s, stc);
+    p.Text(st, D2D1::RectF(x + (g_card.state == 1 ? 0 : 24 * s), y, card.right - pad - 30 * s, y + tk.t_title.size), tk.t_section.size, stc, DWRITE_FONT_WEIGHT_SEMI_BOLD);
     g_card.r[kCardClose] = D2D1::RectF(card.right - pad - 24 * s, y - 2 * s, card.right - pad, y + 22 * s);
-    if (g_card.hot == kCardClose) p.Fill(g_card.r[kCardClose], 12 * s, th.dark ? ui::Rgba(0xFFFFFF, 0.10f) : ui::Rgba(0x000000, 0.06f));
-    p.FeatherIcon("x", g_card.r[kCardClose], 15 * s, th.text2);
+    if (g_card.hot == kCardClose) p.Fill(g_card.r[kCardClose], tk.r_chip * s, th.dark ? ui::Rgba(0xFFFFFF, 0.10f) : ui::Rgba(0x000000, 0.06f));
+    p.FeatherIcon("x", g_card.r[kCardClose], tk.r_control * s, th.text2);
     y += 30 * s;
     // texto
     D2D1_RECT_F box = D2D1::RectF(x, y, card.right - pad, y + textH + 24 * s);
-    p.Fill(box, 14 * s, th.classic ? ui::Rgba(0x23272E) : th.dark ? ui::Rgba(0xFFFFFF, 0.05f) : ui::Rgba(0x000000, 0.04f));
+    p.Fill(box, tk.r_card * s, th.classic ? ui::Rgba(0x23272E) : th.dark ? ui::Rgba(0xFFFFFF, 0.05f) : ui::Rgba(0x000000, 0.04f));
     {
         ID2D1Factory* fac = nullptr; rt->GetFactory(&fac);
         ID2D1RectangleGeometry* clip = nullptr;
@@ -185,7 +188,7 @@ static void CardRender() {
             ID2D1Layer* layer = nullptr;
             if (SUCCEEDED(rt->CreateLayer(&layer))) {
                 rt->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), clip), layer);
-                p.Paragraph(disp, box.left + 12 * s, box.top + 12 * s, textW, 13, th.text);
+                p.Paragraph(disp, box.left + 12 * s, box.top + 12 * s, textW, tk.t_body.size, th.text);
                 rt->PopLayer(); layer->Release();
             }
             clip->Release();
@@ -194,39 +197,39 @@ static void CardRender() {
     }
     y = box.bottom + 12 * s;
     // botões
-    p.Text(T(L"Traduzir:", L"Translate:", L"Traducir:"), D2D1::RectF(x, y, x + 64 * s, y + 32 * s), 12, th.text2);
+    p.Text(T(L"Traduzir:", L"Translate:", L"Traducir:"), D2D1::RectF(x, y, x + 64 * s, y + tk.sp_6 * s * 1.5f), tk.t_caption.size, th.text2);
     const wchar_t* langs[3] = {L"PT", L"ES", L"EN"};
     const wchar_t* tags[3] = {L"pt", L"es", L"en"};
     float bx = x + 66 * s;
     for (int i = 0; i < 3; ++i) {
-        D2D1_RECT_F b = D2D1::RectF(bx, y, bx + 46 * s, y + 32 * s);
+        D2D1_RECT_F b = D2D1::RectF(bx, y, bx + 46 * s, y + tk.sp_6 * s * 1.5f);
         g_card.r[kCardPt + i] = b;
         bool sel = g_card.state >= 1 && g_card.target == tags[i];
         bool same = g_card.lang.substr(0, 2) == tags[i] && !sel;
         if (g_card.state == 0 && !same && wcscmp(tags[i], T(L"pt", L"en", L"es")) == 0) sel = true; // sugere o idioma do usuário (protótipo)
-        if (sel) p.Fill(b, 16 * s, accent);
-        else { if (g_card.hot == kCardPt + i) p.Fill(b, 16 * s, th.dark ? ui::Rgba(0xFFFFFF, 0.08f) : ui::Rgba(0x000000, 0.05f)); p.Stroke(b, 16 * s, th.neon ? ui::Rgba(ui::NeonColor(), 0.5f) : th.dark ? ui::Rgba(0xFFFFFF, 0.16f) : ui::Rgba(0x000000, 0.12f), 1 * s); }
+        if (sel) p.Fill(b, tk.r_chip * s, accent);
+        else { if (g_card.hot == kCardPt + i) p.Fill(b, tk.r_chip * s, th.dark ? ui::Rgba(0xFFFFFF, 0.08f) : ui::Rgba(0x000000, 0.05f)); p.Stroke(b, tk.r_chip * s, th.neon ? ui::Rgba(ui::NeonColor(), 0.5f) : th.dark ? ui::Rgba(0xFFFFFF, 0.16f) : ui::Rgba(0x000000, 0.12f), 1 * s); }
         D2D1_COLOR_F tc = sel ? onAccent : th.text; if (same) tc.a = 0.45f;
-        p.Text(langs[i], b, 13, tc, DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
+        p.Text(langs[i], b, tk.t_caption.size, tc, DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
         bx += 54 * s;
     }
     float rx = card.right - pad;
     for (int k : {kCardWeb, kCardJoin}) {
-        D2D1_RECT_F b = D2D1::RectF(rx - 32 * s, y, rx, y + 32 * s);
+        D2D1_RECT_F b = D2D1::RectF(rx - 32 * s, y, rx, y + tk.sp_6 * s * 1.5f);
         g_card.r[k] = b;
         bool on = k == kCardJoin && g_card.joined;
-        if (on) p.Fill(b, 16 * s, th.dark ? ui::Rgba(0xFFFFFF, 0.14f) : ui::Rgba(0x000000, 0.08f));
-        else if (g_card.hot == k) p.Fill(b, 16 * s, th.dark ? ui::Rgba(0xFFFFFF, 0.08f) : ui::Rgba(0x000000, 0.05f));
-        p.Stroke(b, 16 * s, th.dark ? ui::Rgba(0xFFFFFF, 0.16f) : ui::Rgba(0x000000, 0.12f), 1 * s);
-        p.FeatherIcon(k == kCardWeb ? "external-link" : "align-justify", b, 15 * s, th.text);
+        if (on) p.Fill(b, tk.r_chip * s, th.dark ? ui::Rgba(0xFFFFFF, 0.14f) : ui::Rgba(0x000000, 0.08f));
+        else if (g_card.hot == k) p.Fill(b, tk.r_chip * s, th.dark ? ui::Rgba(0xFFFFFF, 0.08f) : ui::Rgba(0x000000, 0.05f));
+        p.Stroke(b, tk.r_chip * s, th.dark ? ui::Rgba(0xFFFFFF, 0.16f) : ui::Rgba(0x000000, 0.12f), 1 * s);
+        p.FeatherIcon(k == kCardWeb ? "external-link" : "align-justify", b, tk.r_control * s, th.text);
         rx -= 40 * s;
     }
-    y += 32 * s;
+    y += tk.sp_6 * s * 1.5f;
     g_card.r[kCardOrig] = D2D1::RectF(0, 0, 0, 0);
     if (g_card.state == 2) {
         D2D1_RECT_F o = D2D1::RectF(x, y + 6 * s, x + 160 * s, y + 22 * s);
         g_card.r[kCardOrig] = o;
-        p.Text(T(L"Copiar o original", L"Copy the original", L"Copiar el original"), o, 11.5f, g_card.hot == kCardOrig ? th.text : th.text2, DWRITE_FONT_WEIGHT_SEMI_BOLD);
+        p.Text(T(L"Copiar o original", L"Copy the original", L"Copiar el original"), o, tk.t_caption.size, g_card.hot == kCardOrig ? th.text : th.text2, DWRITE_FONT_WEIGHT_SEMI_BOLD);
     }
 
     HBITMAP bmp = nullptr;

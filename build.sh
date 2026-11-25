@@ -1,18 +1,19 @@
 #!/bin/sh
 # Compila o DesignThumbs a partir do Linux com MinGW (pacote g++-mingw-w64-x86-64-posix).
 # Usa os headers mais novos do mingw-w64 em third_party/mingw-w64-headers.
+# v19.5: adiciona engines/ (VizuVector, VizuPeek, VizuIDML)
 set -e
 cd "$(dirname "$0")"
 CXX=x86_64-w64-mingw32-g++
 RC=x86_64-w64-mingw32-windres
-FLAGS="-O2 -DUNICODE -D_UNICODE -static -s -ffunction-sections -fdata-sections -Wl,--gc-sections -Ithird_party/mingw-w64-headers"
+FLAGS="-O2 -flto -march=x86-64-v2 -DUNICODE -D_UNICODE -static -s -ffunction-sections -fdata-sections -Wl,--gc-sections -Wl,-O1 -Ithird_party/mingw-w64-headers -std=c++20 -Wall -Wextra -Wpedantic -Wno-unused-parameter -Wunused-function -Wunused-variable -Wunused-but-set-variable"
 $RC -c 65001 DesignThumbs.rc -O coff -o DesignThumbs.res.o
 $CXX $FLAGS -shared -o DesignThumbs.dll DesignThumbs.cpp DesignThumbs.res.o DesignThumbs.def -lshlwapi -lwindowscodecs -ld2d1 -ldwrite -lole32 -luuid -lgdi32 -lruntimeobject -lshcore
 # libwebp (só o codificador): compila uma vez em build/webp
 mkdir -p build/webp
 if [ ! -f build/webp/libwebp.a ]; then
   for f in third_party/libwebp/src/enc/*.c third_party/libwebp/src/dsp/*.c third_party/libwebp/src/utils/*.c third_party/libwebp/sharpyuv/*.c; do
-    x86_64-w64-mingw32-gcc -O2 -Ithird_party/libwebp -DWEBP_USE_THREAD -c "$f" -o "build/webp/$(echo "$f" | tr / _).o"
+    x86_64-w64-mingw32-gcc -O2 -flto -march=x86-64-v2 -Ithird_party/libwebp -DWEBP_USE_THREAD -c "$f" -o "build/webp/$(echo "$f" | tr / _).o"
   done
   x86_64-w64-mingw32-ar rcs build/webp/libwebp.a build/webp/*.o
 fi
@@ -51,16 +52,18 @@ if [ ! -f build/cdr/libvizucdr.a ]; then
   [ -d $CDR_SRC/boost_1_86_0/boost ] || tar -xjf $CDR_SRC/boost_1_86_0.tar.bz2 -C $CDR_SRC boost_1_86_0/boost boost_1_86_0/LICENSE_1_0.txt
   CDR_INC="-Icdr/icu-shim -I$CDR_SRC/libcdr-0.1.9/inc -I$CDR_SRC/libcdr-0.1.9/src/lib -I$CDR_SRC/librevenge-0.0.6/inc -I$CDR_SRC/librevenge-0.0.6/src/lib -I$CDR_SRC/lcms2-2.16/include -I$CDR_SRC/zlib-1.3.1 -I$CDR_SRC/boost_1_86_0"
   CDR_DEF="-DNDEBUG -DBOOST_ALL_NO_LIB -D_USE_MATH_DEFINES"
-  for f in $CDR_SRC/lcms2-2.16/src/*.c $CDR_SRC/zlib-1.3.1/*.c; do echo "$f"; done | xargs -P "$(nproc)" -I{} sh -c 'x86_64-w64-mingw32-gcc -O2 -w '"$CDR_INC $CDR_DEF"' -c "{}" -o "build/cdr/obj/$(basename {} .c)_c.o"'
+  for f in $CDR_SRC/lcms2-2.16/src/*.c $CDR_SRC/zlib-1.3.1/*.c; do echo "$f"; done | xargs -P "$(nproc)" -I{} sh -c 'x86_64-w64-mingw32-gcc -O2 -flto -march=x86-64-v2 -w '"$CDR_INC $CDR_DEF"' -c "{}" -o "build/cdr/obj/$(basename {} .c)_c.o"'
   ls $CDR_SRC/libcdr-0.1.9/src/lib/*.cpp $CDR_SRC/librevenge-0.0.6/src/lib/*.cpp cdr/icu-shim/icu_shim.cpp | grep -v RVNGDirectoryStream | \
-    xargs -P "$(nproc)" -I{} sh -c 'x86_64-w64-mingw32-g++ -std=c++17 -O2 -w '"$CDR_INC $CDR_DEF"' -c "{}" -o "build/cdr/obj/$(basename {} .cpp).o"'
+    xargs -P "$(nproc)" -I{} sh -c 'x86_64-w64-mingw32-g++ -std=c++17 -O2 -flto -march=x86-64-v2 -w '"$CDR_INC $CDR_DEF"' -c "{}" -o "build/cdr/obj/$(basename {} .cpp).o"'
   x86_64-w64-mingw32-ar rcs build/cdr/libvizucdr.a build/cdr/obj/*.o
   rm -rf build/cdr/obj
 fi
 CDR_FLAGS="-I$CDR_SRC/libcdr-0.1.9/inc -I$CDR_SRC/librevenge-0.0.6/inc -I$CDR_SRC/zlib-1.3.1"
+# Compilar engines (VizuVector: SvgWriter, EpsWriter, PdfWriter; VizuPeek; VizuIDML)
+ENGINE_SOURCES="engines/SvgWriter.h engines/EpsWriter.h engines/PdfWriter.h engines/Peek.h engines/Peek.cpp engines/IdmlWriter.h engines/VectorSink.cpp"
 $RC -c 65001 Vizu.rc -O coff -o Vizu.res.o # embute a DLL no EXE
 $CXX $FLAGS -municode -mwindows -D_WIN32_WINNT=0x0A00 -Wl,-Map=build/Vizu.map $CDR_FLAGS -o Vizu.exe Vizu.cpp Vizu.res.o build/webp/libwebp.a build/cdr/libvizucdr.a -lshlwapi -lole32 -loleaut32 -luuid -lgdi32 -ldwmapi -lshell32 -ld2d1 -ldwrite -lwindowscodecs -lruntimeobject -lshcore -lwinhttp -lurlmon -lcomctl32 -lcomdlg32 -lxmllite -lbcrypt -lmscms -lpdh -lsetupapi -lwinmm
-# O próprio Vizu é o instalador. Ele leva a versão no nome: dist/Vizu_Setup_9.8.11_x64.exe
+# O próprio Vizu é o instalador. Ele leva a versão no nome: dist/Vizu_Setup_19.5.0_x64.exe
 VERSION=$(sed -n 's/.*VALUE "FileVersion", "\([0-9.]*\)".*/\1/p' Vizu.rc)
 mkdir -p dist
 cp Vizu.exe "dist/Vizu_Setup_${VERSION}_x64.exe"

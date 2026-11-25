@@ -3,7 +3,7 @@
 <h3 align="center">Veja todos os seus arquivos de design no Windows,<br>mesmo sem os programas instalados.</h3>
 
 <p align="center">
-  <a href="https://github.com/thiagohcrispim-web/vizu/releases/latest/download/Vizu_Setup_9.14.4_x64.exe"><b>⬇ Baixar o Vizu para Windows</b></a> &nbsp;·&nbsp; grátis e de código aberto (MIT)
+  <a href="https://github.com/thiagohcrispim-web/vizu/releases/latest/download/Vizu_Setup_19.5.0_x64.exe"><b>⬇ Baixar o Vizu para Windows</b></a> &nbsp;·&nbsp; grátis e de código aberto (MIT)
 </p>
 
 ---
@@ -99,7 +99,7 @@ desligado nas Configurações.
 
 ## Instalar
 
-1. Baixe o **[instalador](https://github.com/thiagohcrispim-web/vizu/releases/latest/download/Vizu_Setup_9.14.4_x64.exe)** e abra. Não precisa de administrador.
+1. Baixe o **[instalador](https://github.com/thiagohcrispim-web/vizu/releases/latest/download/Vizu_Setup_19.5.0_x64.exe)** e abra. Não precisa de administrador.
 2. Pronto: as miniaturas aparecem conforme você navega pelas pastas.
 
 Para atualizar, o Vizu avisa sozinho quando sai versão nova. Para desinstalar, rode o instalador de novo ou use
@@ -160,7 +160,7 @@ https://docs.github.com/site-policy/privacy-policies/github-general-privacy-stat
 
 - Compilar no Linux: `./build.sh` (MinGW `g++-mingw-w64-x86-64-posix`; os headers mais novos do mingw-w64 estão em `third_party/`).
 - O GitHub Actions compila a cada envio e publica o instalador como artefato (`.github/workflows/build.yml`).
-- Instalação silenciosa: `Vizu_Setup_9.14.4_x64.exe /install /S` · desinstalar: `Vizu.exe /uninstall [/S]`.
+- Instalação silenciosa: `Vizu_Setup_19.5.0_x64.exe /install /S` · desinstalar: `Vizu.exe /uninstall [/S]`.
 - Diagnóstico de um arquivo: `Vizu.exe /diag "arquivo"` ou arraste o arquivo sobre `diagnostico.bat`. Sem arquivo (`Vizu.exe /diag` ou dois cliques no `.bat`): diagnóstico do Espaço e do Alt.
 - A biblioteca `DesignThumbs.dll` (miniaturas do Explorer) e a chave de registro `HKCU\Software\DesignThumbs` mantêm o
   nome antigo, para não quebrar as miniaturas nem as configurações de quem já usa.
@@ -169,6 +169,7 @@ https://docs.github.com/site-policy/privacy-policies/github-general-privacy-stat
 <details>
 <summary><b>Histórico de versões</b></summary>
 
+- **v19.5.0** — **Grande salto**: motores próprios (VizuVector, VizuPeek, VizuIDML) substituem o Inkscape (~100 MB a menos). CDR/CMX → PDF vetorial, SVG, EPS nativo; PDF → IDML (InDesign). Chuva digital no tema Classic (WorkerW layer, loop perfeito, hash determinístico). Sistema de design completo: squircle com cache, concentricidade, tokens de espaçamento 4px, tipografia Inter, animações com mola (ui::Spring). Limpeza profunda: timers só quando janela visível, TrimMemory, DestroyWindow, remoção de código legado (DesignPeek, migrações antigas), buffers estáticos → locais, leitura por mapping. Flags modernas: -flto, -march=x86-64-v2, -Wl,--gc-sections em todas as etapas. Repositório limpo: dist/ em .gitignore, protótipos movidos para branch/wiki.
 - **v9.14.4** — Tudo da 9.14.3 (Alt na Área de Trabalho, arquivos do Affinity e bateria anexada), que não chegou a ser publicada porque o teste automático não conseguia baixar o motor vetorial do inkscape.org. O teste agora usa uma cópia guardada no GitHub, conferida pelo mesmo SHA-256; para os usuários, o download continua direto do inkscape.org.
 - **v9.14.3** — Alt na Área de Trabalho volta a abrir o menu de converter. Arquivos do Affinity (`.af` e os antigos `.afdesign`, `.afphoto`, `.afpub`) ganham miniatura, prévia e conversão para PNG, JPG, PDF, WEBP e TIFF pela miniatura que o Affinity guarda no arquivo. A bateria anexada à barra de tarefas não abre mais o cartão: realça ao passar o mouse e atualiza com um clique.
 - **v9.14.2** — **Uso de IA:** as logos do Claude e do ChatGPT no lugar das letras, no trilho e no cartão. Novas opções em Configuração › Monitor: mostrar o **restante** em vez do usado; **limites de cor** ajustáveis (atenção e crítico); **anel semanal** por dentro ou por fora; **exibição** sempre, ao passar o cursor (o trilho vira uma faixa fina e abre ao chegar o mouse) ou oculta; **recolher em tela cheia** (vídeos, jogos, apresentações); **aviso quando um limite renovar**, com som opcional e prévia; **tamanho** pequeno, médio ou grande; e **Recentralizar** (também no menu do botão direito). **Espaço e Alt agora funcionam nos arquivos da área de trabalho**, não só nas janelas do Explorer.

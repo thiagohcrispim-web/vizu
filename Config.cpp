@@ -38,6 +38,19 @@ void LoadConfig() {
     g_cfg.tempPermanent = ReadDword(L"TempPermanent", 0) != 0;
     g_cfg.neon = ReadDword(L"NeonColor", 0xFF6633) & 0xFFFFFF;
     ui::NeonColor() = g_cfg.neon;
+
+    // Chuva digital (tema Classic) - PLANO-CHUVA-DIGITAL
+    g_cfg.rainEnabled = ReadDword(L"RainEnabled", 0) != 0;
+    g_cfg.rainColor = ReadDword(L"RainColor", 0x0E1014) & 0xFFFFFF;
+    g_cfg.rainOpacity = max(5ul, min(60ul, (unsigned long)ReadDword(L"RainOpacity", 22)));
+    g_cfg.rainCycleMs = max(10000ul, min(40000ul, (unsigned long)ReadDword(L"RainCycleMs", 20000)));
+    // Garantir passo de 5000
+    g_cfg.rainCycleMs = ((g_cfg.rainCycleMs + 2500) / 5000) * 5000;
+    g_cfg.rainHeadRatio = min(60ul, (unsigned long)ReadDword(L"RainHeadRatio", 15));
+    g_cfg.rainCharset = min(2ul, (unsigned long)ReadDword(L"RainCharset", 0));
+    g_cfg.rainFps = ReadDword(L"RainFps", 24);
+    if (g_cfg.rainFps != 20 && g_cfg.rainFps != 24 && g_cfg.rainFps != 30) g_cfg.rainFps = 24;
+    g_cfg.rainCustomChars = ReadStr(L"RainCustomChars", L"");
 }
 
 void SaveConfig() {
@@ -55,6 +68,16 @@ void SaveConfig() {
     WriteDword(L"VectorTextPaths", g_cfg.vectorTextPaths);
     WriteDword(L"TempPermanent", g_cfg.tempPermanent);
     WriteDword(L"NeonColor", g_cfg.neon);
+
+    // Chuva digital (tema Classic) - PLANO-CHUVA-DIGITAL
+    WriteDword(L"RainEnabled", g_cfg.rainEnabled);
+    WriteDword(L"RainColor", g_cfg.rainColor);
+    WriteDword(L"RainOpacity", g_cfg.rainOpacity);
+    WriteDword(L"RainCycleMs", g_cfg.rainCycleMs);
+    WriteDword(L"RainHeadRatio", g_cfg.rainHeadRatio);
+    WriteDword(L"RainCharset", g_cfg.rainCharset);
+    WriteDword(L"RainFps", g_cfg.rainFps);
+    WriteStr(L"RainCustomChars", g_cfg.rainCustomChars);
 }
 
 } // namespace cfg

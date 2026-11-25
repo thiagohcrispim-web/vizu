@@ -19,6 +19,16 @@ struct Config {
     bool tempPermanent = false;
     DWORD altDelay = 500;
     DWORD quality = 75;
+
+    // Chuva digital (tema Classic) - PLANO-CHUVA-DIGITAL
+    bool rainEnabled = false;
+    DWORD rainColor = 0x0E1014;   // Grafite padrão
+    DWORD rainOpacity = 22;       // 5-60%, padrão 22%
+    DWORD rainCycleMs = 20000;    // 10000-40000ms, passos de 5000
+    DWORD rainHeadRatio = 15;     // 0-60%, padrão 15%
+    DWORD rainCharset = 0;        // 0=Katakana, 1=Latin, 2=Custom
+    DWORD rainFps = 24;           // 20/24/30
+    std::wstring rainCustomChars;
 };
 
 extern Config g_cfg;

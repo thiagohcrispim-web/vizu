@@ -183,6 +183,13 @@ inline bool EnableGlass(HWND h, bool dark) {
 // "Mostrar animações no Windows" desligado = reduzir movimento.
 inline bool ReducedMotion() { BOOL on = TRUE; SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &on, 0); return !on; }
 
+// Libera memória do processo: compacta o heap e reduz o working set.
+// Chama após atividade pesada (ex: conversão, leitura de arquivo grande, fechamento de janela).
+inline void TrimMemory() {
+    HeapCompact(GetProcessHeap(), 0);
+    SetProcessWorkingSetSize(GetCurrentProcess(), (SIZE_T)-1, (SIZE_T)-1);
+}
+
 // cubic-bezier(x1, y1, x2, y2) como no CSS.
 inline float CubicBezier(float x1, float y1, float x2, float y2, float x) {
     if (x <= 0) return 0;
@@ -205,7 +212,7 @@ inline double NowMs() {
 // Valores que deslizam até o alvo. Cada janela tem um; Frame() no começo do desenho, Pump() no fim.
 // Nada anima sozinho: um valor só se move quando o alvo muda (ação ou mouse).
 struct Anim {
-    struct V { float from, to, cur; double start; float dur; bool inout; };
+    struct V { float from, to, cur; double start; float dur; bool inout; Spring sprPos, sprCol; };
     std::map<int, V> m;
     double now = 0;
     bool busy = false, reduced = false;
@@ -218,6 +225,13 @@ struct Anim {
         if (v.to != target) {
             v.from = v.cur; v.to = target; v.start = now; v.inout = inout;
             v.dur = reduced ? (motion ? 0 : (dur < 150 ? dur : 150)) : dur;
+            // Configurar Spring para este valor
+            v.sprPos.SetTarget(target);
+            v.sprPos.SetParams(0.25f, 1.0f); // hover/toggle: response=0.25, damping=1.0
+            v.sprCol.SetTarget(target);
+            v.sprCol.SetParams(0.25f, 1.0f);
+            v.sprPos.SetReduced(reduced);
+            v.sprCol.SetReduced(reduced);
         }
         if (v.dur <= 0) return v.cur = v.to;
         float k = (float)((now - v.start) / v.dur);
@@ -226,10 +240,30 @@ struct Anim {
         busy = true;
         return v.cur = v.from + (v.to - v.from) * (v.inout ? EaseInOut(k) : EaseOut(k));
     }
+    // Spring step para animações fluidas (chamar no loop de renderização com dt em ms)
+    void StepSprings(float dt) {
+        for (auto& p : m) {
+            p.second.sprPos.Step(dt);
+            p.second.sprCol.Step(dt);
+        }
+    }
+    // Obter valor Spring (posição ou cor)
+    float GetSpringPos(int key) {
+        auto it = m.find(key);
+        return it != m.end() ? it->second.sprPos.x : 0;
+    }
+    float GetSpringCol(int key) {
+        auto it = m.find(key);
+        return it != m.end() ? it->second.sprCol.x : 0;
+    }
     // Começa do valor "from" (entrada de janela/aviso).
     void Start(int key, float from, float to, float dur, bool motion = false) {
         float d = reduced || ReducedMotion() ? (motion ? 0 : (dur < 150 ? dur : 150)) : dur;
         m[key] = {from, to, from, NowMs(), d, false};
+        m[key].sprPos.SetParams(0.25f, 1.0f);
+        m[key].sprCol.SetParams(0.25f, 1.0f);
+        m[key].sprPos.SetReduced(reduced);
+        m[key].sprCol.SetReduced(reduced);
     }
     // Ainda animando: pede outro quadro em ~16 ms. Janela oculta ou minimizada não gasta nada.
     void Pump(HWND h, UINT_PTR timer) {
@@ -238,6 +272,227 @@ struct Anim {
     }
 };
 enum : UINT_PTR { kAnimTick = 0x7A11 }; // id de timer reservado para Anim::Pump em todas as janelas
+
+// Animação com mola (spring) - estilo Apple, interrompível, fluido em 60/144Hz
+// response: tempo para chegar ~63% do alvo (0.25 = rápido, 0.35 = médio, 0.4 = lento)
+// damping: amortecimento (1.0 = crítico/sem oscilação, <1 = subamortecido/com bounce)
+struct Spring {
+    float x = 0, v = 0, target = 0;
+    float response = 0.35f, damping = 0.85f; // padrão: abrir Giro, Espiar
+    bool reduced = false;
+    // Atualiza a física da mola. dt em ms.
+    void Step(float dt) {
+        if (reduced) { x = target; v = 0; return; }
+        if (x == target && v == 0) return;
+        // Equação: f = -k*x - c*v  (Hooke + amortecimento)
+        // k = (2*pi/response)^2, c = 2*damping*sqrt(k)
+        // dt em segundos para a simulação
+        float dtSec = dt / 1000.0f;
+        float k = (6.28318530718f / response) * (6.28318530718f / response);
+        float c = 2.0f * damping * sqrtf(k);
+        float a = (-k * (x - target) - c * v);
+        v += a * dtSec;
+        x += v * dtSec;
+        // Para quando praticamente parado
+        if (fabsf(x - target) < 0.001f && fabsf(v) < 0.001f) { x = target; v = 0; }
+    }
+    bool Done() const { return x == target && v == 0; }
+    // Define novo alvo (interrompe animação atual suavemente)
+    void SetTarget(float t) { target = t; }
+    // Define parâmetros da mola
+    void SetParams(float resp, float damp) { response = resp; damping = damp; }
+    // Ativa/desativa modo reduzido
+    void SetReduced(bool r) { reduced = r; if (r) { x = target; v = 0; } }
+};
+
+// Parâmetros recomendados por uso (seção 9 do GUIA-DESIGN):
+// Hover, toggle, segmentado: response=0.25, damping=1.0
+// Abrir Giro, Espiar: response=0.35, damping=0.85
+// Toast: response=0.40, damping=0.80
+// Fechar: sem mola, fade 120ms
+
+// ============================================================
+// Design Tokens (GUIA-DESIGN seções 2, 4, 6, 7)
+// Tokens centralizados para raios (squircle), espaçamento (grade 4px),
+// tipografia (Inter) e cores semânticas por tema.
+// ============================================================
+struct Tokens {
+    // Raios squircle (concentricidade: raio_interno = raio_externo - espaçamento)
+    float r_window = 16;   // janela principal
+    float r_card   = 14;   // cartões/painéis
+    float r_control = 10;  // botões, toggles, steppers
+    float r_chip   = 8;    // chips, badges, tags
+    // Suavidade squircle (0.6 = padrão Apple, 0 = retângulo arredondado)
+    float smooth = 0.6f;
+
+    // Espaçamento em grade de 4px
+    float sp_1 = 4, sp_2 = 8, sp_3 = 12, sp_4 = 16, sp_6 = 24, sp_8 = 32;
+
+    // Tipografia Inter (semibold/medium/regular)
+    struct Type { float size; int weight; float leading; };
+    Type t_title{20, 600, 26};       // Semibold, títulos de janela
+    Type t_section{11, 600, 14};     // Semibold, maiúsculas +6% tracking
+    Type t_body{14, 500, 20};        // Medium, corpo
+    Type t_caption{12, 400, 16};     // Regular, legendas
+    Type t_mono{12, 500, 16};        // Medium tabular, números/%/tamanhos
+
+    // Cores semânticas (preenchidas por tema via MakeTokens)
+    D2D1_COLOR_F bg{}, panel{}, line{}, text{}, text2{}, accent{}, accent2{};
+    D2D1_COLOR_F warn{}, crit{}, ok{}, overlay{};
+};
+
+// Gera tokens de cor semântica a partir do tema
+inline Tokens MakeTokens(const Theme& th) {
+    Tokens tk;
+    if (th.classic) { // Classic: grafite/Ardósia, laranja só preenchimento
+        tk.bg      = th.tint;
+        tk.panel   = th.panel;
+        tk.line    = th.stroke;
+        tk.text    = th.text;
+        tk.text2   = th.text2;
+        tk.accent  = th.accent;      // #FF6633
+        tk.accent2 = Rgba(0xFF8A5C); // laranja claro
+        tk.warn    = Rgba(0xFFB400);
+        tk.crit    = th.danger;
+        tk.ok      = Rgba(0x30D158);
+        tk.overlay = Rgba(0x000000, 0.45f);
+    } else if (th.neon) { // Crispy: neon laranja sobre grafite
+        tk.bg      = th.tint;
+        tk.panel   = th.panel;
+        tk.line    = th.stroke;
+        tk.text    = th.text;
+        tk.text2   = th.text2;
+        tk.accent  = th.accent;      // NeonColor()
+        tk.accent2 = Rgba(0xFF8A5C);
+        tk.warn    = Rgba(0xFFB400);
+        tk.crit    = th.danger;
+        tk.ok      = Rgba(0x30D158);
+        tk.overlay = Rgba(0x000000, 0.55f);
+    } else if (th.dark) { // Dark/Windows escuro
+        tk.bg      = th.tint;
+        tk.panel   = th.panel;
+        tk.line    = th.stroke;
+        tk.text    = th.text;
+        tk.text2   = th.text2;
+        tk.accent  = th.accent;
+        tk.accent2 = Rgba(0xFFFFFF, 0.20f);
+        tk.warn    = Rgba(0xFFB400);
+        tk.crit    = th.danger;
+        tk.ok      = Rgba(0x30D158);
+        tk.overlay = Rgba(0x000000, 0.50f);
+    } else { // Light
+        tk.bg      = th.tint;
+        tk.panel   = th.panel;
+        tk.line    = th.stroke;
+        tk.text    = th.text;
+        tk.text2   = th.text2;
+        tk.accent  = th.accent;
+        tk.accent2 = Rgba(0x000000, 0.10f);
+        tk.warn    = Rgba(0xB06000);
+        tk.crit    = th.danger;
+        tk.ok      = Rgba(0x30A030);
+        tk.overlay = Rgba(0x000000, 0.30f);
+    }
+    return tk;
+}
+
+// Instância global de tokens para o tema atual (inicializada em cada janela)
+inline Tokens g_tokens;
+
+// Squircle com cache por (largura, altura, raio, smooth)
+// Abaixo de 6px raio -> retângulo arredondado comum (mais rápido)
+struct SquircleCacheKey {
+    int w, h, r;
+    bool operator==(const SquircleCacheKey& o) const { return w==o.w && h==o.h && r==o.r; }
+    bool operator<(const SquircleCacheKey& o) const {
+        if (w!=o.w) return w<o.w; if (h!=o.h) return h<o.h; return r<o.r;
+    }
+};
+inline std::map<SquircleCacheKey, ID2D1PathGeometry*> g_squircleCache;
+
+inline ID2D1PathGeometry* Squircle(ID2D1Factory* f, D2D1_RECT_F r, float radius, float smooth = 0.6f) {
+    int w = (int)ceilf(r.right - r.left);
+    int h = (int)ceilf(r.bottom - r.top);
+    int rr = (int)ceilf(radius);
+    if (rr < 6) { // raio pequeno: retângulo arredondado nativo
+        ID2D1PathGeometry* g = nullptr;
+        if (SUCCEEDED(f->CreatePathGeometry(&g))) {
+            ID2D1GeometrySink* k = nullptr;
+            if (SUCCEEDED(g->Open(&k))) {
+                k->BeginFigure(D2D1::Point2F(r.left + rr, r.top), D2D1_FIGURE_BEGIN_FILLED);
+                k->AddLine(D2D1::Point2F(r.right - rr, r.top));
+                k->AddArc(D2D1::ArcSegment(D2D1::Point2F(r.right, r.top + rr), D2D1::SizeF(rr, rr), 0, D2D1_SWEEP_DIRECTION_CLOCKWISE, D2D1_ARC_SIZE_SMALL));
+                k->AddLine(D2D1::Point2F(r.right, r.bottom - rr));
+                k->AddArc(D2D1::ArcSegment(D2D1::Point2F(r.right - rr, r.bottom), D2D1::SizeF(rr, rr), 0, D2D1_SWEEP_DIRECTION_CLOCKWISE, D2D1_ARC_SIZE_SMALL));
+                k->AddLine(D2D1::Point2F(r.left + rr, r.bottom));
+                k->AddArc(D2D1::ArcSegment(D2D1::Point2F(r.left, r.bottom - rr), D2D1::SizeF(rr, rr), 0, D2D1_SWEEP_DIRECTION_CLOCKWISE, D2D1_ARC_SIZE_SMALL));
+                k->AddLine(D2D1::Point2F(r.left, r.top + rr));
+                k->AddArc(D2D1::ArcSegment(D2D1::Point2F(r.left + rr, r.top), D2D1::SizeF(rr, rr), 0, D2D1_SWEEP_DIRECTION_CLOCKWISE, D2D1_ARC_SIZE_SMALL));
+                k->EndFigure(D2D1_FIGURE_END_CLOSED);
+                k->Close(); k->Release();
+            }
+        }
+        return g;
+    }
+    SquircleCacheKey key{w, h, rr};
+    auto it = g_squircleCache.find(key);
+    if (it != g_squircleCache.end()) return it->second;
+    ID2D1PathGeometry* g = nullptr;
+    if (FAILED(f->CreatePathGeometry(&g))) return nullptr;
+    ID2D1GeometrySink* k = nullptr;
+    if (FAILED(g->Open(&k))) { g->Release(); return nullptr; }
+    // Squircle: superellipse |x|^n + |y|^n = r^n com n = 2.42 (smooth=0.6)
+    // Aproximado por 8 curvas Bézier cúbicas (2 por canto)
+    float n = 2.0f / (1.0f - smooth); // smooth=0.6 -> n=5; smooth=0 -> n=2 (arredondado)
+    float rw = (r.right - r.left) * 0.5f;
+    float rh = (r.bottom - r.top) * 0.5f;
+    float cx = (r.left + r.right) * 0.5f;
+    float cy = (r.top + r.bottom) * 0.5f;
+    float rx = rw - radius;
+    float ry = rh - radius;
+    if (rx < 0) rx = 0;
+    if (ry < 0) ry = 0;
+    // Controle para superellipse: k = 0.55228475 * (n-2)/(n-1) * r (aproximação)
+    float kctrl = 0.55228475f * radius * (n - 2.0f) / (n - 1.0f);
+    if (kctrl < 0) kctrl = 0;
+    k->BeginFigure(D2D1::Point2F(cx - rx, r.top), D2D1_FIGURE_BEGIN_FILLED);
+    // Topo
+    k->AddLine(D2D1::Point2F(cx + rx, r.top));
+    // Canto superior direito (2 Béziers)
+    k->AddBezier(D2D1::BezierSegment(
+        D2D1::Point2F(cx + rx + kctrl, r.top),
+        D2D1::Point2F(r.right, cy - ry + kctrl),
+        D2D1::Point2F(r.right, cy - ry)));
+    k->AddBezier(D2D1::BezierSegment(
+        D2D1::Point2F(r.right, cy - ry - kctrl),
+        D2D1::Point2F(cx + rx + kctrl, r.bottom),
+        D2D1::Point2F(cx + rx, r.bottom)));
+    // Base
+    k->AddLine(D2D1::Point2F(cx - rx, r.bottom));
+    // Canto inferior esquerdo (2 Béziers)
+    k->AddBezier(D2D1::BezierSegment(
+        D2D1::Point2F(cx - rx - kctrl, r.bottom),
+        D2D1::Point2F(r.left, cy + ry - kctrl),
+        D2D1::Point2F(r.left, cy + ry)));
+    k->AddBezier(D2D1::BezierSegment(
+        D2D1::Point2F(r.left, cy + ry + kctrl),
+        D2D1::Point2F(cx - rx - kctrl, r.top),
+        D2D1::Point2F(cx - rx, r.top)));
+    k->EndFigure(D2D1_FIGURE_END_CLOSED);
+    k->Close(); k->Release();
+    g_squircleCache[key] = g;
+    return g;
+}
+
+// Libera cache de squircles (chamar em WM_DESTROY da janela principal ou troca de DPI)
+inline void ClearSquircleCache() {
+    for (auto& p : g_squircleCache) if (p.second) p.second->Release();
+    g_squircleCache.clear();
+}
+
+// Helpers de concentricidade: raio_interno = raio_externo - espaçamento (mín 4px)
+inline float InnerRadius(float outer, float spacing) { float r = outer - spacing; return r < 4 ? 4 : r; }
+// Ex.: janela(16) -> cartão(14=16-2) -> controle(10=14-4) -> chip(8=10-2)
 
 inline D2D1_COLOR_F Mix(D2D1_COLOR_F a, D2D1_COLOR_F b, float k) {
     return D2D1::ColorF(a.r + (b.r - a.r) * k, a.g + (b.g - a.g) * k, a.b + (b.b - a.b) * k, a.a + (b.a - a.a) * k);
@@ -369,11 +624,14 @@ public:
     ID2D1RenderTarget* rt;
     IDWriteFactory* dw;
     const Theme& th;
+    const Tokens& tk;                  // tokens de design (ráios, espaçamento, cores, tipografia)
+    ID2D1Factory* fac = nullptr;       // fábrica D2D para Squircle
     float s; // escala de DPI
     Anim* an = nullptr;               // valores animados da janela (nulo: sem animação)
     float mx = -1e6f, my = -1e6f;     // mouse em coordenadas do cliente (luz que segue o cursor)
     bool down = false;                // botão do mouse apertado (efeito de "afundar")
-    Painter(ID2D1RenderTarget* r, IDWriteFactory* d, const Theme& t, float scale) : rt(r), dw(d), th(t), s(scale) {}
+    Painter(ID2D1RenderTarget* r, IDWriteFactory* d, const Theme& t, const Tokens& tokens, float scale)
+        : rt(r), dw(d), th(t), tk(tokens), s(scale) { rt->GetFactory(&fac); }
     // Valor animado (sem Anim, vai direto ao alvo).
     float A(int key, float target, float dur = 220, bool inout = false, bool motion = false) { return an && key ? an->Get(key, target, dur, inout, motion) : target; }
     bool Over(const D2D1_RECT_F& r) const { return mx >= r.left && mx < r.right && my >= r.top && my < r.bottom; }
@@ -390,14 +648,24 @@ public:
         return name;
     }
 
+    // Preenchimento com squircle (usa cache). Para raio < 6 usa arredondado nativo.
     void Fill(const D2D1_RECT_F& r, float radius, D2D1_COLOR_F c) {
         ID2D1SolidColorBrush* b = nullptr;
-        if (SUCCEEDED(rt->CreateSolidColorBrush(c, &b))) { rt->FillRoundedRectangle(D2D1::RoundedRect(r, radius, radius), b); b->Release(); }
+        if (SUCCEEDED(rt->CreateSolidColorBrush(c, &b))) {
+            ID2D1PathGeometry* g = Squircle(fac, r, radius, tk.smooth);
+            if (g) { rt->FillGeometry(g, b); }
+            b->Release();
+        }
     }
+    // Contorno com squircle (usa cache). Para raio < 6 usa arredondado nativo.
     void Stroke(const D2D1_RECT_F& r, float radius, D2D1_COLOR_F c, float w = 1) {
         ID2D1SolidColorBrush* b = nullptr;
         D2D1_RECT_F in = D2D1::RectF(r.left + w / 2, r.top + w / 2, r.right - w / 2, r.bottom - w / 2);
-        if (SUCCEEDED(rt->CreateSolidColorBrush(c, &b))) { rt->DrawRoundedRectangle(D2D1::RoundedRect(in, radius, radius), b, w); b->Release(); }
+        if (SUCCEEDED(rt->CreateSolidColorBrush(c, &b))) {
+            ID2D1PathGeometry* g = Squircle(fac, in, radius, tk.smooth);
+            if (g) { rt->DrawGeometry(g, b, w); }
+            b->Release();
+        }
     }
     // Cartão de vidro: preenchimento translúcido + borda de luz. No Crispy, o cartão V2 (ver Card).
     void Glass(const D2D1_RECT_F& r, float radius, bool hot = false, int key = 0) {
@@ -632,69 +900,128 @@ public:
         Stroke(r, rad, th.stroke);
         Icon(glyph, r, 13, Mix(th.text2, th.icon, k));
     }
-    // Interruptor estilo iOS. key anima a bolinha e a cor (~220 ms).
+    // Interruptor estilo iOS. key anima a bolinha e a cor (Spring physics: response=0.25, damping=1.0).
+    // Concentricidade: trilho usa r_control, knob usa InnerRadius(r_control, sp_1) = r_chip (8px).
+    // Design: trilho neutro + knob escuro; apenas uma ação com cor de destaque por tela.
     void Toggle(const D2D1_RECT_F& r, bool on, bool hot, int key = 0) {
         float h = r.bottom - r.top;
-        float pos = A(key ? key * 4 + 1 : 0, on ? 1.0f : 0.0f, 220, true, true);
-        float col = A(key ? key * 4 + 2 : 0, on ? 1.0f : 0.0f, 220, true);
-        if (th.neon) Neon(r, h / 2, col);
-        Fill(r, h / 2, th.track);
-        if (col > 0) { D2D1_COLOR_F c = th.accent; c.a *= col; Fill(r, h / 2, c); }
-        if (th.neon && col < 1) Stroke(r, h / 2, Rgba(0xFFFFFF, 0.10f * (1 - col)));
-        if (hot) Fill(r, h / 2, Rgba(0xFFFFFF, 0.10f));
-        float k = h - 4 * s, x = r.left + 2 * s + (r.right - r.left - 4 * s - k) * pos;
+        float trackRad = tk.r_control * s;
+        float knobRad = ui::InnerRadius(tk.r_control, tk.sp_1) * s; // r_chip = 8
+
+        // Spring para posição e cor (interrompível, fluido 60/144Hz)
+        float pos, col;
+        if (an && key) {
+            an->StepSprings(16.0f); // step com ~16ms (60fps)
+            pos = an->GetSpringPos(key * 4 + 1);
+            col = an->GetSpringCol(key * 4 + 2);
+            // Atualizar targets se mudaram
+            if (an->m[key * 4 + 1].sprPos.target != (on ? 1.0f : 0.0f)) {
+                an->m[key * 4 + 1].sprPos.SetTarget(on ? 1.0f : 0.0f);
+            }
+            if (an->m[key * 4 + 2].sprCol.target != (on ? 1.0f : 0.0f)) {
+                an->m[key * 4 + 2].sprCol.SetTarget(on ? 1.0f : 0.0f);
+            }
+            // Fallback para Anim se Spring não inicializado
+            if (pos == 0 && an->m[key * 4 + 1].sprPos.x == 0) pos = A(key * 4 + 1, on ? 1.0f : 0.0f, 220, true, true);
+            if (col == 0 && an->m[key * 4 + 2].sprCol.x == 0) col = A(key * 4 + 2, on ? 1.0f : 0.0f, 220, true);
+        } else {
+            pos = A(key ? key * 4 + 1 : 0, on ? 1.0f : 0.0f, 220, true, true);
+            col = A(key ? key * 4 + 2 : 0, on ? 1.0f : 0.0f, 220, true);
+        }
+
+        // Trilho neutro (sem cor de destaque no OFF)
+        Fill(r, trackRad, th.track);
+        if (hot) Fill(r, trackRad, Rgba(0xFFFFFF, 0.06f));
+
+        // Apenas no ON: preenchimento do trilho com accent (única ação de destaque por tela)
+        if (col > 0) { D2D1_COLOR_F c = th.accent; c.a *= col; Fill(r, trackRad, c); }
+        if (th.neon && col < 1) Stroke(r, trackRad, Rgba(0xFFFFFF, 0.10f * (1 - col)));
+
+        // Knob com raio concêntrico (r_chip)
+        float k = h - 4 * s;
+        float x = r.left + 2 * s + (r.right - r.left - 4 * s - k) * pos;
         D2D1_RECT_F kr = D2D1::RectF(x, r.top + 2 * s, x + k, r.top + 2 * s + k);
-        Fill(D2D1::RectF(kr.left, kr.top + 1 * s, kr.right, kr.bottom + 1 * s), k / 2, Rgba(0x000000, 0.18f));
-        Fill(kr, k / 2, Mix(th.knob, th.knobOn, col));
+        // Sombra sutil no knob
+        Fill(D2D1::RectF(kr.left, kr.top + 1 * s, kr.right, kr.bottom + 1 * s), knobRad, Rgba(0x000000, 0.15f));
+        // Knob escuro (neutro), sem accent - o accent fica só no trilho quando ON
+        Fill(kr, knobRad, th.knob);
     }
-    // Controle segmentado; quem chama guarda os retângulos de cada parte. key: o indicador desliza (~220 ms).
+    // Controle segmentado; quem chama guarda os retângulos de cada parte. key: o indicador desliza (Spring: response=0.25, damping=1.0).
+    // Concentricidade: trilho usa r_control, indicador usa InnerRadius(r_control, sp_1) = r_chip.
     void Segmented(const D2D1_RECT_F& r, const std::wstring* labels, int n, int sel, int hot, D2D1_RECT_F* parts, int key = 0) {
         float h = r.bottom - r.top;
-        Fill(r, h / 2, th.track);
-        if (th.neon) Stroke(r, h / 2, Rgba(0xFFFFFF, 0.06f));
+        float trackRad = tk.r_control * s;
+        float indRad = ui::InnerRadius(tk.r_control, tk.sp_1) * s; // r_chip = 8
+        Fill(r, trackRad, th.track);
+        if (th.neon) Stroke(r, trackRad, Rgba(0xFFFFFF, 0.06f));
         float w = (r.right - r.left - 4 * s) / n;
         for (int i = 0; i < n; ++i) parts[i] = D2D1::RectF(r.left + 2 * s + i * w, r.top + 2 * s, r.left + 2 * s + (i + 1) * w, r.bottom - 2 * s);
-        for (int i = 0; i < n; ++i) if (i == hot && i != sel) Fill(parts[i], (h - 4 * s) / 2, Rgba(th.dark ? 0xFFFFFF : 0x000000, 0.06f));
+        for (int i = 0; i < n; ++i) if (i == hot && i != sel) Fill(parts[i], indRad, Rgba(th.dark ? 0xFFFFFF : 0x000000, 0.06f));
         if (sel >= 0 && sel < n) {
-            float x = A(key ? key * 4 + 1 : 0, (float)sel, 220, true, true);
+            float x;
+            if (an && key) {
+                an->StepSprings(16.0f);
+                x = an->GetSpringPos(key * 4 + 1);
+                if (x == 0 && an->m[key * 4 + 1].sprPos.x == 0) x = A(key * 4 + 1, (float)sel, 220, true, true);
+                if (an->m[key * 4 + 1].sprPos.target != (float)sel) {
+                    an->m[key * 4 + 1].sprPos.SetTarget((float)sel);
+                }
+            } else {
+                x = A(key ? key * 4 + 1 : 0, (float)sel, 220, true, true);
+            }
             D2D1_RECT_F ind = D2D1::RectF(r.left + 2 * s + x * w, r.top + 2 * s, r.left + 2 * s + (x + 1) * w, r.bottom - 2 * s);
-            float rad = (h - 4 * s) / 2;
-            if (th.neon) Neon(ind, rad, 0.7f);
-            Fill(ind, rad, th.neon ? Rgba(0x1A1410) : th.segFill);
-            if (th.neon) Fill(ind, rad, th.segFill);
-            if (th.neon || !th.classic) Stroke(ind, rad, th.neon ? th.accent : th.stroke);
+            if (th.neon) Neon(ind, indRad, 0.7f);
+            Fill(ind, indRad, th.neon ? Rgba(0x1A1410) : th.segFill);
+            if (th.neon) Fill(ind, indRad, th.segFill);
+            if (th.neon || !th.classic) Stroke(ind, indRad, th.neon ? th.accent : th.stroke);
         }
         for (int i = 0; i < n; ++i)
             Text(labels[i], parts[i], 12.5f, i == sel ? th.segText : th.text2, i == sel ? DWRITE_FONT_WEIGHT_SEMI_BOLD : DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER);
     }
     // [ − valor + ]; minus/plus recebem os retângulos clicáveis.
+    // Concentricidade: trilho usa r_control, botões usam InnerRadius(r_control, sp_1) = r_chip.
     void Stepper(const D2D1_RECT_F& r, const std::wstring& value, int hot, D2D1_RECT_F* minus, D2D1_RECT_F* plus) {
         float h = r.bottom - r.top;
-        Fill(r, h / 2, th.track);
+        float trackRad = tk.r_control * s;
+        float btnRad = ui::InnerRadius(tk.r_control, tk.sp_1) * s; // r_chip = 8
+        Fill(r, trackRad, th.track);
         *minus = D2D1::RectF(r.left + 2 * s, r.top + 2 * s, r.left + h - 2 * s, r.bottom - 2 * s);
         *plus = D2D1::RectF(r.right - h + 2 * s, r.top + 2 * s, r.right - 2 * s, r.bottom - 2 * s);
-        if (hot == 0) Fill(*minus, (h - 4 * s) / 2, th.panelHot);
-        if (hot == 1) Fill(*plus, (h - 4 * s) / 2, th.panelHot);
+        if (hot == 0) Fill(*minus, btnRad, th.panelHot);
+        if (hot == 1) Fill(*plus, btnRad, th.panelHot);
         Icon(L"", *minus, 11, th.text);
         Icon(L"", *plus, 11, th.text);
         Text(value, D2D1::RectF(r.left + h, r.top, r.right - h, r.bottom), 12.5f, th.text, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
     }
-    // Botão "pílula" com texto. key: o fundo acende (~200 ms) e afunda ao clicar.
+    // Botão "pílula" com texto. key: o fundo acende (Spring: response=0.25, damping=1.0) e afunda ao clicar.
+    // Concentricidade: raio = r_control.
     void Pill(const D2D1_RECT_F& r0, const std::wstring& label, bool hot, bool primary = false, int key = 0) {
         D2D1_RECT_F r = Press(r0, key, hot);
-        float h = r.bottom - r.top, k = A(key ? key * 4 + 1 : 0, hot ? 1.0f : 0.0f, 200);
-        if (primary) {
-            if (th.neon) Neon(r, h / 2, 0.8f + 0.2f * k);
-            Fill(r, h / 2, th.accent);
-            if (k > 0) Fill(r, h / 2, Rgba(0xFFFFFF, 0.14f * k));
-        } else if (th.neon) {
-            Fill(r, h / 2, Rgba(0xFFFFFF, 0.04f));
-            Neon(r, h / 2, k);
-            if (k > 0) Fill(r, h / 2, Rgba(NeonColor(), 0.16f * k));
-            Stroke(r, h / 2, Mix(Rgba(0xFFFFFF, 0.12f), th.accent, k));
+        float h = r.bottom - r.top;
+        float pillRad = tk.r_control * s;
+        float k;
+        if (an && key) {
+            an->StepSprings(16.0f);
+            k = an->GetSpringPos(key * 4 + 1);
+            if (k == 0 && an->m[key * 4 + 1].sprPos.x == 0) k = A(key * 4 + 1, hot ? 1.0f : 0.0f, 200);
+            if (an->m[key * 4 + 1].sprPos.target != (hot ? 1.0f : 0.0f)) {
+                an->m[key * 4 + 1].sprPos.SetTarget(hot ? 1.0f : 0.0f);
+            }
         } else {
-            if (k > 0) { D2D1_COLOR_F c = th.panelHot; c.a *= k; Fill(r, h / 2, c); }
-            Stroke(r, h / 2, th.stroke);
+            k = A(key ? key * 4 + 1 : 0, hot ? 1.0f : 0.0f, 200);
+        }
+        if (primary) {
+            if (th.neon) Neon(r, pillRad, 0.8f + 0.2f * k);
+            Fill(r, pillRad, th.accent);
+            if (k > 0) Fill(r, pillRad, Rgba(0xFFFFFF, 0.14f * k));
+        } else if (th.neon) {
+            Fill(r, pillRad, Rgba(0xFFFFFF, 0.04f));
+            Neon(r, pillRad, k);
+            if (k > 0) Fill(r, pillRad, Rgba(NeonColor(), 0.16f * k));
+            Stroke(r, pillRad, Mix(Rgba(0xFFFFFF, 0.12f), th.accent, k));
+        } else {
+            if (k > 0) { D2D1_COLOR_F c = th.panelHot; c.a *= k; Fill(r, pillRad, c); }
+            Stroke(r, pillRad, th.stroke);
         }
         Text(label, r, 12.5f, primary ? th.onAccent : th.neon ? Mix(th.text, th.accent, k) : th.text, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
     }

@@ -146,39 +146,41 @@ LRESULT CALLBACK ToastProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             float s = g_toast.s;
             ID2D1RenderTarget* rt = g_toast.surf.rt;
             D2D1_SIZE_F sz = rt->GetSize();
-            ui::Painter p(rt, g_dw, g_theme, s);
+            ui::Tokens tk = ui::MakeTokens(g_theme);
+            ui::g_tokens = tk;
+            ui::Painter p(rt, g_dw, g_theme, tk, s);
             if (g_theme.classic) {
                 rt->Clear(ui::Rgba(0x4A4F57));
-                float cy = g_toast.state == 0 ? 33 * s : sz.height / 2;
-                p.Fill(D2D1::RectF(18 * s, cy - 5 * s, 28 * s, cy + 5 * s), 5 * s, g_toast.state == 2 ? g_theme.danger : ui::Rgba(0xFF6633));
-                float x = 42 * s, ty = g_toast.state == 0 ? 13 * s : sz.height / 2 - 22 * s;
-                p.Text(g_toast.title, D2D1::RectF(x, ty, sz.width - 18 * s, ty + 22 * s), 15, ui::Rgba(0xFFFFFF), DWRITE_FONT_WEIGHT_SEMI_BOLD);
-                p.Text(g_toast.text, D2D1::RectF(x, ty + 23 * s, sz.width - 18 * s, ty + 42 * s), 13, ui::Rgba(0xCDD2DA));
+                float cy = g_toast.state == 0 ? tk.sp_6 * 2 * s : sz.height / 2;
+                p.Fill(D2D1::RectF(tk.sp_4 * s, cy - tk.sp_1 * s, (tk.sp_6 + tk.sp_1) * s, cy + tk.sp_1 * s), tk.r_chip * s, g_toast.state == 2 ? g_theme.danger : ui::Rgba(0xFF6633));
+                float x = tk.sp_6 * 2.5f * s, ty = g_toast.state == 0 ? tk.sp_3 * s : sz.height / 2 - tk.sp_6 * 2 * s;
+                p.Text(g_toast.title, D2D1::RectF(x, ty, sz.width - tk.sp_4 * s, ty + tk.sp_6 * 2 * s), tk.t_section.size * 1.36f, ui::Rgba(0xFFFFFF), DWRITE_FONT_WEIGHT_SEMI_BOLD);
+                p.Text(g_toast.text, D2D1::RectF(x, ty + tk.sp_6 * 2.875f * s, sz.width - tk.sp_4 * s, ty + tk.sp_6 * 5.25f * s), tk.t_body.size, ui::Rgba(0xCDD2DA));
                 if (g_toast.state == 0) {
-                    D2D1_RECT_F bar = D2D1::RectF(x, sz.height - 17 * s, sz.width - 18 * s, sz.height - 13 * s);
-                    p.Fill(bar, 2 * s, ui::Rgba(0x23272E));
+                    D2D1_RECT_F bar = D2D1::RectF(x, sz.height - tk.sp_6 * 2.125f * s, sz.width - tk.sp_4 * s, sz.height - tk.sp_3 * s * 1.625f);
+                    p.Fill(bar, tk.sp_1 * s * 0.5f, ui::Rgba(0x23272E));
                     float f = g_toast.total ? (float)g_toast.done / g_toast.total : 0.05f;
-                    bar.right = bar.left + max(4 * s, (bar.right - bar.left) * f);
-                    p.Fill(bar, 2 * s, ui::Rgba(0xFF6633));
+                    bar.right = bar.left + max(tk.sp_1 * s, (bar.right - bar.left) * f);
+                    p.Fill(bar, tk.sp_1 * s * 0.5f, ui::Rgba(0xFF6633));
                 }
                 g_toast.surf.End();
                 EndPaint(h, &ps);
                 return 0;
             }
             rt->Clear(g_theme.tint);
-            p.Stroke(D2D1::RectF(0, 0, sz.width, sz.height), 8 * s, g_theme.stroke);
-            D2D1_RECT_F ic = D2D1::RectF(16 * s, (sz.height - 40 * s) / 2, 56 * s, (sz.height + 40 * s) / 2);
-            p.Fill(ic, 20 * s, g_toast.state == 2 ? g_theme.danger : g_theme.accent);
-            p.Icon(g_toast.state == 0 ? L"" : g_toast.state == 1 ? L"" : L"", ic, 16, g_theme.onAccent);
-            float x = 70 * s;
-            p.Text(g_toast.title, D2D1::RectF(x, 14 * s, sz.width - 16 * s, 36 * s), 13.5f, g_theme.text, DWRITE_FONT_WEIGHT_SEMI_BOLD);
-            p.Text(g_toast.text, D2D1::RectF(x, 36 * s, sz.width - 16 * s, 56 * s), 12, g_theme.text2);
+            p.Stroke(D2D1::RectF(0, 0, sz.width, sz.height), tk.r_window * s * 0.5f, g_theme.stroke);
+            D2D1_RECT_F ic = D2D1::RectF(tk.sp_4 * s, (sz.height - tk.sp_8 * s * 1.25f) / 2, (tk.sp_8 + tk.sp_6) * s, (sz.height + tk.sp_8 * s * 1.25f) / 2);
+            p.Fill(ic, tk.r_card * s * 1.25f, g_toast.state == 2 ? g_theme.danger : g_theme.accent);
+            p.Icon(g_toast.state == 0 ? L"" : g_toast.state == 1 ? L"" : L"", ic, tk.t_caption.size * 1.33f, g_theme.onAccent);
+            float x = tk.sp_6 * 4.375f * s;
+            p.Text(g_toast.title, D2D1::RectF(x, tk.sp_3 * s * 1.75f, sz.width - tk.sp_4 * s, tk.sp_6 * 4.5f * s), tk.t_section.size * 1.22f, g_theme.text, DWRITE_FONT_WEIGHT_SEMI_BOLD);
+            p.Text(g_toast.text, D2D1::RectF(x, tk.sp_6 * 4.5f * s, sz.width - tk.sp_4 * s, tk.sp_6 * 7 * s), tk.t_caption.size, g_theme.text2);
             if (g_toast.state == 0) {
-                D2D1_RECT_F bar = D2D1::RectF(x, sz.height - 18 * s, sz.width - 18 * s, sz.height - 13 * s);
-                p.Fill(bar, 2.5f * s, g_theme.track);
+                D2D1_RECT_F bar = D2D1::RectF(x, sz.height - tk.sp_6 * 2.25f * s, sz.width - tk.sp_4 * s, sz.height - tk.sp_3 * s * 1.625f);
+                p.Fill(bar, tk.sp_1 * s * 0.625f, g_theme.track);
                 float f = g_toast.total ? (float)g_toast.done / g_toast.total : 0.05f;
-                bar.right = bar.left + max(5 * s, (bar.right - bar.left) * f);
-                p.Fill(bar, 2.5f * s, g_theme.accent);
+                bar.right = bar.left + max(tk.sp_1 * s * 1.25f, (bar.right - bar.left) * f);
+                p.Fill(bar, tk.sp_1 * s * 0.625f, g_theme.accent);
             }
             g_toast.surf.End();
         }
@@ -268,7 +270,7 @@ int CropGrab(POINT pt) {
     float ch = (r.bottom - r.top) * h;
     float rx = r.left * w, ry = r.top * h;
 
-    int gap = (int)(10 * s);
+    int gap = (int)(tk.sp_3 * s * 0.833f); // ~10px
     if (x >= rx - gap && x <= rx + cw + gap && y >= ry - gap && y <= ry + ch + gap) return 1; // mover
     if (abs(x - rx) <= gap && abs(y - ry) <= gap) return 2; // canto sup esq
     if (abs(x - (rx + cw)) <= gap && abs(y - ry) <= gap) return 3; // canto sup dir
@@ -283,10 +285,12 @@ void PaintCrop(HWND h) {
     ID2D1RenderTarget* rt = g_crop.surf.rt;
     float s = WndScale(h);
     D2D1_SIZE_F sz = rt->GetSize();
-    ui::Painter p(rt, g_dw, g_theme, s);
+    ui::Tokens tk = ui::MakeTokens(g_theme);
+    ui::g_tokens = tk;
+    ui::Painter p(rt, g_dw, g_theme, tk, s);
 
     rt->Clear(g_theme.tint);
-    p.Stroke(D2D1::RectF(0, 0, sz.width, sz.height), 8 * s, g_theme.stroke);
+    p.Stroke(D2D1::RectF(0, 0, sz.width, sz.height), tk.r_window * s * 0.5f, g_theme.stroke);
 
     // Draw image
     if (g_crop.bmp) {
@@ -298,7 +302,7 @@ void PaintCrop(HWND h) {
     float h = g_crop.imgRect.bottom - g_crop.imgRect.top;
     D2D1_RECT_F r = g_crop.rect;
     D2D1_RECT_F drawR = D2D1::RectF(r.left * w, r.top * h, r.right * w, r.bottom * h);
-    p.Stroke(drawR, 2 * s, g_theme.accent);
+    p.Stroke(drawR, tk.sp_1 * s * 0.5f, g_theme.accent);
 
     g_crop.surf.End();
 }
@@ -463,8 +467,10 @@ void PaintSettings(HWND h) {
     ID2D1RenderTarget* rt = g_set.surf.rt;
     float s = WndScale(h);
     D2D1_SIZE_F sz = rt->GetSize();
-    ui::Painter p(rt, g_dw, g_theme, s);
-    // ... paint settings UI
+    ui::Tokens tk = ui::MakeTokens(g_theme);
+    ui::g_tokens = tk;
+    ui::Painter p(rt, g_dw, g_theme, tk, s);
+    // ... paint settings UI using tokens (tk.r_window, tk.r_card, tk.r_control, tk.r_chip, tk.sp_1-8, tk.t_title.size, etc.)
     g_set.surf.End();
 }
 

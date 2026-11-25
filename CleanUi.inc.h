@@ -293,10 +293,10 @@ static ClColors ClPalette(const ui::Theme& th) {
 static void ClCheckbox(ui::Painter& p, const ClColors& c, D2D1_RECT_F r, int state, float s) { // 0 vazio, 1 marcado, 2 parcial
     if (state) {
         if (p.th.neon) p.Glow(r, 5 * s);
-        p.Fill(r, 5 * s, c.accent);
+        p.Fill(r, p.tk.r_control, c.accent);
         if (state == 1) p.Feather(kIcoCheck, r, 13 * s, c.onAccent, 3);
         else { float cx = (r.left + r.right) / 2, cy = (r.top + r.bottom) / 2; p.Fill(D2D1::RectF(cx - 4.5f * s, cy - 1.25f * s, cx + 4.5f * s, cy + 1.25f * s), 1 * s, c.onAccent); }
-    } else p.Stroke(r, 5 * s, c.box, 1.5f * s);
+    } else p.Stroke(r, p.tk.r_control, c.box, 1.5f * s);
 }
 
 static void ClSpinner(ui::Painter& p, const ClColors& c, D2D1_RECT_F r, float s) {
@@ -322,7 +322,7 @@ static void ClSpinner(ui::Painter& p, const ClColors& c, D2D1_RECT_F r, float s)
 // Barra do disco: usado (sem o que vai sair) · a limpar · liberado agora · livre.
 static void ClDiskBar(ui::Painter& p, const ClColors& c, D2D1_RECT_F r, ULONGLONG total, ULONGLONG free, ULONGLONG toClean, ULONGLONG freed) {
     float h = r.bottom - r.top, w = r.right - r.left;
-    p.Fill(r, h / 2, c.track);
+    p.Fill(r, p.tk.r_chip, c.track);
     if (!total) return;
     ULONGLONG used = total > free ? total - free : 0;
     ULONGLONG rest = used > toClean ? used - toClean : 0;
@@ -333,14 +333,14 @@ static void ClDiskBar(ui::Painter& p, const ClColors& c, D2D1_RECT_F r, ULONGLON
         if (sw <= 0) return;
         if (x + sw > r.right) sw = r.right - x;
         p.rt->PushAxisAlignedClip(D2D1::RectF(x, r.top, x + sw, r.bottom), D2D1_ANTIALIAS_MODE_ALIASED);
-        p.Fill(r, h / 2, col);
+        p.Fill(r, p.tk.r_chip, col);
         p.rt->PopAxisAlignedClip();
         x += sw;
     };
     seg(rest, c.used, 0);
-    seg(toClean, c.accent, 4);
+    seg(toClean, c.accent, 4 * s);
     D2D1_COLOR_F tint = c.accent; tint.a = 0.30f;
-    seg(freed, tint, freed ? 4.0f : 0);
+    seg(freed, tint, freed ? 4.0f * s : 0);
 }
 
 static void ClLegend(ui::Painter& p, const ClColors& c, float x, float y, float maxX, float s, const std::vector<std::pair<D2D1_COLOR_F, std::wstring>>& items) {
@@ -348,8 +348,8 @@ static void ClLegend(ui::Painter& p, const ClColors& c, float x, float y, float 
         float tw = ClMeasure(p, it.second, 12) + 16 * s;
         if (x + tw > maxX) break;
         D2D1_RECT_F d = D2D1::RectF(x, y + 5 * s, x + 8 * s, y + 13 * s);
-        p.Fill(d, 4 * s, it.first);
-        if (it.first.a < 0.5f || (it.first.r == c.track.r && it.first.g == c.track.g)) p.Stroke(d, 4 * s, c.box, 1 * s);
+        p.Fill(d, p.tk.r_chip, it.first);
+        if (it.first.a < 0.5f || (it.first.r == c.track.r && it.first.g == c.track.g)) p.Stroke(d, p.tk.r_chip, c.box, 1 * s);
         ClText(p, it.second, D2D1::RectF(x + 13 * s, y, x + tw + 20 * s, y + 18 * s), 12, p.th.text2);
         x += tw + 12 * s;
     }
@@ -359,7 +359,7 @@ static void ClButton(ui::Painter& p, const ClColors& c, D2D1_RECT_F r0, const st
     int key = 0x5000 + (int)(r0.left / 4) * 977 + (int)(r0.top / 4); // pela posição: o fundo acende (~200 ms) e afunda ao clicar
     D2D1_RECT_F r = p.Press(r0, key, hot && enabled);
     float hk = p.A(key * 4 + 1, hot && enabled ? 1.0f : 0.0f, 200);
-    float rad = 10 * s;
+    float rad = p.tk.r_control;
     if (p.th.neon) { // Crispy: pílula; secundário acende em laranja com neon ao passar o mouse
         rad = (r.bottom - r.top) / 2;
         if (primary) { if (enabled) p.Neon(r, rad); D2D1_COLOR_F f = c.accent; if (!enabled) f.a = 0.35f; p.Fill(r, rad, f); if (hot && enabled) p.Fill(r, rad, ui::Rgba(0xFFFFFF, 0.14f)); }
@@ -402,10 +402,12 @@ static void PaintClean(HWND h) {
     ID2D1RenderTarget* rt = g_cl.surf.rt;
     D2D1_SIZE_F sz = rt->GetSize();
     const ui::Theme& th = g_theme;
+    ui::Tokens tk = ui::MakeTokens(th);
+    ui::g_tokens = tk;
     ClColors c = ClPalette(th);
     rt->Clear(th.tint);
     ui::Backdrop(rt, th, sz.width, sz.height);
-    ui::Painter p(rt, g_dw, th, s);
+    ui::Painter p(rt, g_dw, th, tk, s);
     static ui::Anim an; static HWND last; an.Frame(); p.an = &an;
     if (last != h) { last = h; an.m.clear(); an.Start(0x3000, 0, 1, 220); } // janela nova: fade + escala 0,98 -> 1
     p.mx = (float)g_clMouse.x; p.my = (float)g_clMouse.y; p.down = g_clDown;
@@ -419,20 +421,20 @@ static void PaintClean(HWND h) {
     auto hit = [&](int id, D2D1_RECT_F r) { g_cl.hits.push_back({id, r}); return g_cl.hot == id && !(g_cl.overlay && id < kClDlgCancel); };
     const wchar_t* HF = L"Space Grotesk";
     bool narrow = sz.width < 700 * s;
-    float pad = (narrow ? 16 : 24) * s;
+    float pad = (narrow ? p.tk.sp_4 : p.tk.sp_6) * s;
 
     // barra de título
-    ClText(p, T(L"Limpeza", L"Cleanup", L"Limpieza"), D2D1::RectF(pad, 0, sz.width / 2, 52 * s), 17, th.text, DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_LEADING, HF);
+    ClText(p, T(L"Limpeza", L"Cleanup", L"Limpieza"), D2D1::RectF(pad, 0, sz.width / 2, p.tk.sp_6 * s * 3.25f), p.tk.t_title.size * s, th.text, DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_LEADING, HF);
     {
-        float bx = sz.width - 12 * s - 36 * s;
+        float bx = sz.width - p.tk.sp_3 * s - p.tk.sp_6 * s * 0.9f;
         struct B { int id; const char* ico; bool show; } bs[] = {{kClClose, kIcoX, true}, {kClMin, kIcoMin, true}, {kClSettings, kIcoGear, true},
                                                                  {kClRescan, kIcoRefresh, g_cl.phase == kClResult || g_cl.phase == kClReport}};
         for (auto& b : bs) {
             if (!b.show) continue;
-            D2D1_RECT_F r = D2D1::RectF(bx, 8 * s, bx + 36 * s, 44 * s);
-            if (hit(b.id, r)) p.Fill(r, 8 * s, c.hover);
-            p.Feather(b.ico, r, 16 * s, th.text2);
-            bx -= 40 * s;
+            D2D1_RECT_F r = D2D1::RectF(bx, p.tk.sp_2 * s, bx + p.tk.sp_6 * s * 0.9f, p.tk.sp_6 * s * 1.1f);
+            if (hit(b.id, r)) p.Fill(r, p.tk.r_control, c.hover);
+            p.Feather(b.ico, r, p.tk.r_control * s, th.text2);
+            bx -= p.tk.sp_6 * s * 1.0f;
         }
     }
 
@@ -484,36 +486,36 @@ static void PaintClean(HWND h) {
 
     float bandTop = 56 * s, bandH = narrow ? 172 * s : 108 * s;
     D2D1_RECT_F band = D2D1::RectF(pad, bandTop, sz.width - pad, bandTop + bandH);
-    if (th.neon) p.Card(band, 16 * s, 0x2001); else p.Fill(band, 12 * s, c.panel);
+    if (th.neon) p.Card(band, p.tk.r_card, 0x2001); else p.Fill(band, p.tk.r_card, c.panel);
     {
         float numW = 190 * s;
-        float bx = band.left + 24 * s, by = band.top + (narrow ? 18 : 20) * s;
-        ClText(p, kicker, D2D1::RectF(bx, by, band.right - 24 * s, by + 18 * s), 13, th.text2);
-        ClText(p, CleanSize((ULONGLONG)g_cl.shown), D2D1::RectF(bx, by + 22 * s, bx + 260 * s, by + 70 * s), 40, th.text, DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_LEADING, HF);
+        float bx = band.left + p.tk.sp_6 * s, by = band.top + (narrow ? p.tk.sp_4 * s * 1.125f : p.tk.sp_6 * s * 1.25f);
+        ClText(p, kicker, D2D1::RectF(bx, by, band.right - p.tk.sp_6 * s, by + p.tk.sp_4 * s * 1.125f), p.tk.t_caption.size * s, th.text2);
+        ClText(p, CleanSize((ULONGLONG)g_cl.shown), D2D1::RectF(bx, by + p.tk.sp_6 * s * 1.375f, bx + 260 * s, by + p.tk.t_title.size * s * 3.5f), p.tk.t_title.size * s, th.text, DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_LEADING, HF);
         // ação
-        float aw = 0, ah = 44 * s;
-        float pw = primary.empty() ? 0 : ClMeasure(p, primary, 14, DWRITE_FONT_WEIGHT_SEMI_BOLD) + 44 * s;
-        float sw2 = secondary.empty() ? 0 : ClMeasure(p, secondary, 14, DWRITE_FONT_WEIGHT_SEMI_BOLD) + 36 * s;
-        aw = pw + sw2 + (pw && sw2 ? 10 * s : 0);
-        float subW = ClMeasure(p, sub, 12);
+        float aw = 0, ah = p.tk.sp_6 * s * 1.1f;
+        float pw = primary.empty() ? 0 : ClMeasure(p, primary, p.tk.t_body.size * s, DWRITE_FONT_WEIGHT_SEMI_BOLD) + p.tk.sp_6 * s * 1.1f;
+        float sw2 = secondary.empty() ? 0 : ClMeasure(p, secondary, p.tk.t_body.size * s, DWRITE_FONT_WEIGHT_SEMI_BOLD) + p.tk.sp_6 * s * 0.9f;
+        aw = pw + sw2 + (pw && sw2 ? p.tk.sp_2 * s : 0);
+        float subW = ClMeasure(p, sub, p.tk.t_caption.size);
         float colW = max(aw, subW);
-        float ax = band.right - 24 * s - colW + (colW - aw) / 2, ay = narrow ? by + 14 * s : band.top + 18 * s;
-        if (!secondary.empty()) { D2D1_RECT_F r = D2D1::RectF(ax, ay, ax + sw2, ay + ah); ClButton(p, c, r, secondary, false, hit(kClSecondary, r), s); ax += sw2 + 10 * s; }
+        float ax = band.right - p.tk.sp_6 * s - colW + (colW - aw) / 2, ay = narrow ? by + p.tk.sp_3 * s * 0.875f : band.top + p.tk.sp_4 * s * 1.125f;
+        if (!secondary.empty()) { D2D1_RECT_F r = D2D1::RectF(ax, ay, ax + sw2, ay + ah); ClButton(p, c, r, secondary, false, hit(kClSecondary, r), s); ax += sw2 + p.tk.sp_2 * s; }
         if (!primary.empty()) { bool en = g_cl.phase != kClResult || sel > 0; D2D1_RECT_F r = D2D1::RectF(ax, ay, ax + pw, ay + ah); bool hv = hit(en ? kClPrimary : 0, r); ClButton(p, c, r, primary, true, hv, s, en); }
-        ClText(p, sub, D2D1::RectF(band.right - 24 * s - colW, ay + ah + 4 * s, band.right - 24 * s, ay + ah + 22 * s), 12, th.text2, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER);
+        ClText(p, sub, D2D1::RectF(band.right - p.tk.sp_6 * s - colW, ay + ah + p.tk.sp_1 * s, band.right - p.tk.sp_6 * s, ay + ah + p.tk.sp_6 * s * 1.375f), p.tk.t_caption.size * s, th.text2, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER);
         // disco
-        float dx0 = narrow ? bx : bx + numW, dx1 = narrow ? band.right - 24 * s : band.right - 24 * s - colW - 28 * s;
-        float dy = narrow ? by + 92 * s : band.top + 22 * s;
-        ClText(p, diskTitle, D2D1::RectF(dx0, dy, dx1, dy + 18 * s), 13, th.text, DWRITE_FONT_WEIGHT_MEDIUM);
+        float dx0 = narrow ? bx : bx + numW, dx1 = narrow ? band.right - p.tk.sp_6 * s : band.right - p.tk.sp_6 * s - colW - 28 * s;
+        float dy = narrow ? by + p.tk.sp_6 * s * 5.75f : band.top + p.tk.sp_6 * s * 1.375f;
+        ClText(p, diskTitle, D2D1::RectF(dx0, dy, dx1, dy + p.tk.sp_4 * s * 1.125f), p.tk.t_caption.size * s, th.text, DWRITE_FONT_WEIGHT_MEDIUM);
         { // a largura das barras anima (~300 ms) quando o valor muda
         float kc = an.Get(1, (float)barClean, 300, true, true), kf = an.Get(2, (float)barFreed, 300, true, true);
-        ClDiskBar(p, c, D2D1::RectF(dx0, dy + 26 * s, dx1, dy + 36 * s), dk.total, dk.free, (ULONGLONG)kc, (ULONGLONG)kf);
+        ClDiskBar(p, c, D2D1::RectF(dx0, dy + p.tk.sp_6 * s * 1.625f, dx1, dy + p.tk.sp_6 * s * 2.25f), dk.total, dk.free, (ULONGLONG)kc, (ULONGLONG)kf);
     }
-        ClLegend(p, c, dx0, dy + 44 * s, dx1, s, legend);
+        ClLegend(p, c, dx0, dy + p.tk.sp_6 * s * 2.75f, dx1, s, legend);
     }
 
     // ---- cabeçalho da lista ----
-    float ly = band.bottom + 18 * s;
+    float ly = band.bottom + p.tk.sp_4 * s * 1.125f;
     std::wstring head;
     int groupsWith = 0; for (auto& g : g_cl.res.groups) if (!g.items.empty()) ++groupsWith;
     if (g_cl.phase == kClScan) {
@@ -529,19 +531,19 @@ static void PaintClean(HWND h) {
     else { swprintf(buf, 256, T(L"RELATÓRIO · %ls ARQUIVOS SAÍRAM", L"REPORT · %ls FILES REMOVED", L"INFORME · %ls ARCHIVOS ELIMINADOS"), CleanCount([] { size_t n = 0; for (auto& o : g_cl.out) n += o.second.filesRemoved; return n; }()).c_str()); head = buf; }
     for (auto& ch : head) ch = (wchar_t)towupper(ch);
     { // letras espaçadas, alinhado à esquerda (TextSpaced centraliza no retângulo: ele tem a largura exata do texto)
-        float hw = ClMeasure(p, head, 11.5f, DWRITE_FONT_WEIGHT_SEMI_BOLD) + head.size() * 11.5f * 0.1f * s + 4 * s, maxW = sz.width - 2 * pad - (g_cl.phase == kClResult ? 160 * s : 0);
+        float hw = ClMeasure(p, head, p.tk.t_section.size * s, DWRITE_FONT_WEIGHT_SEMI_BOLD) + head.size() * p.tk.t_section.size * s * 0.1f + p.tk.sp_1 * s, maxW = sz.width - 2 * pad - (g_cl.phase == kClResult ? p.tk.sp_6 * s * 6.66f : 0);
         if (hw > maxW) hw = maxW;
-        p.TextSpaced(head, D2D1::RectF(pad, ly, pad + hw, ly + 32 * s), 11.5f, th.text2, DWRITE_FONT_WEIGHT_SEMI_BOLD, 0.1f);
+        p.TextSpaced(head, D2D1::RectF(pad, ly, pad + hw, ly + p.tk.t_section.size * s * 2.9f), p.tk.t_section.size * s, th.text2, DWRITE_FONT_WEIGHT_SEMI_BOLD, 0.1f);
     }
     if (g_cl.phase == kClResult && groupsWith) {
-        D2D1_RECT_F sr = D2D1::RectF(sz.width - pad - 148 * s, ly, sz.width - pad, ly + 32 * s), parts[2];
+        D2D1_RECT_F sr = D2D1::RectF(sz.width - pad - p.tk.sp_6 * s * 6.16f, ly, sz.width - pad, ly + p.tk.t_section.size * s * 2.9f), parts[2];
         std::wstring l[2] = {T(L"Lista", L"List", L"Lista"), T(L"Mapa", L"Map", L"Mapa")};
         int hv = g_cl.hot == kClList ? 0 : g_cl.hot == kClMap ? 1 : -1;
         p.Segmented(sr, l, 2, g_cl.map ? 1 : 0, hv, parts);
         hit(kClList, parts[0]); hit(kClMap, parts[1]);
     }
     bool footer = g_cl.phase == kClResult && !g_cl.map && g_cl.res.total;
-    float top = ly + 40 * s, bottom = sz.height - (footer ? 54 : 8) * s;
+    float top = ly + p.tk.sp_6 * s * 1.66f, bottom = sz.height - (footer ? p.tk.sp_6 * s * 1.35f : p.tk.sp_2 * s);
     g_cl.listTop = top; g_cl.listBottom = bottom;
     D2D1_RECT_F view = D2D1::RectF(pad, top, sz.width - pad, bottom);
 
@@ -556,34 +558,34 @@ static void PaintClean(HWND h) {
         }
         std::sort(items.begin(), items.end(), [](const std::pair<ULONGLONG, int>& a, const std::pair<ULONGLONG, int>& b) { return a.first > b.first; });
         std::vector<std::pair<int, D2D1_RECT_F>> rects;
-        D2D1_RECT_F area = D2D1::RectF(view.left, view.top, view.right, view.bottom - 26 * s);
+        D2D1_RECT_F area = D2D1::RectF(view.left, view.top, view.right, view.bottom - p.tk.sp_6 * s * 1.083f);
         ClTreemap(items, 0, items.size(), area, rects);
         for (auto& rc : rects) {
-            D2D1_RECT_F r = D2D1::RectF(rc.second.left + 3 * s, rc.second.top + 3 * s, rc.second.right - 3 * s, rc.second.bottom - 3 * s);
-            if (r.right - r.left < 4 * s || r.bottom - r.top < 4 * s) continue;
+            D2D1_RECT_F r = D2D1::RectF(rc.second.left + p.tk.sp_1 * s, rc.second.top + p.tk.sp_1 * s, rc.second.right - p.tk.sp_1 * s, rc.second.bottom - p.tk.sp_1 * s);
+            if (r.right - r.left < p.tk.sp_1 * s || r.bottom - r.top < p.tk.sp_1 * s) continue;
             auto& gi = g_cl.cells[rc.first];
             auto& g = g_cl.res.groups[gi.first]; auto& it = g.items[gi.second];
             int on, all; ClCount(g, gi.second, on, all);
             bool hv = hit(kClCell0 + rc.first, r);
             D2D1_COLOR_F fill = on ? c.accent : c.panel;
             if (on && on < all) fill.a = 0.55f;
-            if (on && th.neon) p.Glow(r, 8 * s);
-            p.Fill(r, 8 * s, fill);
-            if (!on) p.Stroke(r, 8 * s, c.line, 1 * s);
-            if (hv) p.Fill(r, 8 * s, ui::Rgba(th.dark || on ? 0xFFFFFF : 0x000000, 0.12f));
+            if (on && th.neon) p.Glow(r, p.tk.sp_2 * s);
+            p.Fill(r, p.tk.r_chip, fill);
+            if (!on) p.Stroke(r, p.tk.r_chip, c.line, 1 * s);
+            if (hv) p.Fill(r, p.tk.r_chip, ui::Rgba(th.dark || on ? 0xFFFFFF : 0x000000, 0.12f));
             D2D1_COLOR_F tc = on ? c.onAccent : th.text, t2 = on ? c.onAccent : th.text2;
-            if (r.bottom - r.top > 40 * s && r.right - r.left > 60 * s) {
-                ClText(p, CleanName(it.name), D2D1::RectF(r.left + 12 * s, r.top + 8 * s, r.right - 8 * s, r.top + 26 * s), 13, tc, DWRITE_FONT_WEIGHT_SEMI_BOLD);
+            if (r.bottom - r.top > p.tk.sp_6 * s * 1.666f && r.right - r.left > p.tk.sp_6 * s * 2.5f) {
+                ClText(p, CleanName(it.name), D2D1::RectF(r.left + p.tk.sp_3 * s, r.top + p.tk.sp_2 * s, r.right - p.tk.sp_2 * s, r.top + p.tk.sp_6 * s * 1.083f), p.tk.t_body.size * s, tc, DWRITE_FONT_WEIGHT_SEMI_BOLD);
                 std::wstring sz2 = CleanSize(it.bytes); if (it.risk == clean::kReview) sz2 += std::wstring(L" · ") + T(L"Revisar", L"Review", L"Revisar");
-                ClText(p, sz2, D2D1::RectF(r.left + 12 * s, r.top + 26 * s, r.right - 8 * s, r.top + 42 * s), 12, t2);
-                if (ClIsRunning(it) && r.bottom - r.top > 70 * s) {
-                    p.Feather(kIcoAlert, D2D1::RectF(r.left + 12 * s, r.bottom - 26 * s, r.left + 26 * s, r.bottom - 10 * s), 13 * s, tc);
-                    ClText(p, T(L"Aberto", L"Open", L"Abierto"), D2D1::RectF(r.left + 30 * s, r.bottom - 27 * s, r.right - 8 * s, r.bottom - 9 * s), 12, tc);
+                ClText(p, sz2, D2D1::RectF(r.left + p.tk.sp_3 * s, r.top + p.tk.sp_6 * s * 1.083f, r.right - p.tk.sp_2 * s, r.top + p.tk.sp_6 * s * 1.75f), p.tk.t_caption.size * s, t2);
+                if (ClIsRunning(it) && r.bottom - r.top > p.tk.sp_6 * s * 2.916f) {
+                    p.Feather(kIcoAlert, D2D1::RectF(r.left + p.tk.sp_3 * s, r.bottom - p.tk.sp_6 * s * 1.083f, r.left + p.tk.sp_6 * s * 1.083f, r.bottom - p.tk.sp_2 * s * 0.416f), p.tk.sp_3 * s * 0.541f, tc);
+                    ClText(p, T(L"Aberto", L"Open", L"Abierto"), D2D1::RectF(r.left + p.tk.sp_6 * s * 1.25f, r.bottom - p.tk.sp_6 * s * 1.125f, r.right - p.tk.sp_2 * s, r.bottom - p.tk.sp_2 * s * 0.375f), p.tk.t_caption.size * s, tc);
                 }
             }
         }
         ClText(p, T(L"Clique num bloco para marcar ou desmarcar.", L"Click a block to select or clear it.", L"Haz clic en un bloque para marcarlo o desmarcarlo."),
-               D2D1::RectF(view.left, view.bottom - 20 * s, view.right, view.bottom), 12, th.text2);
+               D2D1::RectF(view.left, view.bottom - p.tk.sp_4 * s * 0.833f, view.right, view.bottom), p.tk.t_caption.size * s, th.text2);
     } else {
         // ---- lista ----
         g_cl.rows.clear();
@@ -605,11 +607,11 @@ static void PaintClean(HWND h) {
             }
         }
         if (g_cl.phase == kClResult && g_cl.res.total == 0) {
-            ClText(p, T(L"Nada para limpar agora.", L"Nothing to clean right now.", L"Nada que limpiar ahora."), D2D1::RectF(view.left, view.top + 30 * s, view.right, view.top + 56 * s), 17, th.text, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER, HF);
-            ClText(p, T(L"O que é recente ou está em uso fica até poder sair.", L"Recent files and files in use stay until they can go.", L"Lo reciente o en uso se queda hasta poder salir."), D2D1::RectF(view.left, view.top + 60 * s, view.right, view.top + 80 * s), 13, th.text2, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER);
+            ClText(p, T(L"Nada para limpar agora.", L"Nothing to clean right now.", L"Nada que limpiar ahora."), D2D1::RectF(view.left, view.top + p.tk.sp_6 * s * 1.25f, view.right, view.top + p.tk.sp_6 * s * 2.333f), p.tk.t_title.size * s, th.text, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER, HF);
+            ClText(p, T(L"O que é recente ou está em uso fica até poder sair.", L"Recent files and files in use stay until they can go.", L"Lo reciente o en uso se queda hasta poder salir."), D2D1::RectF(view.left, view.top + p.tk.sp_6 * s * 2.5f, view.right, view.top + p.tk.sp_6 * s * 3.333f), p.tk.t_body.size * s, th.text2, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER);
         }
         float total = 0;
-        for (auto& r : g_cl.rows) total += (r.depth == 0 ? 48 : 42) * s;
+        for (auto& r : g_cl.rows) total += (r.depth == 0 ? p.tk.sp_6 * s * 1.2f : p.tk.sp_6 * s * 1.05f);
         g_cl.contentH = total;
         float maxScroll = max(0.0f, total - (view.bottom - view.top));
         g_cl.scroll = min(max(g_cl.scroll, 0.0f), maxScroll);
@@ -618,7 +620,7 @@ static void PaintClean(HWND h) {
         std::lock_guard<std::mutex> lk(g_cl.mu);
         for (size_t ri = 0; ri < g_cl.rows.size(); ++ri) {
             const CleanRow& row = g_cl.rows[ri];
-            float rh = (row.depth == 0 ? 48 : 42) * s;
+            float rh = (row.depth == 0 ? p.tk.sp_6 * s * 1.2f : p.tk.sp_6 * s * 1.05f);
             D2D1_RECT_F r = D2D1::RectF(view.left, y, view.right, y + rh);
             y += rh;
             if (r.bottom < view.top || r.top > view.bottom) continue;
@@ -627,10 +629,10 @@ static void PaintClean(HWND h) {
             bool interactive = g_cl.phase == kClResult || g_cl.phase == kClReport;
             bool rowHot = interactive && hit(id0 + 2, D2D1::RectF(r.left, max(r.top, view.top), r.right, min(r.bottom, view.bottom)));
             bool runningItem = row.depth >= 1 && ClIsRunning(gr.items[row.i]);
-            if (row.depth == 1 && runningItem && g_cl.phase == kClResult) p.Fill(r, 8 * s, c.panel);
-            else if (rowHot) p.Fill(r, 8 * s, c.hover);
+            if (row.depth == 1 && runningItem && g_cl.phase == kClResult) p.Fill(r, p.tk.r_chip, c.panel);
+            else if (rowHot) p.Fill(r, p.tk.r_chip, c.hover);
             if (ri + 1 < g_cl.rows.size()) p.Fill(D2D1::RectF(r.left, r.bottom - 1 * s, r.right, r.bottom), 0, c.line);
-            float x = r.left + 16 * s + row.depth * 28 * s, cy = (r.top + r.bottom) / 2;
+            float x = r.left + p.tk.sp_4 * s + row.depth * 28 * s, cy = (r.top + r.bottom) / 2;
             // seta
             bool expandable = row.depth == 0 ? !gr.items.empty() && !ClGroupLeafOnly(gr) : row.depth == 1 && gr.items[row.i].leaves.size() > 1;
             bool opened = row.depth == 0 ? g_cl.openG.count(row.g) > 0 : g_cl.openI.count(row.g * 1000 + row.i) > 0;
@@ -663,14 +665,14 @@ static void PaintClean(HWND h) {
                 bool cur = !gr.done && (row.g == 0 || g_cl.res.groups[row.g - 1].done);
                 if (gr.done) ClCheckbox(p, c, bx, on == all && all ? 1 : on ? 2 : 0, s);
                 else if (cur) ClSpinner(p, c, bx, s);
-                else p.Fill(bx, 5 * s, c.track);
+                else p.Fill(bx, p.tk.r_chip, c.track);
                 dim = !gr.done;
                 size = gr.done ? (gr.items.empty() ? T(L"nada", L"nothing", L"nada") : CleanSize(gr.bytes)) : L"—";
                 if (cur) note = T(L"Procurando…", L"Searching…", L"Buscando…");
             } else if (g_cl.phase == kClCleaning) {
                 if (allDone && anyOut) p.Feather(anySkip ? kIcoSkip : kIcoCheck, bx, 16 * s, anySkip ? c.warn : th.text, anySkip ? 2.0f : 2.5f);
                 else if (g_cl.cleaningG == row.g && (row.depth == 0 || anyOut || true)) ClSpinner(p, c, bx, s);
-                else p.Stroke(bx, 9 * s, c.line, 1.5f * s);
+                else p.Stroke(bx, p.tk.r_control * s * 0.9f, c.line, 1.5f * s);
                 if (allDone && anyOut) { size = CleanSize(rem); note = anySkip ? T(L"Pulado · programa aberto", L"Skipped · app open", L"Omitido · programa abierto") : T(L"Limpo", L"Clean", L"Limpio"); }
             } else if (report) {
                 if (!on) { p.Feather(kIcoSkip, bx, 16 * s, th.text2); dim = true; note = T(L"Não marcado", L"Not selected", L"No marcado"); }
@@ -682,46 +684,46 @@ static void PaintClean(HWND h) {
                     else if (kep >= (1u << 20)) { note = CleanSize(kep) + T(L" em uso ficaram", L" in use stayed", L" en uso se quedaron"); }
                 }
             } else {
-                bool boxHot = hit(id0 + 1, D2D1::RectF(bx.left - 6 * s, bx.top - 6 * s, bx.right + 6 * s, bx.bottom + 6 * s));
-                if (boxHot) p.Fill(D2D1::RectF(bx.left - 5 * s, bx.top - 5 * s, bx.right + 5 * s, bx.bottom + 5 * s), 7 * s, c.hover);
+                bool boxHot = hit(id0 + 1, D2D1::RectF(bx.left - p.tk.sp_2 * s * 1.5f, bx.top - p.tk.sp_2 * s * 1.5f, bx.right + p.tk.sp_2 * s * 1.5f, bx.bottom + p.tk.sp_2 * s * 1.5f));
+                if (boxHot) p.Fill(D2D1::RectF(bx.left - p.tk.sp_1 * s * 1.25f, bx.top - p.tk.sp_1 * s * 1.25f, bx.right + p.tk.sp_1 * s * 1.25f, bx.bottom + p.tk.sp_1 * s * 1.25f), p.tk.r_chip, c.hover);
                 if (all) ClCheckbox(p, c, bx, on == all ? 1 : on ? 2 : 0, s);
                 else { p.Feather(kIcoInfo, bx, 16 * s, th.text2); if (row.depth) note = T(L"Só informa", L"Info only", L"Solo informa"); }
                 if (runningItem && row.depth == 1) { note = T(L"Aberto · feche para limpar tudo", L"Open · close it to clean everything", L"Abierto · ciérralo para limpiar todo"); noteColor = c.warn; noteIcon = kIcoAlert; }
                 if (row.depth == 2 && clean::TargetOf(gr.items[row.i].leaves[row.l]).risk == clean::kReview && !ClPermanent()) note = T(L"Vai para a Lixeira", L"Goes to the Recycle Bin", L"Va a la Papelera");
             }
-            x += 30 * s;
-            float sizeW = 84 * s, right = r.right - 16 * s;
-            ClText(p, size, D2D1::RectF(right - sizeW, r.top, right, r.bottom), row.depth == 0 ? 15 : 14, row.depth == 0 && !dim ? th.text : th.text2, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_TRAILING);
-            right -= sizeW + 12 * s;
+            x += p.tk.sp_6 * s * 0.75f;
+            float sizeW = 84 * s, right = r.right - p.tk.sp_4 * s;
+            ClText(p, size, D2D1::RectF(right - sizeW, r.top, right, r.bottom), row.depth == 0 ? p.tk.t_section.size : p.tk.t_body.size, row.depth == 0 && !dim ? th.text : th.text2, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_TRAILING);
+            right -= sizeW + p.tk.sp_3 * s;
             // selo Seguro / Revisar (grupo, na análise)
             if (row.depth == 0 && (g_cl.phase == kClResult || (g_cl.phase == kClScan && gr.done && !gr.items.empty()))) {
                 int risk = ClGroupRisk(gr);
                 bool rev = risk == clean::kReview;
                 std::wstring bl = rev ? T(L"Revisar", L"Review", L"Revisar") : risk == clean::kInform ? T(L"Só informa", L"Info only", L"Solo informa") : T(L"Seguro", L"Safe", L"Seguro");
-                float bw = ClMeasure(p, bl, 12) + (rev ? 30 : 18) * s;
-                D2D1_RECT_F br = D2D1::RectF(right - bw, cy - 11 * s, right, cy + 11 * s);
-                p.Stroke(br, 11 * s, rev ? c.accent : c.line, 1 * s);
+                float bw = ClMeasure(p, bl, p.tk.t_caption.size) + (rev ? p.tk.sp_6 * s * 0.75f : p.tk.sp_4 * s * 1.125f);
+                D2D1_RECT_F br = D2D1::RectF(right - bw, cy - p.tk.sp_3 * s * 0.91f, right, cy + p.tk.sp_3 * s * 0.91f);
+                p.Stroke(br, p.tk.r_chip * s * 0.68f, rev ? c.accent : c.line, 1 * s);
                 float tx = br.left + 9 * s;
-                if (rev) { p.Fill(D2D1::RectF(tx, cy - 3 * s, tx + 6 * s, cy + 3 * s), 3 * s, c.accent); tx += 12 * s; }
-                ClText(p, bl, D2D1::RectF(tx, br.top, br.right, br.bottom), 12, rev ? th.text : th.text2);
-                right = br.left - 12 * s;
+                if (rev) { p.Fill(D2D1::RectF(tx, cy - p.tk.sp_1 * s * 0.75f, tx + p.tk.sp_1 * s * 1.5f, cy + p.tk.sp_1 * s * 0.75f), p.tk.sp_1 * s * 0.75f, c.accent); tx += 12 * s; }
+                ClText(p, bl, D2D1::RectF(tx, br.top, br.right, br.bottom), p.tk.t_caption.size, rev ? th.text : th.text2);
+                right = br.left - p.tk.sp_3 * s;
             }
             if (!note.empty()) {
-                float nw = min(ClMeasure(p, note, 12.5f) + (noteIcon ? 20 * s : 0), max(0.0f, right - x - 120 * s));
-                if (nw > 40 * s) {
+                float nw = min(ClMeasure(p, note, p.tk.t_caption.size * 1.04f) + (noteIcon ? p.tk.sp_6 * s * 0.5f : 0), max(0.0f, right - x - p.tk.sp_6 * s * 5));
+                if (nw > p.tk.sp_6 * s * 1.0f) {
                     D2D1_RECT_F nr = D2D1::RectF(right - nw, r.top, right, r.bottom);
-                    if (noteIcon) p.Feather(noteIcon, D2D1::RectF(nr.left, cy - 7 * s, nr.left + 14 * s, cy + 7 * s), 14 * s, noteColor);
-                    ClText(p, note, D2D1::RectF(nr.left + (noteIcon ? 20 * s : 0), nr.top, nr.right, nr.bottom), 12.5f, noteColor);
-                    right = nr.left - 12 * s;
+                    if (noteIcon) p.Feather(noteIcon, D2D1::RectF(nr.left, cy - p.tk.sp_1 * s * 1.75f, nr.left + p.tk.sp_3 * s * 1.16f, cy + p.tk.sp_1 * s * 1.75f), p.tk.sp_3 * s * 1.16f, noteColor);
+                    ClText(p, note, D2D1::RectF(nr.left + (noteIcon ? p.tk.sp_6 * s * 0.5f : 0), nr.top, nr.right, nr.bottom), p.tk.t_caption.size * 1.04f, noteColor);
+                    right = nr.left - p.tk.sp_3 * s;
                 }
             }
-            ClText(p, name, D2D1::RectF(x, r.top, right, r.bottom), row.depth == 0 ? 15 : 14, dim ? th.text2 : th.text, row.depth == 0 ? DWRITE_FONT_WEIGHT_MEDIUM : DWRITE_FONT_WEIGHT_NORMAL);
+            ClText(p, name, D2D1::RectF(x, r.top, right, r.bottom), row.depth == 0 ? p.tk.t_section.size : p.tk.t_body.size, dim ? th.text2 : th.text, row.depth == 0 ? DWRITE_FONT_WEIGHT_MEDIUM : DWRITE_FONT_WEIGHT_NORMAL);
         }
         rt->PopAxisAlignedClip();
         if (maxScroll > 0) { // barra de rolagem fina
-            float vh = view.bottom - view.top, th2 = max(30 * s, vh * vh / total), ty = view.top + (vh - th2) * (g_cl.scroll / maxScroll);
-            if (th.neon) p.ScrollBar(D2D1::RectF(view.right + 6 * s, view.top, view.right + 10 * s, view.bottom), g_cl.scroll / maxScroll, vh / total);
-            else p.Fill(D2D1::RectF(view.right + 6 * s, ty, view.right + 10 * s, ty + th2), 2 * s, c.line);
+            float vh = view.bottom - view.top, th2 = max(p.tk.sp_6 * s * 0.75f, vh * vh / total), ty = view.top + (vh - th2) * (g_cl.scroll / maxScroll);
+            if (th.neon) p.ScrollBar(D2D1::RectF(view.right + p.tk.sp_1 * s * 1.5f, view.top, view.right + p.tk.sp_2 * s * 1.25f, view.bottom), g_cl.scroll / maxScroll, vh / total);
+            else p.Fill(D2D1::RectF(view.right + p.tk.sp_1 * s * 1.5f, ty, view.right + p.tk.sp_2 * s * 1.25f, ty + th2), p.tk.sp_1 * s * 0.5f, c.line);
         }
         if (footer) { // o que acontece ao limpar o item sob o mouse (consequência do targets.json)
             std::wstring tip;
@@ -738,7 +740,7 @@ static void PaintClean(HWND h) {
                 }
             }
             if (tip.empty()) tip = T(L"Passe o mouse num item para ver o que muda ao limpar.", L"Hover an item to see what changes when it's cleaned.", L"Pasa el ratón sobre un elemento para ver qué cambia al limpiarlo.");
-            p.Paragraph(tip, view.left + 4 * s, view.bottom + 12 * s, view.right - view.left - 8 * s, 12.5f, th.text2, true, 1.35f);
+            p.Paragraph(tip, view.left + p.tk.sp_1 * s, view.bottom + p.tk.sp_3 * s, view.right - view.left - p.tk.sp_2 * s, p.tk.t_caption.size * 1.04f, th.text2, true, 1.35f);
         }
     }
 
@@ -788,31 +790,31 @@ static void PaintClean(HWND h) {
             swprintf(buf, 256, T(L"Fechar e limpar", L"Close and clean", L"Cerrar y limpiar")); ok = buf;
         }
         float dw = min(480 * s, sz.width - 32 * s), ix = 24 * s;
-        float textH = p.Paragraph(text, 0, 0, dw - 2 * ix - 54 * s, 13.5f, th.text2, false);
-        float dh = 24 * s + max(40 * s, 30 * s + textH) + 16 * s + list.size() * 36 * s + 20 * s + 40 * s + 24 * s;
+        float textH = p.Paragraph(text, 0, 0, dw - 2 * ix - p.tk.sp_6 * s * 1.35f, p.tk.t_section.size * 1.125f, th.text2, false);
+        float dh = p.tk.sp_6 * s + max(p.tk.sp_6 * s * 1.0f, p.tk.sp_6 * s * 0.75f + textH) + p.tk.sp_4 * s + list.size() * p.tk.sp_6 * s * 0.9f + p.tk.sp_6 * s * 0.5f + p.tk.sp_6 * s * 1.0f + p.tk.sp_6 * s;
         D2D1_RECT_F d = D2D1::RectF((sz.width - dw) / 2, (sz.height - dh) / 2, (sz.width + dw) / 2, (sz.height + dh) / 2);
-        p.Shadow(d, 14 * s);
+        p.Shadow(d, p.tk.r_card * s);
         D2D1_COLOR_F surf = th.classic ? ui::Rgba(0x353A42) : th.neon ? ui::Rgba(0x1A1A1E) : th.dark ? ui::Rgba(0x1F1F22) : ui::Rgba(0xFFFFFF);
-        p.Fill(d, 14 * s, surf);
-        p.Stroke(d, 14 * s, c.line, 1 * s);
-        float yy = d.top + 24 * s;
-        D2D1_RECT_F ib = D2D1::RectF(d.left + ix, yy, d.left + ix + 40 * s, yy + 40 * s);
+        p.Fill(d, p.tk.r_card * s, surf);
+        p.Stroke(d, p.tk.r_card * s, c.line, 1 * s);
+        float yy = d.top + p.tk.sp_6 * s;
+        D2D1_RECT_F ib = D2D1::RectF(d.left + ix, yy, d.left + ix + p.tk.sp_6 * s * 1.0f, yy + p.tk.sp_6 * s * 1.0f);
         D2D1_COLOR_F ibg = c.accent; ibg.a = th.dark && !th.classic && !th.neon && g_cfg.themeMode == ui::kThemeDark ? 0.14f : 0.18f;
-        p.Fill(ib, 10 * s, ibg);
-        p.Feather(icon, ib, 20 * s, th.dark && g_cfg.themeMode == ui::kThemeDark ? th.text : c.accent);
-        float tx = ib.right + 14 * s;
-        ClText(p, title, D2D1::RectF(tx, yy, d.right - ix, yy + 26 * s), 19, th.text, DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_LEADING, HF);
-        p.Paragraph(text, tx, yy + 30 * s, d.right - ix - tx, 13.5f, th.text2);
-        yy += max(40 * s, 30 * s + textH) + 16 * s;
+        p.Fill(ib, p.tk.r_control * s * 0.625f, ibg);
+        p.Feather(icon, ib, p.tk.sp_6 * s * 0.5f, th.dark && g_cfg.themeMode == ui::kThemeDark ? th.text : c.accent);
+        float tx = ib.right + p.tk.sp_3 * s * 1.166f;
+        ClText(p, title, D2D1::RectF(tx, yy, d.right - ix, yy + p.tk.sp_6 * s * 1.625f), p.tk.t_title.size * 0.95f, th.text, DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_LEADING, HF);
+        p.Paragraph(text, tx, yy + p.tk.sp_6 * s * 1.875f, d.right - ix - tx, p.tk.t_section.size * 1.125f, th.text2);
+        yy += max(p.tk.sp_6 * s * 1.0f, p.tk.sp_6 * s * 0.75f + textH) + p.tk.sp_4 * s;
         for (auto& li : list) {
-            ClText(p, li.first, D2D1::RectF(d.left + ix, yy, d.right - ix - 90 * s, yy + 36 * s), 14, th.text);
-            ClText(p, li.second, D2D1::RectF(d.right - ix - 90 * s, yy, d.right - ix, yy + 36 * s), 14, th.text2, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_TRAILING);
-            p.Fill(D2D1::RectF(d.left + ix, yy + 36 * s - 1 * s, d.right - ix, yy + 36 * s), 0, c.line);
-            yy += 36 * s;
+            ClText(p, li.first, D2D1::RectF(d.left + ix, yy, d.right - ix - p.tk.sp_6 * s * 2.25f, yy + p.tk.sp_6 * s * 0.9f), p.tk.t_body.size, th.text);
+            ClText(p, li.second, D2D1::RectF(d.right - ix - p.tk.sp_6 * s * 2.25f, yy, d.right - ix, yy + p.tk.sp_6 * s * 0.9f), p.tk.t_body.size, th.text2, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_TRAILING);
+            p.Fill(D2D1::RectF(d.left + ix, yy + p.tk.sp_6 * s * 0.9f - 1 * s, d.right - ix, yy + p.tk.sp_6 * s * 0.9f), 0, c.line);
+            yy += p.tk.sp_6 * s * 0.9f;
         }
-        yy += 20 * s;
-        float okW = ClMeasure(p, ok, 14, DWRITE_FONT_WEIGHT_SEMI_BOLD) + 40 * s, caW = ClMeasure(p, cancel, 14, DWRITE_FONT_WEIGHT_SEMI_BOLD) + 36 * s;
-        D2D1_RECT_F okR = D2D1::RectF(d.right - ix - okW, yy, d.right - ix, yy + 40 * s), caR = D2D1::RectF(okR.left - 10 * s - caW, yy, okR.left - 10 * s, yy + 40 * s);
+        yy += p.tk.sp_6 * s * 0.5f;
+        float okW = ClMeasure(p, ok, p.tk.t_body.size, DWRITE_FONT_WEIGHT_SEMI_BOLD) + p.tk.sp_6 * s * 1.0f, caW = ClMeasure(p, cancel, p.tk.t_body.size, DWRITE_FONT_WEIGHT_SEMI_BOLD) + p.tk.sp_6 * s * 0.9f;
+        D2D1_RECT_F okR = D2D1::RectF(d.right - ix - okW, yy, d.right - ix, yy + p.tk.sp_6 * s * 1.0f), caR = D2D1::RectF(okR.left - p.tk.sp_2 * s * 1.25f - caW, yy, okR.left - p.tk.sp_2 * s * 1.25f, yy + p.tk.sp_6 * s * 1.0f);
         g_cl.hits.push_back({kClDlgCancel, caR}); g_cl.hits.push_back({kClDlgOk, okR});
         ClButton(p, c, caR, cancel, false, g_cl.hot == kClDlgCancel, s);
         ClButton(p, c, okR, ok, true, g_cl.hot == kClDlgOk, s);

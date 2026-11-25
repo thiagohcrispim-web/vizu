@@ -65,10 +65,12 @@ struct Window {
         ui::Theme body = theme, head = theme;
         body.text = C(0xF2F2F2); body.text2 = C(0xCDD2DA); body.accent = C(0xFF6633); body.onAccent = C(0x0A0B0D); body.neon = true;
         body.font = L"Inter"; head = body; head.font = L"Space Grotesk";
-        ui::Painter p(rt, write, body, s), ph(rt, write, head, s);
+        ui::Tokens tk = ui::MakeTokens(body);
+        ui::g_tokens = tk;
+        ui::Painter p(rt, write, body, tk, s), ph(rt, write, head, tk, s);
         const D2D1_COLOR_F text = body.text, text2 = body.text2, dim = C(0xB5BAC2), accent = body.accent, line = C(0xFFFFFF, 0.12f);
         auto rect = [&](float x, float y, float right, float bottom) { return D2D1::RectF(x*s, y*s, right*s, bottom*s); };
-        float width = w / s, L = 48, R = width - 48;
+        float width = w / s, L = tk.sp_6 * 2 * s, R = width - tk.sp_6 * 2 * s;
         hits.clear();
         auto hit = [&](int id, D2D1_RECT_F r) { hits.push_back({id,r}); return hot == id; };
         // Brilho laranja do botão primário (box-shadow do protótipo): camadas que enfraquecem para fora.
@@ -80,36 +82,36 @@ struct Window {
         };
         auto primary = [&](D2D1_RECT_F r, const std::wstring& label, int id) {
             bool hov = hit(id, r);
-            halo(r, 12*s, 46*s, 0.32f, 6*s);
-            p.Stroke(r, 12*s, C(0xFF6633, 0.6f), 1*s);
-            p.Fill(r, 12*s, accent);
-            if (hov) p.Fill(r, 12*s, C(0xFFFFFF, 0.14f));
-            p.Text(label, r, 15, body.onAccent, DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
+            halo(r, tk.r_chip * s, tk.sp_6 * 2 * s, 0.32f, tk.sp_2 * s * 1.5f);
+            p.Stroke(r, tk.r_chip * s, C(0xFF6633, 0.6f), 1*s);
+            p.Fill(r, tk.r_chip * s, accent);
+            if (hov) p.Fill(r, tk.r_chip * s, C(0xFFFFFF, 0.14f));
+            p.Text(label, r, tk.t_caption.size * 1.25f, body.onAccent, DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
         };
         // Botão Cancelar do protótipo: contorno cinza de 2 px. Devolve a borda direita para alinhar o resto do rodapé.
         auto ghost = [&](float x, const wchar_t* label, int id) {
-            float w = p.Measure(label, 15, DWRITE_FONT_WEIGHT_NORMAL) / s + 52;
+            float w = p.Measure(label, tk.t_caption.size * 1.25f, DWRITE_FONT_WEIGHT_NORMAL) / s + tk.sp_6 * 3 * s;
             auto r = rect(x, 548, x + w, 596);
             bool hov = hit(id, r);
-            if (hov) p.Fill(r, 12*s, C(0xFFFFFF, 0.08f));
-            p.Stroke(r, 12*s, C(0x7A808A), 2*s);
-            p.Text(label, r, 15, hov ? text : text2, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER);
+            if (hov) p.Fill(r, tk.r_chip * s, C(0xFFFFFF, 0.08f));
+            p.Stroke(r, tk.r_chip * s, C(0x7A808A), 2*s);
+            p.Text(label, r, tk.t_caption.size * 1.25f, hov ? text : text2, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER);
             return x + w;
         };
         auto keycap = [&](D2D1_RECT_F r, const wchar_t* label) {
             // Tecla do protótipo: moldura externa de 1,5 px, moldura interna com lábio inferior de 9 px.
-            p.Stroke(r, 10*s, C(0xFF6633, 0.22f), 6*s);
-            p.Stroke(r, 10*s, accent, 1.5f*s);
+            p.Stroke(r, tk.r_control * s, C(0xFF6633, 0.22f), 6*s);
+            p.Stroke(r, tk.r_control * s, accent, 1.5f*s);
             D2D1_RECT_F in = D2D1::RectF(r.left + 4*s, r.top + 3*s, r.right - 4*s, r.bottom - 9*s);
-            p.Stroke(in, 7*s, accent, 1.5f*s);
-            ph.TextSpaced(label, in, 14, accent, DWRITE_FONT_WEIGHT_BOLD, 0.1f);
+            p.Stroke(in, ui::InnerRadius(tk.r_control, tk.sp_1) * s, accent, 1.5f*s);
+            ph.TextSpaced(label, in, tk.t_caption.size * 1.16f, accent, DWRITE_FONT_WEIGHT_BOLD, 0.1f);
         };
         bool done = page == 2;
         ui::Brand(rt, body, L*s, 44*s, 32*s); // logotipo 125 x 32, como no protótipo
-        p.Text(L"9.14.4", rect(R-120, 44, R, 76), 13, text2, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_TRAILING);
+        p.Text(L"19.5.0", rect(R-120, 44, R, 76), tk.t_caption.size, text2, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_TRAILING);
         if (page == 0) {
-            ph.Text(installed ? T(L"Atualize ou troque a versão:",L"Update or switch edition:",L"Actualiza o cambia la versión:") : T(L"Escolha uma versão:",L"Choose an edition:",L"Elige una versión:"), rect(L,102,R,138), 32, text, DWRITE_FONT_WEIGHT_BOLD);
-            p.Text(T(L"Para trocar depois, rode o instalador de novo.",L"To switch later, run the installer again.",L"Para cambiar después, ejecuta el instalador de nuevo."), rect(L,146,R,168), 15, text2);
+            ph.Text(installed ? T(L"Atualize ou troque a versão:",L"Update or switch edition:",L"Actualiza o cambia la versión:") : T(L"Escolha uma versão:",L"Choose an edition:",L"Elige una versión:"), rect(L,102,R,138), tk.t_title.size, text, DWRITE_FONT_WEIGHT_BOLD);
+            p.Text(T(L"Para trocar depois, rode o instalador de novo.",L"To switch later, run the installer again.",L"Para cambiar después, ejecuta el instalador de nuevo."), rect(L,146,R,168), tk.t_caption.size, text2);
             struct Ed { const wchar_t* name; const wchar_t* desc; const wchar_t* size; int bar; };
             Ed eds[3] = {
                 {L"Lite", T(L"Prévia com Espaço e miniaturas",L"Space preview and thumbnails",L"Vista con Espacio y miniaturas"), L"2 MB", 2},
@@ -121,19 +123,19 @@ struct Window {
                 float y = top + i*row;
                 auto box = rect(L, y, R, y + row);
                 bool sel = edition == i, hov = hit(10+i, box);
-                if (hov) p.Fill(rect(L-12, y+4, R+12, y+row-4), 10*s, C(0xFFFFFF, 0.04f));
+                if (hov) p.Fill(rect(L-tk.sp_3*s, y+tk.sp_1*s, R+tk.sp_3*s, y+row-tk.sp_1*s), ui::InnerRadius(tk.r_control, tk.sp_1)*s, C(0xFFFFFF, 0.04f));
                 p.Fill(rect(L, y, R, y+1), 0, line);
-                auto dot = rect(L+2, y+29, L+20, y+47);
+                auto dot = rect(L+tk.sp_1*s, y+29, L+(tk.sp_4 + tk.sp_1)*s, y+47);
                 if (sel) {
-                    p.Glow(dot, 9*s);
-                    p.Fill(dot, 9*s, accent);
-                    p.Fill(rect(L+6, y+33, L+16, y+43), 5*s, C(0x0A0B0D));
-                    p.Fill(rect(L+8, y+35, L+14, y+41), 3*s, accent);
-                } else p.Stroke(dot, 9*s, hov ? text : text2, 1.5f*s);
+                    p.Glow(dot, tk.r_chip*s);
+                    p.Fill(dot, tk.r_chip*s, accent);
+                    p.Fill(rect(L+tk.sp_2*s, y+33, L+tk.sp_4*s, y+43), ui::InnerRadius(tk.r_chip, tk.sp_1)*s, C(0x0A0B0D));
+                    p.Fill(rect(L+tk.sp_2*s*2, y+35, L+tk.sp_2*s*3.5, y+41), ui::InnerRadius(tk.r_chip, tk.sp_1)*s*0.6f, accent);
+                } else p.Stroke(dot, tk.r_chip*s, hov ? text : text2, 1.5f*s);
                 float right = R - 150;
-                p.Text(eds[i].name, rect(L+38, y+16, right-16, y+40), 17, text, DWRITE_FONT_WEIGHT_SEMI_BOLD);
-                p.Text(eds[i].desc, rect(L+38, y+40, right-16, y+60), 14, text2);
-                p.Text(eds[i].size, rect(right, y+24, R, y+42), 12, i == 2 ? text : text2);
+                p.Text(eds[i].name, rect(L+38, y+16, right-16, y+40), tk.t_section.size * 1.5f, text, DWRITE_FONT_WEIGHT_SEMI_BOLD);
+                p.Text(eds[i].desc, rect(L+38, y+40, right-16, y+60), tk.t_body.size, text2);
+                p.Text(eds[i].size, rect(right, y+24, R, y+42), tk.t_caption.size, i == 2 ? text : text2);
                 p.Fill(rect(right, y+44, R, y+48), 2*s, line);
                 float fill = eds[i].bar >= 100 ? 150 : 4;
                 if (eds[i].bar >= 100 && sel) p.Glow(rect(right, y+44, right+fill, y+48), 2*s);
@@ -142,38 +144,38 @@ struct Window {
             p.Fill(rect(L, top+3*row, R, top+3*row+1), 0, line);
             p.Text(edition==0?T(L"O Lite não tem menu circular, conversões, OCR nem relógio.",L"Lite has no radial menu, conversions, OCR or clock.",L"Lite no tiene menú circular, conversiones, OCR ni reloj."):
                    T(L"O Ultra baixa o motor vetorial uma única vez e confere a integridade antes de instalar.",L"Ultra downloads the vector engine once and checks its integrity before installing.",L"Ultra descarga el motor vectorial una sola vez y verifica su integridad antes de instalar."),
-                   rect(L, top+3*row+26, R, top+3*row+48), 13, text2);
+                   rect(L, top+3*row+26, R, top+3*row+48), tk.t_caption.size, text2);
             float cx = ghost(L, T(L"Cancelar",L"Cancel",L"Cancelar"), 3);
             if (installed) {
-                auto un = rect(cx + 12, 548, cx + 116, 596);
-                p.Text(T(L"Desinstalar",L"Uninstall",L"Desinstalar"), un, 15, hit(4, un) ? body.danger : text2, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER);
+                auto un = rect(cx + tk.sp_3*s, 548, cx + 116, 596);
+                p.Text(T(L"Desinstalar",L"Uninstall",L"Desinstalar"), un, tk.t_caption.size * 1.25f, hit(4, un) ? body.danger : text2, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER);
             }
             const wchar_t* go = installed ? T(L"Atualizar Vizu",L"Update Vizu",L"Actualizar Vizu") : T(L"Instalar Vizu",L"Install Vizu",L"Instalar Vizu");
-            float bw = p.Measure(go, 15, DWRITE_FONT_WEIGHT_BOLD) / s + 68;
+            float bw = p.Measure(go, tk.t_caption.size * 1.25f, DWRITE_FONT_WEIGHT_BOLD) / s + tk.sp_6 * 4 * s;
             primary(rect(R-bw, 548, R, 596), go, 2);
         } else if (page == 1) {
             int value; std::wstring phaseText; Download d;
             { std::lock_guard<std::mutex> lock(mutex); value = percent; phaseText = phase; d = dl; }
             bool ultra = edition == 2, downloading = d.total > 0;
             auto mb = [](unsigned long long bytes) { return std::to_wstring((bytes + 524288) / 1048576); };
-            ph.Text(downloading ? T(L"Baixando o motor vetorial",L"Downloading the vector engine",L"Descargando el motor vectorial") : T(L"Instalando o Vizu",L"Installing Vizu",L"Instalando Vizu"), rect(L,102,R,138), 32, text, DWRITE_FONT_WEIGHT_BOLD);
-            p.Text(downloading ? T(L"Acontece só na primeira vez. As atualizações reaproveitam o motor.",L"This only happens once. Updates reuse the engine.",L"Solo ocurre la primera vez. Las actualizaciones reutilizan el motor.") : T(L"Estamos preparando tudo para você.",L"We're getting everything ready for you.",L"Estamos preparando todo para ti."), rect(L,146,R,168), 15, text2);
+            ph.Text(downloading ? T(L"Baixando o motor vetorial",L"Downloading the vector engine",L"Descargando el motor vectorial") : T(L"Instalando o Vizu",L"Installing Vizu",L"Instalando Vizu"), rect(L,102,R,138), tk.t_title.size, text, DWRITE_FONT_WEIGHT_BOLD);
+            p.Text(downloading ? T(L"Acontece só na primeira vez. As atualizações reaproveitam o motor.",L"This only happens once. Updates reuse the engine.",L"Solo ocurre la primera vez. Las actualizaciones reutilizan el motor.") : T(L"Estamos preparando tudo para você.",L"We're getting everything ready for you.",L"Estamos preparando todo para ti."), rect(L,146,R,168), tk.t_caption.size, text2);
             auto card = rect(L, 208, R, 352);
-            p.Fill(card, 14*s, C(0xFFFFFF, 0.05f)); p.Stroke(card, 14*s, C(0xFFFFFF, 0.10f));
-            ph.Text(std::to_wstring(value) + L"%", rect(L+22, 226, R-22, 276), 40, text, DWRITE_FONT_WEIGHT_BOLD);
-            if (downloading) p.Text(mb(d.got) + T(L" MB de ", L" MB of ", L" MB de ") + mb(d.total) + L" MB", rect(L+22, 240, R-22, 270), 14, text2, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_TRAILING);
+            p.Fill(card, tk.r_card * s, C(0xFFFFFF, 0.05f)); p.Stroke(card, tk.r_card * s, C(0xFFFFFF, 0.10f));
+            ph.Text(std::to_wstring(value) + L"%", rect(L+22, 226, R-22, 276), tk.t_title.size * 1.5f, text, DWRITE_FONT_WEIGHT_BOLD);
+            if (downloading) p.Text(mb(d.got) + T(L" MB de ", L" MB of ", L" MB de ") + mb(d.total) + L" MB", rect(L+22, 240, R-22, 270), tk.t_body.size, text2, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_TRAILING);
             auto bar = rect(L+22, 290, R-22, 300);
-            p.Fill(bar, 5*s, C(0xFFFFFF, 0.10f));
-            if (value > 0) { auto f = rect(L+22, 290, L+22+(R-L-44)*value/100.0f, 300); p.Glow(f, 5*s); p.Fill(f, 5*s, accent); }
+            p.Fill(bar, tk.sp_2 * s * 0.6f, C(0xFFFFFF, 0.10f));
+            if (value > 0) { auto f = rect(L+22, 290, L+22+(R-L-44)*value/100.0f, 300); p.Glow(f, tk.sp_2 * s * 0.6f); p.Fill(f, tk.sp_2 * s * 0.6f, accent); }
             if (downloading) {
                 unsigned long long tenths = (unsigned long long)(d.bps / 104857.6 + 0.5); // MB/s com uma casa decimal
-                p.Text(std::to_wstring(tenths / 10) + T(L",", L".", L",") + std::to_wstring(tenths % 10) + L" MB/s", rect(L+22, 314, R-22, 334), 14, text2);
+                p.Text(std::to_wstring(tenths / 10) + T(L",", L".", L",") + std::to_wstring(tenths % 10) + L" MB/s", rect(L+22, 314, R-22, 334), tk.t_body.size, text2);
                 if (d.total > d.got && d.bps > 1) {
                     unsigned long long sec = (unsigned long long)((d.total - d.got) / d.bps);
                     std::wstring left = sec >= 90 ? std::to_wstring(sec / 60) + L" min" : std::to_wstring(sec) + L" s";
-                    p.Text(T(L"cerca de ", L"about ", L"unos ") + left + T(L" restantes", L" left", L" restantes"), rect(L+22, 314, R-22, 334), 14, text2, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_TRAILING);
+                    p.Text(T(L"cerca de ", L"about ", L"unos ") + left + T(L" restantes", L" left", L" restantes"), rect(L+22, 314, R-22, 334), tk.t_body.size, text2, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_TRAILING);
                 }
-            } else p.Text(phaseText, rect(L+22, 314, R-22, 334), 14, text2);
+            } else p.Text(phaseText, rect(L+22, 314, R-22, 334), tk.t_body.size, text2);
             const wchar_t* stepsU[4] = {T(L"Preparando a instalação",L"Preparing installation",L"Preparando la instalación"), T(L"Baixando o motor vetorial",L"Downloading the vector engine",L"Descargando el motor vectorial"), T(L"Conferindo a integridade",L"Checking integrity",L"Verificando la integridad"), T(L"Instalando arquivos e miniaturas",L"Installing files and thumbnails",L"Instalando archivos y miniaturas")};
             const wchar_t* stepsV[3] = {T(L"Preparando a instalação",L"Preparing installation",L"Preparando la instalación"), T(L"Instalando arquivos e miniaturas",L"Installing files and thumbnails",L"Instalando archivos y miniaturas"), T(L"Configurando atalhos",L"Setting up shortcuts",L"Configurando accesos")};
             int count = ultra ? 4 : 3;
@@ -182,20 +184,20 @@ struct Window {
                 float y = 378 + i*30;
                 auto ic = rect(L, y+4, L+16, y+20);
                 const wchar_t* label = ultra ? stepsU[i] : stepsV[i];
-                if (i < current) { p.Icon(L"", ic, 11, text2); p.Text(label, rect(L+28, y, R, y+24), 15, text2); }
-                else if (i == current) { p.Stroke(ic, 8*s, accent, 1.5f*s); p.Fill(rect(L+6.5f, y+10.5f, L+9.5f, y+13.5f), 1.5f*s, accent); p.Text(label, rect(L+28, y, R, y+24), 15, C(0xFF8A5C), DWRITE_FONT_WEIGHT_SEMI_BOLD); }
-                else { p.Stroke(ic, 8*s, dim, 1.5f*s); p.Text(label, rect(L+28, y, R, y+24), 15, dim); }
+                if (i < current) { p.Icon(L"", ic, tk.t_caption.size * 0.9f, text2); p.Text(label, rect(L+28, y, R, y+24), tk.t_body.size, text2); }
+                else if (i == current) { p.Stroke(ic, tk.r_control * s, accent, 1.5f*s); p.Fill(rect(L+6.5f, y+10.5f, L+9.5f, y+13.5f), ui::InnerRadius(tk.r_control, tk.sp_1)*s, accent); p.Text(label, rect(L+28, y, R, y+24), tk.t_body.size, C(0xFF8A5C), DWRITE_FONT_WEIGHT_SEMI_BOLD); }
+                else { p.Stroke(ic, tk.r_control * s, dim, 1.5f*s); p.Text(label, rect(L+28, y, R, y+24), tk.t_body.size, dim); }
             }
             float cx = ghost(L, T(L"Cancelar",L"Cancel",L"Cancelar"), 3);
-            if (ultra) p.Text(T(L"Se a conexão cair, o download continua de onde parou.",L"If the connection drops, the download resumes where it stopped.",L"Si se cae la conexión, la descarga continúa donde se detuvo."), rect(cx + 20, 552, R, 592), 13, text2, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_TRAILING);
+            if (ultra) p.Text(T(L"Se a conexão cair, o download continua de onde parou.",L"If the connection drops, the download resumes where it stopped.",L"Si se cae la conexión, la descarga continúa donde se detuvo."), rect(cx + (tk.sp_4 + tk.sp_1)*s, 552, R, 592), tk.t_caption.size, text2, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_TRAILING);
         } else {
             if (success) {
                 auto ring = rect(L, 121, L+64, 185);
-                p.Fill(rect(L-8, 113, L+72, 193), 40*s, C(0xFF6633, 0.14f));
-                p.Glow(ring, 32*s);
-                p.Fill(ring, 32*s, accent);
-                p.Feather("M20 6L9 17l-5-5", ring, 30*s, C(0x0A0B0D), 2.4f);
-                ph.Paragraph(T(L"Tudo pronto. Agora é\na sua vez de testar.",L"All set. Now it's\nyour turn to try it.",L"Todo listo. Ahora te toca\nprobarlo."), (L+84)*s, 116*s, (R-L-84)*s, 32, C(0xFFFFFF), true, 1.125f, DWRITE_FONT_WEIGHT_BOLD);
+                p.Fill(rect(L-tk.sp_2*s, 113, L+tk.sp_6*s*4.5, 193), tk.r_window * s * 2.5f, C(0xFF6633, 0.14f));
+                p.Glow(ring, tk.r_window * s * 2);
+                p.Fill(ring, tk.r_window * s * 2, accent);
+                p.Feather("M20 6L9 17l-5-5", ring, tk.r_window * s * 1.875f, C(0x0A0B0D), 2.4f);
+                ph.Paragraph(T(L"Tudo pronto. Agora é\na sua vez de testar.",L"All set. Now it's\nyour turn to try it.",L"Todo listo. Ahora te toca\nprobarlo."), (L+84)*s, 116*s, (R-L-84)*s, tk.t_title.size, C(0xFFFFFF), true, 1.125f, DWRITE_FONT_WEIGHT_BOLD);
                 struct Tip { const wchar_t* key; const wchar_t* lead; const wchar_t* title; const wchar_t* body; float cap; };
                 Tip tips[2] = {
                     {T(L"ESPAÇO",L"SPACE",L"ESPACIO"), nullptr, T(L"Espaço",L"Space",L"Espacio"), T(L"Escolha uma imagem ou PDF no Explorer e aperte **ESPAÇO** para abrir a prévia. **Aperte de novo para fechar.**",L"Pick an image or PDF in Explorer and press **SPACE** to open the preview. **Press it again to close.**",L"Elige una imagen o PDF en el Explorador y pulsa **ESPACIO** para abrir la vista. **Pulsa de nuevo para cerrar.**"), 180},
@@ -206,20 +208,20 @@ struct Window {
                     // Cartões do protótipo: 130 px (espaço) e 108 px (alt), com 16 px entre eles.
                     float y = i == 0 ? 230 : 376, h = i == 0 ? 130 : 108;
                     auto card = rect(L, y, R, y+h);
-                    p.Fill(card, 14*s, C(0xFFFFFF, 0.05f)); p.Stroke(card, 14*s, C(0xFFFFFF, 0.10f));
+                    p.Fill(card, tk.r_card * s, C(0xFFFFFF, 0.05f)); p.Stroke(card, tk.r_card * s, C(0xFFFFFF, 0.10f));
                     float keyY = y + (h - 48) / 2, kx = L+20;
-                    if (tips[i].lead) { float lw = p.Measure(tips[i].lead, 14) / s; p.Text(tips[i].lead, rect(kx, keyY, kx+lw+2, keyY+48), 14, accent); kx += lw + 12; }
+                    if (tips[i].lead) { float lw = p.Measure(tips[i].lead, tk.t_caption.size) / s; p.Text(tips[i].lead, rect(kx, keyY, kx+lw+2, keyY+48), tk.t_caption.size, accent); kx += lw + 12; }
                     keycap(rect(kx, keyY, kx+tips[i].cap, keyY+48), tips[i].key);
                     float tx = L+20+199+18;
-                    ph.Text(tips[i].title, rect(tx, y+20, R-20, y+44), 18, text, DWRITE_FONT_WEIGHT_BOLD);
-                    p.Paragraph(tips[i].body, tx*s, (y+46)*s, (R-20-tx)*s, 15, C(0xE3E6EB), true, 1.5f);
+                    ph.Text(tips[i].title, rect(tx, y+20, R-20, y+44), tk.t_section.size * 1.6f, text, DWRITE_FONT_WEIGHT_BOLD);
+                    p.Paragraph(tips[i].body, tx*s, (y+46)*s, (R-20-tx)*s, tk.t_body.size, C(0xE3E6EB), true, 1.5f);
                 }
             } else {
-                ph.Text(T(L"Não foi possível concluir.",L"Couldn't finish installation.",L"No se pudo completar."), rect(L,168,R,212), 32, text, DWRITE_FONT_WEIGHT_BOLD);
-                p.Paragraph(error.substr(0,500), L*s, 228*s, (R-L)*s, 15, text2);
+                ph.Text(T(L"Não foi possível concluir.",L"Couldn't finish installation.",L"No se pudo completar."), rect(L,168,R,212), tk.t_title.size, text, DWRITE_FONT_WEIGHT_BOLD);
+                p.Paragraph(error.substr(0,500), L*s, 228*s, (R-L)*s, tk.t_body.size, text2);
             }
             const wchar_t* go = success ? T(L"Começar >",L"Get started >",L"Comenzar >") : T(L"Fechar",L"Close",L"Cerrar");
-            float bw = p.Measure(go, 15, DWRITE_FONT_WEIGHT_BOLD) / s + 68;
+            float bw = p.Measure(go, tk.t_caption.size * 1.25f, DWRITE_FONT_WEIGHT_BOLD) / s + tk.sp_6 * 4 * s;
             primary(rect(R-bw, 528, R, 576), go, 2);
         }
         if(GetFocus()==hwnd) for(const auto& area:hits) if(area.first==focus)

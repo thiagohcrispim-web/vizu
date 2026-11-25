@@ -179,8 +179,10 @@ static void NotchRender() {
     const float sr = s * NotchSizeMul(); // o trilho muda de tamanho; o cartão fica no normal para o texto ser legível
     const int wkMode = NotchWeekMode();
     const bool showLeft = ReadDword(L"AiShowLeft", 0) != 0;
+    ui::Tokens tk = ui::MakeTokens(g_theme);
+    ui::g_tokens = tk;
     const float ch = (wkMode == 2 ? 86 : 74) * sr; // altura do conteúdo de um item (anel + número)
-    const float item = ch, thickFull = vert ? (wkMode == 2 ? 66 : 62) * sr : ch - 4 * sr, pad = 10 * sr, cardW = 262 * s, gap = 10 * s, M = 14 * s;
+    const float item = ch, thickFull = vert ? (wkMode == 2 ? 66 : 62) * sr : ch - tk.sp_1 * sr, pad = tk.sp_2 * sr * 1.25f, cardW = 262 * s, gap = tk.sp_2 * s, M = tk.r_card * s;
     const float strip = 6 * s;
     const bool collapsed = n.ex < 0.999f;
     if (collapsed) n.open = -1;
@@ -190,11 +192,11 @@ static void NotchRender() {
     float cardH = 0;
     if (n.open >= 0) {
         const AiProvider& a = ai[n.open];
-        cardH = 16 + 24;                                   // título
+        cardH = tk.sp_4 + tk.sp_6;                                   // título
         if (a.fetchedMs) cardH += (a.w5h.pct >= 0 ? 52 : 0) + (a.week.pct >= 0 ? 52 : 0);
         if (a.state != 1) cardH += 36;                     // aviso
         if (n.open == 0 && (a.state == 2 || a.state == 3)) cardH += 44; // botão do Claude Code
-        cardH += 10;
+        cardH += tk.sp_2 + tk.sp_1; // 10
         cardH *= s;
     }
     // janela: trilho + (cartão ao lado, para dentro da tela)
@@ -212,11 +214,11 @@ static void NotchRender() {
     rt->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
     ui::Theme th = g_theme; // o trilho é sempre escuro, como um notch
     th.dark = true;
-    ui::Painter p(rt, g_dw, th, s), pr(rt, g_dw, th, sr); // pr: trilho (com o tamanho escolhido); p: cartão
+    ui::Painter p(rt, g_dw, th, tk, s), pr(rt, g_dw, th, tk, sr); // pr: trilho (com o tamanho escolhido); p: cartão
     D2D1_COLOR_F bg = ui::Rgba(0x0E0E10, 0.97f), line = ui::Rgba(0xFFFFFF, 0.10f), text = ui::Rgba(0xFFFFFF, 0.96f), text2 = ui::Rgba(0xFFFFFF, 0.58f), track = ui::Rgba(0xFFFFFF, 0.12f);
     // trilho: grudado na borda (os cantos do lado da borda ficam fora da janela)
     D2D1_RECT_F rail;
-    float R = min(22 * sr, thick + 22 * sr * n.ex);
+    float R = min(tk.r_control * sr * 1.375f, thick + tk.r_control * sr * 1.375f * n.ex);
     if (n.edge == kEdgeRight) rail = D2D1::RectF(W - railW, (H - railH) / 2, W + R, (H + railH) / 2);
     else if (n.edge == kEdgeLeft) rail = D2D1::RectF(-R, (H - railH) / 2, railW, (H + railH) / 2);
     else if (n.edge == kEdgeTop) rail = D2D1::RectF((W - railW) / 2, -R, (W + railW) / 2, railH);
@@ -233,22 +235,22 @@ static void NotchRender() {
         const AiProvider& a = ai[i];
         bool ok = a.fetchedMs != 0 && a.w5h.pct >= 0;
         bool okW = a.fetchedMs != 0 && a.week.pct >= 0;
-        if (n.hot == i || n.open == i) p.Fill(D2D1::RectF(it.left + 5 * s, it.top + 3 * s, it.right - 5 * s, it.bottom - 3 * s), 12 * s, ui::Rgba(0xFFFFFF, 0.06f));
+        if (n.hot == i || n.open == i) p.Fill(D2D1::RectF(it.left + tk.sp_1 * s * 1.25f, it.top + tk.sp_1 * s * 0.75f, it.right - tk.sp_1 * s * 1.25f, it.bottom - tk.sp_1 * s * 0.75f), ui::InnerRadius(tk.r_card, tk.sp_2) * s, ui::Rgba(0xFFFFFF, 0.06f));
         float top = vert ? it.top : (it.top + it.bottom) / 2 - ch / 2;
         D2D1_POINT_2F c = D2D1::Point2F((it.left + it.right) / 2, top + (wkMode == 2 ? 32 : 27) * sr);
         float inner = wkMode == 1 ? 12 : 17; // anel semanal por dentro: o fundo e a logo diminuem
         p.Fill(D2D1::RectF(c.x - inner * sr, c.y - inner * sr, c.x + inner * sr, c.y + inner * sr), inner * sr, ui::Rgba(0xFFFFFF, 0.07f));
-        NotchRing(rt, c, 20 * sr, 3 * sr, ok ? a.w5h.pct : 0, track, ok ? NotchLevel(a.w5h.pct) : track);
+        NotchRing(rt, c, 20 * sr, tk.sp_1 * sr * 0.75f, ok ? a.w5h.pct : 0, track, ok ? NotchLevel(a.w5h.pct) : track);
         if (wkMode) {
             D2D1_COLOR_F wc = okW ? NotchLevel(a.week.pct) : track; wc.a *= 0.7f;
-            NotchRing(rt, c, (wkMode == 1 ? 15 : 25) * sr, 2 * sr, okW ? a.week.pct : 0, ui::Rgba(0xFFFFFF, 0.08f), wc);
+            NotchRing(rt, c, (wkMode == 1 ? 15 : 25) * sr, tk.sp_1 * sr * 0.5f, okW ? a.week.pct : 0, ui::Rgba(0xFFFFFF, 0.08f), wc);
         }
         // Claude na cor da marca; ChatGPT monocromático (branco). Sem leitura: cinza.
         NotchLogo(rt, i, c, (wkMode == 1 ? 13 : 18) * sr, !ok ? text2 : i == 0 ? ui::Rgba(0xD97757) : text);
         wchar_t b[32];
         if (ok) swprintf(b, 32, L"%.0f%%", showLeft ? max(0.0, 100 - a.w5h.pct) : a.w5h.pct); else wcscpy_s(b, a.state == 0 ? L"…" : L"—");
         float ty = c.y + (wkMode == 2 ? 29 : 24) * sr;
-        ClText(pr, b, D2D1::RectF(it.left, ty, it.right, ty + 18 * sr), 13, ok ? text : text2, DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
+        ClText(pr, b, D2D1::RectF(it.left, ty, it.right, ty + 18 * sr), tk.t_caption.size, ok ? text : text2, DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
     }
     n.rBtn = n.rCard = D2D1::RectF(0, 0, 0, 0);
     if (n.open >= 0) {
@@ -262,37 +264,37 @@ static void NotchRender() {
         cx = max(M * 0.5f, min(W - cardW - M * 0.5f, cx)); cy = max(M * 0.5f, min(H - cardH - M * 0.5f, cy));
         D2D1_RECT_F card = D2D1::RectF(cx, cy, cx + cardW, cy + cardH);
         n.rCard = card;
-        p.Fill(card, 14 * s, bg);
-        p.Stroke(card, 14 * s, line, 1 * s);
-        float x = card.left + 16 * s, xr = card.right - 16 * s, y = card.top + 16 * s;
-        NotchLogo(rt, n.open, D2D1::Point2F(x + 8 * s, y + 11 * s), 16 * s, n.open == 0 ? ui::Rgba(0xD97757) : text);
+        p.Fill(card, ui::InnerRadius(tk.r_card, tk.sp_2) * s, bg);
+        p.Stroke(card, ui::InnerRadius(tk.r_card, tk.sp_2) * s, line, 1 * s);
+        float x = card.left + tk.sp_4 * s, xr = card.right - tk.sp_4 * s, y = card.top + tk.sp_4 * s;
+        NotchLogo(rt, n.open, D2D1::Point2F(x + tk.sp_2 * s, y + tk.sp_2 * s * 1.375f), tk.sp_4 * s, n.open == 0 ? ui::Rgba(0xD97757) : text);
         ClText(p, n.open == 0 ? T(L"Uso do Claude", L"Claude usage", L"Uso de Claude") : T(L"Uso do ChatGPT", L"ChatGPT usage", L"Uso de ChatGPT"),
-               D2D1::RectF(x + 24 * s, y, xr, y + 22 * s), 15, text, DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_LEADING, L"Space Grotesk");
-        y += 30 * s;
+               D2D1::RectF(x + tk.sp_6 * s, y, xr, y + 22 * s), tk.t_title.size, text, DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_LEADING, L"Space Grotesk");
+        y += tk.sp_6 * s + tk.sp_2 * s; // 30
         if (a.fetchedMs) {
             struct Row { const wchar_t* n; const AiWindow* w; } rows[] = {
                 {n.open == 0 ? T(L"Sessão atual (5 h)", L"Current session (5h)", L"Sesión actual (5 h)") : T(L"Limite de 5 h", L"5-hour limit", L"Límite de 5 h"), &a.w5h},
                 {T(L"Semanal", L"Weekly", L"Semanal"), &a.week}};
             for (auto& r : rows) {
                 if (r.w->pct < 0) continue;
-                ClText(p, r.n, D2D1::RectF(x, y, xr, y + 16 * s), 12.5f, text, DWRITE_FONT_WEIGHT_SEMI_BOLD);
-                ClText(p, AiResetText(r.w->resetMs), D2D1::RectF(x, y, xr, y + 16 * s), 11.5f, text2, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_TRAILING);
+                ClText(p, r.n, D2D1::RectF(x, y, xr, y + 16 * s), tk.t_section.size, text, DWRITE_FONT_WEIGHT_SEMI_BOLD);
+                ClText(p, AiResetText(r.w->resetMs), D2D1::RectF(x, y, xr, y + 16 * s), tk.t_caption.size, text2, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_TRAILING);
                 D2D1_RECT_F bar = D2D1::RectF(x, y + 22 * s, xr, y + 26 * s);
-                p.Fill(bar, 2 * s, track);
+                p.Fill(bar, tk.sp_1 * s * 0.5f, track);
                 float wv = (float)((bar.right - bar.left) * max(0.0, min(1.0, r.w->pct / 100)));
-                if (wv > 0) p.Fill(D2D1::RectF(bar.left, bar.top, bar.left + max(wv, 4 * s), bar.bottom), 2 * s, NotchLevel(r.w->pct));
+                if (wv > 0) p.Fill(D2D1::RectF(bar.left, bar.top, bar.left + max(wv, tk.sp_1 * s), bar.bottom), tk.sp_1 * s * 0.5f, NotchLevel(r.w->pct));
                 wchar_t b[96]; swprintf(b, 96, T(L"%.0f%% usado · %.0f%% restante", L"%.0f%% used · %.0f%% left", L"%.0f%% usado · %.0f%% restante"), r.w->pct, max(0.0, 100 - r.w->pct));
-                ClText(p, b, D2D1::RectF(x, y + 30 * s, xr, y + 46 * s), 11.5f, text2);
+                ClText(p, b, D2D1::RectF(x, y + 30 * s, xr, y + 46 * s), tk.t_caption.size, text2);
                 y += 52 * s;
             }
         }
-        if (a.state != 1) { ClText(p, AiStateText(a.state, n.open), D2D1::RectF(x, y + 4 * s, xr, y + 32 * s), 12, a.fetchedMs ? text2 : text); y += 36 * s; }
+        if (a.state != 1) { ClText(p, AiStateText(a.state, n.open), D2D1::RectF(x, y + tk.sp_1 * s, xr, y + 32 * s), tk.t_caption.size, a.fetchedMs ? text2 : text); y += 36 * s; }
         if (n.open == 0 && (a.state == 2 || a.state == 3)) {
             n.rBtn = D2D1::RectF(x, y, xr, y + 34 * s);
             bool inst = ClaudeExe().empty();
-            p.Fill(n.rBtn, 9 * s, n.btnHot ? ui::Rgba(0xFFFFFF, 0.92f) : ui::Rgba(0xFFFFFF, 0.85f));
+            p.Fill(n.rBtn, tk.r_chip * s, n.btnHot ? ui::Rgba(0xFFFFFF, 0.92f) : ui::Rgba(0xFFFFFF, 0.85f));
             ClText(p, inst ? T(L"Instalar o Claude Code e entrar", L"Install Claude Code and sign in", L"Instalar Claude Code e iniciar sesión") : T(L"Entrar no Claude Code", L"Sign in to Claude Code", L"Iniciar sesión en Claude Code"),
-                   n.rBtn, 12.5f, ui::Rgba(0x0E0E10), DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
+                   n.rBtn, tk.t_caption.size, ui::Rgba(0x0E0E10), DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
         }
     }
     HBITMAP bmp = nullptr;
@@ -332,18 +334,21 @@ static void NotchToastRender() {
     rt->Clear(D2D1::ColorF(0, 0));
     rt->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
     ui::Theme th = g_theme; th.dark = true;
-    ui::Painter p(rt, g_dw, th, s);
+    ui::Tokens tk = ui::MakeTokens(th);
+    ui::g_tokens = tk;
+    ui::Painter p(rt, g_dw, th, tk, s);
     D2D1_RECT_F card = D2D1::RectF(0.5f, 0.5f, Wt - 0.5f, Ht - 0.5f);
-    p.Fill(card, 14 * s, ui::Rgba(0x0E0E10, 0.97f));
-    p.Stroke(card, 14 * s, ui::Rgba(0xFFFFFF, 0.10f), 1 * s);
-    NotchLogo(rt, t.which, D2D1::Point2F(30 * s, Ht / 2.0f), 24 * s, t.which == 0 ? ui::Rgba(0xD97757) : ui::Rgba(0xFFFFFF));
+    float rad = ui::InnerRadius(tk.r_card, tk.sp_2) * s;
+    p.Fill(card, rad, ui::Rgba(0x0E0E10, 0.97f));
+    p.Stroke(card, rad, ui::Rgba(0xFFFFFF, 0.10f), tk.sp_1 * s * 0.25f);
+    NotchLogo(rt, t.which, D2D1::Point2F(tk.sp_6 * s + tk.sp_2 * s, Ht / 2.0f), 24 * s, t.which == 0 ? ui::Rgba(0xD97757) : ui::Rgba(0xFFFFFF));
     const wchar_t* title = t.which == 0
         ? (t.kind == 0 ? T(L"Limite de 5 h do Claude renovado", L"Claude 5-hour limit renewed", L"Límite de 5 h de Claude renovado")
                        : T(L"Limite semanal do Claude renovado", L"Claude weekly limit renewed", L"Límite semanal de Claude renovado"))
         : (t.kind == 0 ? T(L"Limite de 5 h do ChatGPT renovado", L"ChatGPT 5-hour limit renewed", L"Límite de 5 h de ChatGPT renovado")
                        : T(L"Limite semanal do ChatGPT renovado", L"ChatGPT weekly limit renewed", L"Límite semanal de ChatGPT renovado"));
-    ClText(p, title, D2D1::RectF(56 * s, 13 * s, Wt - 14 * s, 33 * s), 13, ui::Rgba(0xFFFFFF, 0.96f), DWRITE_FONT_WEIGHT_BOLD);
-    ClText(p, T(L"Você está com 100% de novo", L"You're back to 100%", L"Vuelves a tener el 100%"), D2D1::RectF(56 * s, 34 * s, Wt - 14 * s, 52 * s), 11.5f, ui::Rgba(0xFFFFFF, 0.58f));
+    ClText(p, title, D2D1::RectF(tk.sp_4 * s + tk.sp_2 * s * 1.5f, tk.sp_3 * s, Wt - tk.sp_3 * s, 33 * s), tk.t_body.size, ui::Rgba(0xFFFFFF, 0.96f), DWRITE_FONT_WEIGHT_BOLD);
+    ClText(p, T(L"Você está com 100% de novo", L"You're back to 100%", L"Vuelves a tener el 100%"), D2D1::RectF(tk.sp_4 * s + tk.sp_2 * s * 1.5f, tk.sp_8 * s + tk.sp_1 * s, Wt - tk.sp_3 * s, 52 * s), tk.t_caption.size, ui::Rgba(0xFFFFFF, 0.58f));
     HBITMAP bmp = nullptr;
     if (FAILED(cv.Finish(&bmp)) || !bmp) return;
     // perto do trilho, para dentro da tela
@@ -431,8 +436,9 @@ static void NotchUpdateVisible() {
     bool show = NotchShowMode() != 2 && !n.fullHidden;
     if (show != (IsWindowVisible(n.wnd) != 0)) {
         if (show) { NotchRender(); ShowWindow(n.wnd, SW_SHOWNOACTIVATE); SetWindowPos(n.wnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE); }
-        else { n.open = n.hot = -1; ShowWindow(n.wnd, SW_HIDE); }
+        else { n.open = n.hot = -1; DestroyWindow(n.wnd); n.wnd = nullptr; ui::TrimMemory(); }
     }
+    NotchSetTimer(n.wnd, show);
 }
 
 // Abre (1) ou recolhe (0) o trilho no modo "ao passar o cursor", com uma animação curta.
@@ -488,8 +494,7 @@ static LRESULT CALLBACK NotchProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             AiRefresh(h, false);
             NotchUpdateVisible();
             if (n.open >= 0 && n.leaveAt && GetTickCount64() > n.leaveAt) { n.open = n.hot = -1; n.leaveAt = 0; n.btnHot = false; NotchRender(); }
-            static int tick = 0;
-            if (++tick % 30 == 0) NotchRender(); // "volta em…" muda com o tempo
+            NotchRender(); // Update "volta em…" text on each 60s tick
         } else if (wp == 2) { // animação de abrir/recolher (~150 ms)
             float k = min(1.0f, (GetTickCount64() - n.exT0) / 150.0f);
             k = 1 - (1 - k) * (1 - k);
@@ -562,6 +567,19 @@ static LRESULT CALLBACK NotchProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     return DefWindowProcW(h, msg, wp, lp);
 }
 
+static void NotchSetTimer(HWND h, bool visible) {
+    if (!h) return;
+    if (visible) {
+        // AI usage refresh: every 60s (was 8s), plus animation timers as needed
+        SetTimer(h, 1, 60000, nullptr);
+    } else {
+        // Window hidden - no timers needed
+        KillTimer(h, 1);
+        KillTimer(h, 2);
+        KillTimer(h, 3);
+    }
+}
+
 static void NotchEnable(bool on) {
     Notch& n = g_nt;
     if (!on) { if (n.wnd) { KillTimer(n.wnd, 1); KillTimer(n.wnd, 2); KillTimer(n.wnd, 3); DestroyWindow(n.wnd); n.wnd = nullptr; } return; }
@@ -582,8 +600,9 @@ static void NotchEnable(bool on) {
     AiRefresh(n.wnd, false);
     NotchRender();
     n.fullHidden = ReadDword(L"AiHideFull", 1) && NotchFullscreen();
-    if (NotchShowMode() != 2 && !n.fullHidden) ShowWindow(n.wnd, SW_SHOWNOACTIVATE);
-    SetTimer(n.wnd, 1, 1000, nullptr);
+    bool visible = (NotchShowMode() != 2 && !n.fullHidden);
+    if (visible) ShowWindow(n.wnd, SW_SHOWNOACTIVATE);
+    NotchSetTimer(n.wnd, visible);
 }
 
 // Muda a borda pela Configuração (o arrastar faz o mesmo).

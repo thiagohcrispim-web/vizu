@@ -2,7 +2,7 @@
 # Requer CMake 3.20+, MinGW-w64 no Linux ou MSVC no Windows
 cmake_minimum_required(VERSION 3.20)
 project(Vizu
-    VERSION 9.14.5
+    VERSION 19.5.0
     LANGUAGES CXX C RC
     DESCRIPTION "Vizu - Quick Look para Windows Explorer"
 )
@@ -36,19 +36,20 @@ if(MSVC)
 else()  # MinGW
     add_compile_options(
         -Wall -Wextra -Wpedantic -Werror -Wno-unused-parameter
-        -std=c++20 -pipe -O2 -flto -fno-exceptions -fno-rtti
+        -Wunused-function -Wunused-variable -Wunused-but-set-variable
+        -std=c++20 -pipe -O2 -flto -march=x86-64-v2 -fno-exceptions -fno-rtti
         -DWIN32_LEAN_AND_MEAN -DNOMINMAX
         -DNTDDI_VERSION=0x0A000003
     )
-    add_link_options(-flto -Wl,--gc-sections -Wl,--strip-all -static-libgcc -static-libstdc++)
+    add_link_options(-flto -Wl,--gc-sections -Wl,--strip-all -Wl,-O1 -static-libgcc -static-libstdc++)
 endif()
 
 # Definições de versão
 add_compile_definitions(
-    VIZU_VERSION_MAJOR=9
-    VIZU_VERSION_MINOR=14
-    VIZU_VERSION_PATCH=5
-    VIZU_VERSION_STRING="9.14.5"
+    VIZU_VERSION_MAJOR=19
+    VIZU_VERSION_MINOR=5
+    VIZU_VERSION_PATCH=0
+    VIZU_VERSION_STRING="19.5.0"
     UNICODE
     _UNICODE
 )
@@ -116,6 +117,18 @@ set(VIZU_SOURCES
     Vizu.cpp
 )
 
+# Engines (VizuVector, VizuPeek, VizuIDML)
+set(ENGINE_SOURCES
+    engines/SvgWriter.h
+    engines/EpsWriter.h
+    engines/PdfWriter.h
+    engines/Peek.h
+    engines/Peek.cpp
+    engines/IdmlWriter.h
+    engines/VectorSink.h
+    engines/VectorSink.cpp
+)
+
 # Headers (para IDE)
 set(VIZU_HEADERS
     Config.h
@@ -145,16 +158,18 @@ set(VIZU_HEADERS
     ColorInfo.h
     Ui.h
     i18n.h
+    ${ENGINE_SOURCES}
 )
 
 # ============================================================================
 # Executável principal
 # ============================================================================
-add_executable(Vizu WIN32 ${VIZU_SOURCES} ${VIZU_HEADERS} Vizu.rc)
+add_executable(Vizu WIN32 ${VIZU_SOURCES} ${ENGINE_SOURCES} Vizu.rc)
 
 target_include_directories(Vizu PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_BINARY_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/engines
 )
 
 target_link_libraries(Vizu PRIVATE
@@ -187,9 +202,13 @@ set_target_properties(Vizu PROPERTIES
 # For now, we build only DesignThumbs.cpp which pulls in all format handling
 add_library(DesignThumbs SHARED
     DesignThumbs.cpp
+    ${ENGINE_SOURCES}
 )
 
-target_include_directories(DesignThumbs PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(DesignThumbs PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/engines
+)
 
 target_link_libraries(DesignThumbs PRIVATE
     ${D2D1} ${DWRITE} ${WINCODEC} ${DWMAPI}
