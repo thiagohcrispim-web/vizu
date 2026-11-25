@@ -89,18 +89,31 @@ inline std::string Where(void* addr) {
 inline void Send(const std::string& body) {
     if (!Consent() || !kReportHost[0]) return;
     std::thread([body] {
-        HINTERNET s = WinHttpOpen(L"Vizu-Report", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
-        if (!s) return;
-        WinHttpSetTimeouts(s, 5000, 5000, 8000, 8000);
-        HINTERNET c = WinHttpConnect(s, kReportHost, INTERNET_DEFAULT_HTTPS_PORT, 0);
-        HINTERNET r = c ? WinHttpOpenRequest(c, L"POST", kReportPath, nullptr, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE) : nullptr;
-        if (r) {
-            const wchar_t* h = L"Content-Type: application/json\r\n";
-            if (WinHttpSendRequest(r, h, (DWORD)-1, (void*)body.data(), (DWORD)body.size(), (DWORD)body.size(), 0)) WinHttpReceiveResponse(r, nullptr);
-            WinHttpCloseHandle(r);
+        // winhttp.dll carregada só aqui: a DLL da prévia e os testes incluem este arquivo sem ligar a biblioteca
+        HMODULE w = LoadLibraryExW(L"winhttp.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+        if (!w) return;
+        auto Open = (decltype(&WinHttpOpen))(void*)GetProcAddress(w, "WinHttpOpen");
+        auto Timeouts = (decltype(&WinHttpSetTimeouts))(void*)GetProcAddress(w, "WinHttpSetTimeouts");
+        auto Connect = (decltype(&WinHttpConnect))(void*)GetProcAddress(w, "WinHttpConnect");
+        auto OpenReq = (decltype(&WinHttpOpenRequest))(void*)GetProcAddress(w, "WinHttpOpenRequest");
+        auto SendReq = (decltype(&WinHttpSendRequest))(void*)GetProcAddress(w, "WinHttpSendRequest");
+        auto Receive = (decltype(&WinHttpReceiveResponse))(void*)GetProcAddress(w, "WinHttpReceiveResponse");
+        auto Close = (decltype(&WinHttpCloseHandle))(void*)GetProcAddress(w, "WinHttpCloseHandle");
+        if (!Open || !Timeouts || !Connect || !OpenReq || !SendReq || !Receive || !Close) { FreeLibrary(w); return; }
+        HINTERNET s = Open(L"Vizu-Report", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+        if (s) {
+            Timeouts(s, 5000, 5000, 8000, 8000);
+            HINTERNET c = Connect(s, kReportHost, INTERNET_DEFAULT_HTTPS_PORT, 0);
+            HINTERNET r = c ? OpenReq(c, L"POST", kReportPath, nullptr, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, WINHTTP_FLAG_SECURE) : nullptr;
+            if (r) {
+                const wchar_t* h = L"Content-Type: application/json\r\n";
+                if (SendReq(r, h, (DWORD)-1, (void*)body.data(), (DWORD)body.size(), (DWORD)body.size(), 0)) Receive(r, nullptr);
+                Close(r);
+            }
+            if (c) Close(c);
+            Close(s);
         }
-        if (c) WinHttpCloseHandle(c);
-        WinHttpCloseHandle(s);
+        FreeLibrary(w);
     }).detach();
 }
 
