@@ -401,7 +401,8 @@ inline Tokens MakeTokens(const Theme& th) {
 // Instância global de tokens para o tema atual (inicializada em cada janela)
 inline Tokens g_tokens;
 
-// Squircle com cache por (largura, altura, raio, smooth)
+// Squircle: cria a geometria na posição pedida; quem chama libera com Release().
+// (v19.5.1 guardava em cache só pelo tamanho: desenhava no lugar errado e vazava memória até a janela ficar preta)
 // Abaixo de 6px raio -> retângulo arredondado comum (mais rápido)
 struct SquircleCacheKey {
     int w, h, r;
@@ -436,9 +437,6 @@ inline ID2D1PathGeometry* Squircle(ID2D1Factory* f, D2D1_RECT_F r, float radius,
         }
         return g;
     }
-    SquircleCacheKey key{w, h, rr};
-    auto it = g_squircleCache.find(key);
-    if (it != g_squircleCache.end()) return it->second;
     ID2D1PathGeometry* g = nullptr;
     if (FAILED(f->CreatePathGeometry(&g))) return nullptr;
     ID2D1GeometrySink* k = nullptr;
@@ -482,8 +480,7 @@ inline ID2D1PathGeometry* Squircle(ID2D1Factory* f, D2D1_RECT_F r, float radius,
         D2D1::Point2F(cx - rx, r.top)));
     k->EndFigure(D2D1_FIGURE_END_CLOSED);
     k->Close(); k->Release();
-    g_squircleCache[key] = g;
-    return g;
+    return g; // quem chama libera (Release)
 }
 
 // Libera cache de squircles (chamar em WM_DESTROY da janela principal ou troca de DPI)
@@ -634,6 +631,9 @@ public:
     bool down = false;                // botão do mouse apertado (efeito de "afundar")
     Painter(ID2D1RenderTarget* r, IDWriteFactory* d, const Theme& t, const Tokens& tokens, float scale)
         : rt(r), dw(d), th(t), tk(tokens), s(scale) { rt->GetFactory(&fac); }
+    ~Painter() { if (fac) fac->Release(); }
+    Painter(const Painter&) = delete;
+    Painter& operator=(const Painter&) = delete;
     // Valor animado (sem Anim, vai direto ao alvo).
     float A(int key, float target, float dur = 220, bool inout = false, bool motion = false) { return an && key ? an->Get(key, target, dur, inout, motion) : target; }
     bool Over(const D2D1_RECT_F& r) const { return mx >= r.left && mx < r.right && my >= r.top && my < r.bottom; }
@@ -655,7 +655,7 @@ public:
         ID2D1SolidColorBrush* b = nullptr;
         if (SUCCEEDED(rt->CreateSolidColorBrush(c, &b))) {
             ID2D1PathGeometry* g = Squircle(fac, r, radius, tk.smooth);
-            if (g) { rt->FillGeometry(g, b); }
+            if (g) { rt->FillGeometry(g, b); g->Release(); }
             b->Release();
         }
     }
@@ -665,7 +665,7 @@ public:
         D2D1_RECT_F in = D2D1::RectF(r.left + w / 2, r.top + w / 2, r.right - w / 2, r.bottom - w / 2);
         if (SUCCEEDED(rt->CreateSolidColorBrush(c, &b))) {
             ID2D1PathGeometry* g = Squircle(fac, in, radius, tk.smooth);
-            if (g) { rt->DrawGeometry(g, b, w); }
+            if (g) { rt->DrawGeometry(g, b, w); g->Release(); }
             b->Release();
         }
     }

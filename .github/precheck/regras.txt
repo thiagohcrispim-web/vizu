@@ -51,3 +51,15 @@ proibido: #include "(Config|ConfigModern|ThemeManager|AltMenu|Dialogs)\.h"
 nivel: aviso
 motivo: o Vizu.cpp tem a própria struct Config e LoadConfig/SaveConfig. Config.h/ConfigModern.h são rascunhos fora do build: mudanças de configuração vão no Vizu.cpp
 origem: v19.5.0
+
+id: squircle-sem-cache-por-tamanho
+arquivos: Ui.h
+proibido: g_squircleCache\[
+motivo: o cache guardava a forma só pelo tamanho (desenhava no lugar errado) e as formas pequenas vazavam a cada desenho até a janela ficar preta. Crie a geometria e libere com Release()
+origem: v19.5.2
+
+id: painter-libera-fabrica
+arquivos: Ui.h
+exigido: ~Painter\(\) \{ if \(fac\) fac->Release\(\); \}
+motivo: o Painter pega a fábrica D2D com GetFactory e precisa devolver no destrutor
+origem: v19.5.2
