@@ -1,0 +1,33 @@
+# Arquivos que existem no repositório mas NÃO entram no Vizu.exe, na DLL nem nos testes.
+# Editar qualquer um deles não muda o programa. A configuração real fica no Vizu.cpp.
+# Para colocar um deles no build, inclua-o de verdade e tire daqui (o pré-teste avisa).
+
+# Rascunhos da v19.5 (arquitetura em vários .cpp que nunca foi ligada)
+AltMenu.cpp
+AltMenu.h
+AltMenuModern.h
+BackgroundLoader.cpp
+BackgroundLoader.h
+BackgroundLoaderOptimized.h
+CacheOptimized.h
+Config.cpp
+Config.h
+ConfigModern.h
+Dialogs.cpp
+Dialogs.h
+ExplorerIntegration.cpp
+ExplorerIntegration.h
+ModernCpp.h
+ThemeManager.cpp
+ThemeManager.h
+VizuMain.cpp
+Resource.h
+
+# Motores próprios em desenvolvimento: ainda não compilam (ver regra motores-nao-ligados)
+engines/EpsWriter.h
+engines/IdmlWriter.h
+engines/PdfWriter.h
+engines/Peek.cpp
+engines/Peek.h
+engines/SvgWriter.h
+engines/VectorSink.cpp

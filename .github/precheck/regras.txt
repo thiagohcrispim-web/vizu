@@ -1,0 +1,53 @@
+# Regras de bugs conhecidos do Vizu.
+# A cada bug corrigido, acrescente um bloco aqui para ele nunca mais voltar.
+#
+#   id: nome-curto
+#   arquivos: globs separados por espaço (relativos à raiz)
+#   proibido: regex que NÃO pode aparecer   (use (?s) para atravessar linhas)
+#   exigido: regex que PRECISA aparecer em pelo menos um dos arquivos
+#   nivel: erro | aviso
+#   motivo: o que deu errado e como corrigir
+#   origem: versão/commit onde o bug apareceu
+
+id: engines-dentro-de-cdrv
+arquivos: *.h *.cpp
+proibido: cdrv::engines::
+motivo: o namespace engines é global (engines::...). Não aninhe dentro de cdrv
+origem: v19.5.0
+
+id: namespace-engines-aninhado
+arquivos: CdrVector.h
+proibido: (?s)namespace cdrv \{(?:(?!\} // namespace cdrv).)*namespace engines \{
+motivo: feche "} // namespace cdrv" antes de abrir "namespace engines {"
+origem: v19.5.0
+
+id: motores-nao-ligados
+arquivos: Jobs.h Vizu.cpp *.inc.h
+proibido: VectorWriterFactory::(Create|Destroy)
+motivo: engines/VectorSink.cpp e os writers SVG/EPS/PDF/IDML ainda não compilam nem são ligados ao EXE. Use cdrv::Svg / cdrv::Pdf até os motores passarem nos testes
+origem: v19.5.0
+
+id: oldlink-atalhos-antigos
+arquivos: Vizu.cpp
+exigido: static std::wstring OldLink\(
+motivo: SetAutostart/SetStartMenu apagam os atalhos antigos do DesignPeek com OldLink; não remova
+origem: v19.5.0
+
+id: inkscape-ainda-usado
+arquivos: Jobs.h
+exigido: vec::Convert\(
+motivo: SVG -> EPS/PDF ainda depende do Inkscape (vec::Convert). Não remova sem motor substituto testado
+origem: v19.5.0
+
+id: instalador-no-dist
+arquivos: .gitignore
+proibido: ^/?dist/?\s*$
+motivo: o release.py lê o instalador em dist/; dist/ não pode ser ignorado
+origem: v19.5.1
+
+id: configmodern-nao-usado
+arquivos: Vizu.cpp
+proibido: #include "(Config|ConfigModern|ThemeManager|AltMenu|Dialogs)\.h"
+nivel: aviso
+motivo: o Vizu.cpp tem a própria struct Config e LoadConfig/SaveConfig. Config.h/ConfigModern.h são rascunhos fora do build: mudanças de configuração vão no Vizu.cpp
+origem: v19.5.0
