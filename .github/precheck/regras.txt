@@ -52,11 +52,11 @@ nivel: aviso
 motivo: o Vizu.cpp tem a própria struct Config e LoadConfig/SaveConfig. Config.h/ConfigModern.h são rascunhos fora do build: mudanças de configuração vão no Vizu.cpp
 origem: v19.5.0
 
-id: squircle-sem-cache-por-tamanho
+id: cantos-arredondados-nativos
 arquivos: Ui.h
-proibido: g_squircleCache\[
-motivo: o cache guardava a forma só pelo tamanho (desenhava no lugar errado) e as formas pequenas vazavam a cada desenho até a janela ficar preta. Crie a geometria e libere com Release()
-origem: v19.5.2
+proibido: = Squircle\(fac
+motivo: o "squircle" por Béziers da v19.5 saía com cantos chanfrados, guardava formas entre fábricas diferentes (Configurações pretas) e vazava memória. Fill/Stroke usam FillRoundedRectangle/DrawRoundedRectangle
+origem: v19.5.2 e v19.5.5
 
 id: painter-libera-fabrica
 arquivos: Ui.h
@@ -69,3 +69,15 @@ arquivos: Update.h
 proibido: kVersion = L"9\.14\.5"
 motivo: a versão interna ficou 9.14.5 na série 19.5 e o Vizu oferecia atualizar sem parar. O pré-teste também compara kVersion com o Vizu.rc
 origem: v19.5.0
+
+id: chuva-desenha-de-verdade
+arquivos: Rain.inc.h
+exigido: case WM_TIMER: if \(!ShouldPause\(\)\) DrawFrame\(\);
+motivo: na v19.5 o timer só pedia repintura e a pintura não desenhava nada; a chuva nunca aparecia
+origem: v19.5.5
+
+id: chuva-sem-janela-em-camadas
+arquivos: Rain.inc.h
+proibido: WS_EX_LAYERED
+motivo: o Direct2D (HwndRenderTarget) não desenha em janela WS_EX_LAYERED; a chuva desenha o papel de parede por baixo, opaca
+origem: v19.5.5

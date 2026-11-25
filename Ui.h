@@ -653,24 +653,16 @@ public:
         return name;
     }
 
-    // Preenchimento com squircle (usa cache). Para raio < 6 usa arredondado nativo.
+    // Retângulo arredondado nativo do Direct2D (como até a 9.14.5).
+    // v19.5 tentou um "squircle" por Béziers que saía com cantos chanfrados e quebrava o desenho.
     void Fill(const D2D1_RECT_F& r, float radius, D2D1_COLOR_F c) {
         ID2D1SolidColorBrush* b = nullptr;
-        if (SUCCEEDED(rt->CreateSolidColorBrush(c, &b))) {
-            ID2D1PathGeometry* g = Squircle(fac, r, radius, tk.smooth);
-            if (g) { rt->FillGeometry(g, b); g->Release(); }
-            b->Release();
-        }
+        if (SUCCEEDED(rt->CreateSolidColorBrush(c, &b))) { rt->FillRoundedRectangle(D2D1::RoundedRect(r, radius, radius), b); b->Release(); }
     }
-    // Contorno com squircle (usa cache). Para raio < 6 usa arredondado nativo.
     void Stroke(const D2D1_RECT_F& r, float radius, D2D1_COLOR_F c, float w = 1) {
         ID2D1SolidColorBrush* b = nullptr;
         D2D1_RECT_F in = D2D1::RectF(r.left + w / 2, r.top + w / 2, r.right - w / 2, r.bottom - w / 2);
-        if (SUCCEEDED(rt->CreateSolidColorBrush(c, &b))) {
-            ID2D1PathGeometry* g = Squircle(fac, in, radius, tk.smooth);
-            if (g) { rt->DrawGeometry(g, b, w); g->Release(); }
-            b->Release();
-        }
+        if (SUCCEEDED(rt->CreateSolidColorBrush(c, &b))) { rt->DrawRoundedRectangle(D2D1::RoundedRect(in, radius, radius), b, w); b->Release(); }
     }
     // Cartão de vidro: preenchimento translúcido + borda de luz. No Crispy, o cartão V2 (ver Card).
     void Glass(const D2D1_RECT_F& r, float radius, bool hot = false, int key = 0) {

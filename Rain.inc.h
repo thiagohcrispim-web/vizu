@@ -7,6 +7,8 @@
 #include <vector>
 #include <string>
 #include <random>
+#include <algorithm>
+#include <wincodec.h>
 #include "Ui.h"
 
 namespace rain {
@@ -68,254 +70,187 @@ inline void InitCharset() {
     }
 }
 
-// Encontra WorkerW correta (Win 11 23H2: irmã do SHELLDLL_DefView; 24H2+: filha do Progman)
-inline HWND FindWorkerW() {
+inline ID2D1Bitmap* g_wall = nullptr;   // papel de parede desenhado por baixo da chuva
+inline HWND g_insertAfter = nullptr;    // 24H2: fica logo abaixo dos ícones (SHELLDLL_DefView)
+inline RECT g_area = {};                // área da janela (coordenadas da tela)
+
+// Onde fica a camada do papel de parede (atrás dos ícones):
+//  - Windows 11 24H2+: Progman tem como filhas SHELLDLL_DefView (ícones) e WorkerW (papel de parede).
+//    A chuva vira filha do Progman, logo abaixo dos ícones.
+//  - Windows 10 / 11 até 23H2: a WorkerW de nível superior com SHELLDLL_DefView guarda os ícones e a
+//    WorkerW seguinte (na ordem das janelas) é a do papel de parede. A chuva vira filha dela.
+inline HWND FindWallpaperParent(HWND* insertAfter) {
+    *insertAfter = nullptr;
     HWND progman = FindWindowW(L"Progman", nullptr);
     if (!progman) return nullptr;
-
-    // Envia mensagem para Progman criar WorkerW se necessário (0x052C)
-    SendMessageTimeout(progman, 0x052C, 0, 0, SMTO_NORMAL, 1000, nullptr);
-
-    HWND workerW = nullptr;
-    // Procura WorkerW que é irmã do SHELLDLL_DefView (23H2) ou filha do Progman (24H2+)
-    EnumWindows([](HWND hwnd, LPARAM lParam) -> BOOL {
-        HWND* pWorker = (HWND*)lParam;
-        wchar_t className[256];
-        GetClassNameW(hwnd, className, 256);
-        if (wcscmp(className, L"WorkerW") == 0) {
-            // Verifica se tem SHELLDLL_DefView como filha (23H2) ou é filha do Progman (24H2+)
-            HWND defView = FindWindowExW(hwnd, nullptr, L"SHELLDLL_DefView", nullptr);
-            HWND parent = GetParent(hwnd);
-            HWND progman = FindWindowW(L"Progman", nullptr);
-            if (defView || parent == progman) {
-                *pWorker = hwnd;
-                return FALSE;
-            }
-        }
-        return TRUE;
-    }, (LPARAM)&workerW);
-
-    return workerW;
+    // pede ao Explorer para criar a WorkerW (mensagem não documentada usada por papéis de parede animados)
+    SendMessageTimeoutW(progman, 0x052C, 0xD, 0x1, SMTO_NORMAL, 1000, nullptr);
+    SendMessageTimeoutW(progman, 0x052C, 0, 0, SMTO_NORMAL, 1000, nullptr);
+    HWND defView = FindWindowExW(progman, nullptr, L"SHELLDLL_DefView", nullptr);
+    if (defView && FindWindowExW(progman, nullptr, L"WorkerW", nullptr)) { *insertAfter = defView; return progman; } // 24H2+
+    HWND iconsWorker = nullptr;
+    for (HWND w = FindWindowExW(nullptr, nullptr, L"WorkerW", nullptr); w; w = FindWindowExW(nullptr, w, L"WorkerW", nullptr))
+        if (FindWindowExW(w, nullptr, L"SHELLDLL_DefView", nullptr)) { iconsWorker = w; break; }
+    if (iconsWorker) {
+        if (HWND wall = FindWindowExW(nullptr, iconsWorker, L"WorkerW", nullptr)) return wall;
+    }
+    if (defView) { *insertAfter = defView; return progman; } // sem WorkerW: desenha no Progman, abaixo dos ícones
+    return nullptr;
 }
 
-// Cria janela de chuva como filha da WorkerW (atrás dos ícones, na frente do papel de parede)
-inline bool CreateRainWindow() {
-    g_workerW = FindWorkerW();
-    if (!g_workerW) return false;
-
-    RECT rc;
-    GetClientRect(g_workerW, &rc);
-    int w = rc.right - rc.left;
-    int h = rc.bottom - rc.top;
-
-    WNDCLASSEXW wc = { sizeof(wc) };
-    wc.style = CS_HREDRAW | CS_VREDRAW;
-    wc.lpfnWndProc = [](HWND h, UINT msg, WPARAM wp, LPARAM lp) -> LRESULT {
-        switch (msg) {
-        case WM_PAINT: {
-            PAINTSTRUCT ps;
-            BeginPaint(h, &ps);
-            EndPaint(h, &ps);
-            return 0;
-        }
-        case WM_ERASEBKGND:
-            return 1; // não apagar fundo, nós desenhamos tudo
-        case WM_TIMER:
-            if (wp == g_timerId) {
-                InvalidateRect(h, nullptr, FALSE);
-            }
-            return 0;
-        case WM_DISPLAYCHANGE:
-        case WM_SIZE:
-            // Recriar render target no próximo frame
-            if (g_rt) { g_rt->Release(); g_rt = nullptr; }
-            return 0;
-        case WM_DESTROY:
-            if (g_timerId) KillTimer(h, g_timerId);
-            return 0;
-        }
-        return DefWindowProcW(h, msg, wp, lp);
-    };
-    wc.hInstance = GetModuleHandleW(nullptr);
-    wc.lpszClassName = L"VizuRain";
-    wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
-    RegisterClassExW(&wc);
-
-    // WS_EX_TRANSPARENT | WS_EX_LAYERED | WS_EX_NOACTIVATE
-    // Para ficar atrás dos ícones mas receber paint
-    g_rainWnd = CreateWindowExW(
-        WS_EX_TRANSPARENT | WS_EX_LAYERED | WS_EX_NOACTIVATE,
-        L"VizuRain", L"", WS_CHILD | WS_VISIBLE,
-        0, 0, w, h, g_workerW, nullptr, GetModuleHandleW(nullptr), nullptr
-    );
-
-    if (!g_rainWnd) return false;
-
-    // Layered com alpha per-pixel
-    SetLayeredWindowAttributes(g_rainWnd, 0, 255, LWA_ALPHA);
-
-    // Criar render target D2D
-    D2D1_RENDER_TARGET_PROPERTIES props = D2D1::RenderTargetProperties(
-        D2D1_RENDER_TARGET_TYPE_DEFAULT,
-        D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED),
-        96, 96
-    );
-    if (FAILED(g_d2d->CreateHwndRenderTarget(props,
-        D2D1::HwndRenderTargetProperties(g_rainWnd, D2D1::SizeU(w, h)), &g_rt))) {
-        return false;
-    }
-    g_rt->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
-
-    // Fonte monoespaçada para chuva
-    if (FAILED(g_dw->CreateTextFormat(L"Consolas", nullptr, DWRITE_FONT_WEIGHT_NORMAL,
-        DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 16.0f, L"en-us", &g_font))) {
-        return false;
-    }
-    g_font->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
-    g_font->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
-
-    // Medir caractere
-    DWRITE_TEXT_METRICS tm;
-    IDWriteTextLayout* layout = nullptr;
-    if (SUCCEEDED(g_dw->CreateTextLayout(L"ア", 1, g_font, 100, 100, &layout))) {
-        layout->GetMetrics(&tm);
-        g_charW = tm.width;
-        g_charH = tm.height;
-        layout->Release();
-    }
-
-    // Inicializar colunas
-    g_cols = (int)(w / g_charW) + 2;
-    g_rows = (int)(h / g_charH) + 2;
-    g_colSpeeds.assign(g_cols, 0);
-    g_colOffsets.assign(g_cols, 0);
-    g_colLengths.assign(g_cols, 0);
-
-    // Seed determinístico baseado em resolução + config
-    g_seed = 0xC0FFEE ^ (w * 31) ^ (h * 17) ^ (g_cfg.cycleMs / 1000);
-
-    for (int i = 0; i < g_cols; ++i) {
-        g_colSpeeds[i] = 0.5f + (Rand() % 1000) / 2000.0f; // 0.5-1.0 células/frame
-        g_colOffsets[i] = (Rand() % 1000) / 1000.0f * g_cfg.cycleMs / 16.67f; // offset no ciclo
-        g_colLengths[i] = 5 + (Rand() % (g_rows / 2)); // comprimento variável
-    }
-
-    QueryPerformanceFrequency(&g_freq);
-    QueryPerformanceCounter(&g_startTime);
-
-    // Timer para animação (~16ms para 60fps, mas respeita FPS config)
-    int interval = 1000 / g_cfg.fps;
-    g_timerId = SetTimer(g_rainWnd, 1, interval, nullptr);
-
-    g_running = true;
-    return true;
+// Carrega o papel de parede atual como bitmap do Direct2D (nulo se não houver imagem).
+inline void LoadWallpaper() {
+    if (g_wall) { g_wall->Release(); g_wall = nullptr; }
+    wchar_t path[MAX_PATH] = {};
+    if (!SystemParametersInfoW(SPI_GETDESKWALLPAPER, MAX_PATH, path, 0) || !path[0] || !g_rt) return;
+    IWICImagingFactory* wic = nullptr; IWICBitmapDecoder* dec = nullptr; IWICBitmapFrameDecode* fr = nullptr; IWICFormatConverter* cv = nullptr;
+    if (SUCCEEDED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&wic))) &&
+        SUCCEEDED(wic->CreateDecoderFromFilename(path, nullptr, GENERIC_READ, WICDecodeMetadataCacheOnLoad, &dec)) &&
+        SUCCEEDED(dec->GetFrame(0, &fr)) && SUCCEEDED(wic->CreateFormatConverter(&cv)) &&
+        SUCCEEDED(cv->Initialize(fr, GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0, WICBitmapPaletteTypeMedianCut)))
+        g_rt->CreateBitmapFromWicBitmap(cv, nullptr, &g_wall);
+    if (cv) cv->Release(); if (fr) fr->Release(); if (dec) dec->Release(); if (wic) wic->Release();
 }
 
-// Desenha um frame da chuva
+// Pausar quando não aparece ou não convém (janela em tela cheia/maximizada, bateria baixa, animações desligadas)
+inline bool ShouldPause() {
+    HWND fg = GetForegroundWindow();
+    if (!fg) return true; // tela bloqueada
+    wchar_t cls[64] = {}; GetClassNameW(fg, cls, 64);
+    if (wcscmp(cls, L"Progman") && wcscmp(cls, L"WorkerW")) { // a própria área de trabalho em foco não conta
+        RECT rc; GetWindowRect(fg, &rc);
+        MONITORINFO mi = {sizeof(mi)}; GetMonitorInfoW(MonitorFromWindow(fg, MONITOR_DEFAULTTONEAREST), &mi);
+        if (rc.left <= mi.rcWork.left && rc.right >= mi.rcWork.right && rc.top <= mi.rcWork.top && rc.bottom >= mi.rcWork.bottom) return true;
+    }
+    SYSTEM_POWER_STATUS ps;
+    if (GetSystemPowerStatus(&ps) && ps.ACLineStatus == 0 && (ps.BatteryFlag & (2 | 4))) return true; // na bateria e baixa
+    BOOL animOn = TRUE; SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &animOn, 0);
+    return !animOn;
+}
+
+// Desenha um quadro: papel de parede (em cada monitor, preenchendo) e a chuva por cima.
 inline void DrawFrame() {
-    if (!g_rt || !g_running) return;
-
-    LARGE_INTEGER now;
-    QueryPerformanceCounter(&now);
+    if (!g_running || !g_rainWnd) return;
+    if (!g_rt) {
+        RECT rc; GetClientRect(g_rainWnd, &rc);
+        D2D1_RENDER_TARGET_PROPERTIES props = D2D1::RenderTargetProperties(D2D1_RENDER_TARGET_TYPE_DEFAULT,
+            D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE), 96, 96);
+        if (FAILED(g_d2d->CreateHwndRenderTarget(props, D2D1::HwndRenderTargetProperties(g_rainWnd, D2D1::SizeU(rc.right, rc.bottom)), &g_rt))) return;
+        g_rt->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
+        LoadWallpaper();
+    }
+    LARGE_INTEGER now; QueryPerformanceCounter(&now);
     float elapsedMs = (float)((now.QuadPart - g_startTime.QuadPart) * 1000.0 / g_freq.QuadPart);
-
-    // Loop perfeito: fase = t/ciclo, k inteiro (voltas por ciclo)
-    float cycleProgress = fmodf(elapsedMs, (float)g_cfg.cycleMs) / g_cfg.cycleMs; // 0..1
+    float cycleProgress = fmodf(elapsedMs, (float)g_cfg.cycleMs) / g_cfg.cycleMs; // loop perfeito
 
     g_rt->BeginDraw();
-    g_rt->Clear(D2D1::ColorF(0, 0)); // transparente
-
-    // Cor base
-    float r = ((g_cfg.color >> 16) & 0xFF) / 255.0f;
-    float g = ((g_cfg.color >> 8) & 0xFF) / 255.0f;
-    float b = (g_cfg.color & 0xFF) / 255.0f;
-
-    ID2D1SolidColorBrush* brush = nullptr;
-    g_rt->CreateSolidColorBrush(D2D1::ColorF(r, g, b, g_cfg.opacity), &brush);
-
-    // Desenhar cada coluna
-    for (int col = 0; col < g_cols; ++col) {
+    COLORREF bg = GetSysColor(COLOR_DESKTOP);
+    g_rt->Clear(D2D1::ColorF(GetRValue(bg) / 255.f, GetGValue(bg) / 255.f, GetBValue(bg) / 255.f));
+    if (g_wall) { // "preencher" em cada monitor, como o Windows faz por padrão
+        D2D1_SIZE_F ws = g_wall->GetSize();
+        EnumDisplayMonitors(nullptr, nullptr, [](HMONITOR, HDC, LPRECT m, LPARAM lp) -> BOOL {
+            D2D1_SIZE_F ws = *(D2D1_SIZE_F*)lp;
+            float mw = (float)(m->right - m->left), mh = (float)(m->bottom - m->top);
+            float k = std::max(mw / ws.width, mh / ws.height), w = ws.width * k, h = ws.height * k;
+            float x = m->left - g_area.left + (mw - w) / 2, y = m->top - g_area.top + (mh - h) / 2;
+            g_rt->PushAxisAlignedClip(D2D1::RectF((float)(m->left - g_area.left), (float)(m->top - g_area.top), (float)(m->right - g_area.left), (float)(m->bottom - g_area.top)), D2D1_ANTIALIAS_MODE_ALIASED);
+            g_rt->DrawBitmap(g_wall, D2D1::RectF(x, y, x + w, y + h), 1.0f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
+            g_rt->PopAxisAlignedClip();
+            return TRUE;
+        }, (LPARAM)&ws);
+    }
+    float r = ((g_cfg.color >> 16) & 0xFF) / 255.0f, g = ((g_cfg.color >> 8) & 0xFF) / 255.0f, b = (g_cfg.color & 0xFF) / 255.0f;
+    ID2D1SolidColorBrush* brush = nullptr; ID2D1SolidColorBrush* head = nullptr;
+    g_rt->CreateSolidColorBrush(D2D1::ColorF(r, g, b), &brush);
+    g_rt->CreateSolidColorBrush(D2D1::ColorF(r + (1 - r) * 0.6f, g + (1 - g) * 0.6f, b + (1 - b) * 0.6f), &head); // cabeça mais clara
+    int frame = (int)(elapsedMs / (1000.0f / std::max(1, g_cfg.fps)));
+    for (int col = 0; brush && head && col < g_cols; ++col) {
         float x = col * g_charW;
-        float speed = g_colSpeeds[col];
-        float offset = g_colOffsets[col];
         int length = g_colLengths[col];
-
-        // Posição da cabeça no ciclo (0..rows)
-        float headPos = fmodf(cycleProgress * g_rows + offset, (float)g_rows + length);
+        float headPos = fmodf(cycleProgress * (g_rows + length) * g_colSpeeds[col] * 2 + g_colOffsets[col], (float)g_rows + length);
         int headRow = (int)headPos;
-
-        // Desenhar caracteres da coluna (da cabeça para cima)
+        int headN = std::max(1, (int)(length * g_cfg.headRatio));
         for (int i = 0; i < length; ++i) {
             int row = headRow - i;
             if (row < 0 || row >= g_rows) continue;
-
-            float y = row * g_charH;
-            float progress = (float)i / length;
-            float alpha = 1.0f - progress; // fade da cabeça para a cauda
-
-            // Cabeça mais brilhante
-            if (i < (int)(length * g_cfg.headRatio)) {
-                alpha = 1.0f;
-            }
-
-            // Pular opacidade < 0.2% (otimização)
-            if (alpha * g_cfg.opacity < 0.002f) continue;
-
-            // Hash determinístico para caractere (baseado em col, row, frame)
-            uint32_t charSeed = (col * 73856093) ^ (row * 19349663) ^ ((int)(elapsedMs / 16.67f) * 83492791);
-            charSeed ^= charSeed << 13;
-            charSeed ^= charSeed >> 17;
-            charSeed ^= charSeed << 5;
-            UINT ch = g_chars[charSeed % g_chars.size()];
-
-            wchar_t wc = (wchar_t)ch;
-            D2D1_RECT_F layoutRect = D2D1::RectF(x, y, x + g_charW, y + g_charH);
-            brush->SetOpacity(alpha * g_cfg.opacity);
-            g_rt->DrawTextW(&wc, 1, g_font, layoutRect, brush);
+            float alpha = (i < headN ? 1.0f : 1.0f - (float)i / length) * g_cfg.opacity;
+            if (alpha < 0.004f) continue;
+            uint32_t cs = (col * 73856093u) ^ (row * 19349663u) ^ ((uint32_t)(frame / 6) * 83492791u);
+            cs ^= cs << 13; cs ^= cs >> 17; cs ^= cs << 5;
+            wchar_t wc = (wchar_t)g_chars[cs % g_chars.size()];
+            ID2D1SolidColorBrush* br = i < headN ? head : brush;
+            br->SetOpacity(alpha);
+            g_rt->DrawTextW(&wc, 1, g_font, D2D1::RectF(x, row * g_charH, x + g_charW, (row + 1) * g_charH), br);
         }
     }
-
-    if (brush) brush->Release();
-
+    if (brush) brush->Release(); if (head) head->Release();
     HRESULT hr = g_rt->EndDraw();
-    if (hr == D2DERR_RECREATE_TARGET) {
-        g_rt->Release();
-        g_rt = nullptr;
-        // Recriar no próximo frame
-    }
+    if (hr == D2DERR_RECREATE_TARGET) { if (g_wall) { g_wall->Release(); g_wall = nullptr; } g_rt->Release(); g_rt = nullptr; }
+    else if (FAILED(hr)) DIAG_HR("chuva: desenho falhou", hr);
 }
 
-// Pausar/retomar baseado em condições (tela cheia, maximizada, bateria, tela bloqueada, animações desligadas)
-inline bool ShouldPause() {
-    // Tela cheia / janela maximizada
-    HWND fg = GetForegroundWindow();
-    if (fg) {
-        RECT rc;
-        GetWindowRect(fg, &rc);
-        MONITORINFO mi = { sizeof(mi) };
-        HMONITOR mon = MonitorFromWindow(fg, MONITOR_DEFAULTTONEAREST);
-        GetMonitorInfo(mon, &mi);
-        RECT work = mi.rcWork;
-        if (rc.left <= work.left && rc.right >= work.right && rc.top <= work.top && rc.bottom >= work.bottom) {
-            return true;
-        }
+// Cria a janela da chuva na camada do papel de parede (atrás dos ícones).
+inline bool CreateRainWindow() {
+    g_workerW = FindWallpaperParent(&g_insertAfter);
+    if (!g_workerW) { diag::Note("chuva", "camada do papel de parede não encontrada"); return false; }
+    RECT rc; GetClientRect(g_workerW, &rc);
+    g_area = {GetSystemMetrics(SM_XVIRTUALSCREEN), GetSystemMetrics(SM_YVIRTUALSCREEN), 0, 0};
+    int w = rc.right - rc.left, h = rc.bottom - rc.top;
+    if (w <= 0 || h <= 0) { w = GetSystemMetrics(SM_CXVIRTUALSCREEN); h = GetSystemMetrics(SM_CYVIRTUALSCREEN); }
+
+    static bool registered = false;
+    if (!registered) {
+        WNDCLASSEXW wc = {sizeof(wc)};
+        wc.lpfnWndProc = [](HWND hw, UINT msg, WPARAM wp, LPARAM lp) -> LRESULT {
+            switch (msg) {
+            case WM_PAINT: { PAINTSTRUCT ps; BeginPaint(hw, &ps); EndPaint(hw, &ps); DrawFrame(); return 0; }
+            case WM_ERASEBKGND: return 1;
+            case WM_TIMER: if (!ShouldPause()) DrawFrame(); return 0;
+            case WM_SETTINGCHANGE: if (wp == SPI_SETDESKWALLPAPER && g_rt) LoadWallpaper(); DrawFrame(); return 0;
+            case WM_DISPLAYCHANGE: case WM_SIZE:
+                if (g_wall) { g_wall->Release(); g_wall = nullptr; }
+                if (g_rt) { g_rt->Release(); g_rt = nullptr; }
+                return 0;
+            }
+            return DefWindowProcW(hw, msg, wp, lp);
+        };
+        wc.hInstance = GetModuleHandleW(nullptr);
+        wc.lpszClassName = L"VizuRain";
+        RegisterClassExW(&wc);
+        registered = true;
     }
+    // Filha comum (sem camadas): desenhamos o papel de parede e a chuva por cima, opaco.
+    g_rainWnd = CreateWindowExW(WS_EX_NOACTIVATE | WS_EX_TRANSPARENT, L"VizuRain", L"", WS_CHILD | WS_VISIBLE | WS_DISABLED,
+                                0, 0, w, h, g_workerW, nullptr, GetModuleHandleW(nullptr), nullptr);
+    if (!g_rainWnd) { diag::Note("chuva", "CreateWindow", HRESULT_FROM_WIN32(GetLastError())); return false; }
+    if (g_insertAfter) SetWindowPos(g_rainWnd, g_insertAfter, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE); // logo abaixo dos ícones
 
-    // Bateria baixa
-    SYSTEM_POWER_STATUS ps;
-    if (GetSystemPowerStatus(&ps) && ps.BatteryFlag & 128) { // 128 = bateria baixa
-        return true;
+    if (!g_font && FAILED(g_dw->CreateTextFormat(L"Consolas", nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL,
+                                                 DWRITE_FONT_STRETCH_NORMAL, 16.0f, L"en-us", &g_font))) return false;
+    g_font->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+    g_font->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
+    g_charW = 12; g_charH = 18;
+    IDWriteTextLayout* layout = nullptr; DWRITE_TEXT_METRICS tm;
+    if (SUCCEEDED(g_dw->CreateTextLayout(L"\x30A2", 1, g_font, 100, 100, &layout))) {
+        if (SUCCEEDED(layout->GetMetrics(&tm)) && tm.width > 2 && tm.height > 2) { g_charW = tm.width + 2; g_charH = tm.height; }
+        layout->Release();
     }
-
-    // Tela bloqueada
-    if (GetForegroundWindow() == nullptr) return true;
-
-    // "Mostrar animações no Windows" desligado
-    BOOL animOn = TRUE;
-    SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &animOn, 0);
-    if (!animOn) return true;
-
-    return false;
+    g_cols = (int)(w / g_charW) + 1;
+    g_rows = (int)(h / g_charH) + 1;
+    g_colSpeeds.assign(g_cols, 0); g_colOffsets.assign(g_cols, 0); g_colLengths.assign(g_cols, 0);
+    g_seed = 0xC0FFEE ^ (w * 31) ^ (h * 17) ^ (g_cfg.cycleMs / 1000);
+    for (int i = 0; i < g_cols; ++i) {
+        g_colSpeeds[i] = 0.5f + (Rand() % 1000) / 2000.0f;
+        g_colOffsets[i] = (float)(Rand() % (unsigned)(g_rows + 1));
+        g_colLengths[i] = 5 + (int)(Rand() % (unsigned)std::max(1, g_rows / 3));
+    }
+    QueryPerformanceFrequency(&g_freq);
+    QueryPerformanceCounter(&g_startTime);
+    g_running = true;
+    g_timerId = SetTimer(g_rainWnd, 1, 1000 / std::max(1, g_cfg.fps), nullptr);
+    DrawFrame();
+    diag::Log("chuva: ligada (" + std::string(g_insertAfter ? "Progman/24H2" : "WorkerW") + ")");
+    return true;
 }
 
 // Timer callback - chamado pelo WM_TIMER
@@ -345,6 +280,7 @@ inline void Stop() {
     g_running = false;
     if (g_timerId) { KillTimer(g_rainWnd, g_timerId); g_timerId = 0; }
     if (g_rainWnd) { DestroyWindow(g_rainWnd); g_rainWnd = nullptr; }
+    if (g_wall) { g_wall->Release(); g_wall = nullptr; }
     if (g_rt) { g_rt->Release(); g_rt = nullptr; }
     if (g_font) { g_font->Release(); g_font = nullptr; }
     g_workerW = nullptr;
