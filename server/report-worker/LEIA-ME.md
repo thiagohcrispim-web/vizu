@@ -21,7 +21,7 @@ O token do GitHub fica guardado no Cloudflare, nunca dentro do programa.
    npx wrangler deploy
    ```
    O deploy mostra o endereço, por exemplo `vizu-reports.SUA-CONTA.workers.dev`.
-4. Em `Diag.h`, ponha esse endereço em `kReportHost` (sem `https://`) e publique uma versão nova do Vizu.
+4. Em `Diag.h`, `kReportHost` já aponta para `vizu-reports.thiago-h-crispim.workers.dev` (desde a 19.5.5).
 
 Enquanto `kReportHost` estiver vazio, o Vizu só grava o `erros.log` local e não envia nada.
 

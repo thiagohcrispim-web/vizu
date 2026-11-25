@@ -18,7 +18,7 @@
 namespace diag {
 
 // Endereço do receptor. Vazio = nada é enviado (só o erros.log local).
-inline const wchar_t* kReportHost = L"";            // ex.: L"vizu-reports.<conta>.workers.dev"
+inline const wchar_t* kReportHost = L"vizu-reports.thiago-h-crispim.workers.dev";
 inline const wchar_t* kReportPath = L"/report";
 inline const wchar_t* kCfgKey = L"Software\\DesignThumbs";
 
