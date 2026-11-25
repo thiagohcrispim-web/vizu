@@ -76,8 +76,14 @@ exigido: case WM_TIMER: if \(!ShouldPause\(\)\) DrawFrame\(\);
 motivo: na v19.5 o timer só pedia repintura e a pintura não desenhava nada; a chuva nunca aparecia
 origem: v19.5.5
 
-id: chuva-sem-janela-em-camadas
+id: chuva-camadas-com-opacidade
 arquivos: Rain.inc.h
-proibido: WS_EX_LAYERED
-motivo: o Direct2D (HwndRenderTarget) não desenha em janela WS_EX_LAYERED; a chuva desenha o papel de parede por baixo, opaca
-origem: v19.5.5
+exigido: SetLayeredWindowAttributes\(g_rainWnd, 0, 255, LWA_ALPHA\)
+motivo: no Windows 11 24H2 a chuva (filha do Progman) só aparece como janela em camadas, com opacidade definida; sem isso fica invisível
+origem: v19.5.6
+
+id: avancado-com-secao-valida
+arquivos: Vizu.cpp
+proibido: advanced\(rows, (?!kSec(Conv|Time|Clean|Other|Sys|RainAdv)\b)
+motivo: advanced() recebe o índice da seção (kSec...), não um id de botão; um id grande lê fora de g_advOpen e o Avançado não abre (chuva na v19.5)
+origem: v19.5.6

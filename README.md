@@ -3,7 +3,7 @@
 <h3 align="center">Veja todos os seus arquivos de design no Windows,<br>mesmo sem os programas instalados.</h3>
 
 <p align="center">
-  <a href="https://github.com/thiagohcrispim-web/vizu/releases/latest/download/Vizu_Setup_19.5.6_x64.exe"><b>⬇ Baixar o Vizu para Windows</b></a> &nbsp;·&nbsp; grátis e de código aberto (MIT)
+  <a href="https://github.com/thiagohcrispim-web/vizu/releases/latest/download/Vizu_Setup_19.5.7_x64.exe"><b>⬇ Baixar o Vizu para Windows</b></a> &nbsp;·&nbsp; grátis e de código aberto (MIT)
 </p>
 
 ---
@@ -99,7 +99,7 @@ desligado nas Configurações.
 
 ## Instalar
 
-1. Baixe o **[instalador](https://github.com/thiagohcrispim-web/vizu/releases/latest/download/Vizu_Setup_19.5.6_x64.exe)** e abra. Não precisa de administrador.
+1. Baixe o **[instalador](https://github.com/thiagohcrispim-web/vizu/releases/latest/download/Vizu_Setup_19.5.7_x64.exe)** e abra. Não precisa de administrador.
 2. Pronto: as miniaturas aparecem conforme você navega pelas pastas.
 
 Para atualizar, o Vizu avisa sozinho quando sai versão nova. Para desinstalar, rode o instalador de novo ou use
@@ -160,7 +160,7 @@ https://docs.github.com/site-policy/privacy-policies/github-general-privacy-stat
 
 - Compilar no Linux: `./build.sh` (MinGW `g++-mingw-w64-x86-64-posix`; os headers mais novos do mingw-w64 estão em `third_party/`).
 - O GitHub Actions compila a cada envio e publica o instalador como artefato (`.github/workflows/build.yml`).
-- Instalação silenciosa: `Vizu_Setup_19.5.6_x64.exe /install /S` · desinstalar: `Vizu.exe /uninstall [/S]`.
+- Instalação silenciosa: `Vizu_Setup_19.5.7_x64.exe /install /S` · desinstalar: `Vizu.exe /uninstall [/S]`.
 - Diagnóstico de um arquivo: `Vizu.exe /diag "arquivo"` ou arraste o arquivo sobre `diagnostico.bat`. Sem arquivo (`Vizu.exe /diag` ou dois cliques no `.bat`): diagnóstico do Espaço e do Alt.
 - A biblioteca `DesignThumbs.dll` (miniaturas do Explorer) e a chave de registro `HKCU\Software\DesignThumbs` mantêm o
   nome antigo, para não quebrar as miniaturas nem as configurações de quem já usa.
@@ -169,6 +169,7 @@ https://docs.github.com/site-policy/privacy-policies/github-general-privacy-stat
 <details>
 <summary><b>Histórico de versões</b></summary>
 
+- **v19.5.7** — Opções da chuva voltam a abrir (o "Avançado" do tema usava uma seção inexistente). Chuva aparece no Windows 11 24H2 (janela em camadas atrás dos ícones) e com cabeça clara, visível até na cor grafite.
 - **v19.5.6** — Botões e cartões voltam a ter cantos redondos (o desenho "squircle" da 19.5 saía chanfrado). Chuva digital do tema Classic funcionando: fica atrás dos ícones da área de trabalho, sobre o papel de parede, inclusive no Windows 11 24H2.
 - **v19.5.5** — Liga o envio de relatórios de erro anônimos (para quem aceitar em Configurações › Sistema): os erros viram issues no GitHub com a etiqueta `relatorio-automatico`.
 - **v19.5.4** — Atualização não fica mais oferecendo versão nova sem parar (a versão interna dizia 9.14.5). Novo registro de erros em `%LOCALAPPDATA%\DesignThumbs\erros.log`, autoteste rápido ao abrir, vigia de travamento e opção "Enviar relatórios de erro anônimos" (desligada por padrão) em Configurações › Sistema.

@@ -2850,8 +2850,9 @@ static const wchar_t* kAboutEs =
 static std::vector<std::pair<int, D2D1_RECT_F>> g_setHits;
 static int g_setHot;
 static float g_setScroll, g_setContentH;
-enum { kSecConv, kSecTime, kSecClean, kSecOther, kSecSys, kSecCount }; // seções com "Avançado"
+enum { kSecConv, kSecTime, kSecClean, kSecOther, kSecSys, kSecRainAdv, kSecCount }; // kAdv0..kAdv5: no máximo 6 seções // seções com "Avançado"
 static bool g_advOpen[kSecCount]; // tudo começa recolhido
+static_assert(kSecCount <= 6, "cada seção com Avançado precisa de um botão kAdv0..kAdv5");
 static ui::Anim g_setAnim;          // movimento das Configurações (chaves, seletores, Avançado, abrir/fechar)
 static POINT g_setMouse = {-100000, -100000};
 static bool g_setDown, g_setClosing;
@@ -3788,7 +3789,7 @@ static void PaintSettings(HWND h) {
                 swprintf(b, 128, L"%ls", g_cfg.rainCustomChars.empty() ? T(L"(vazio - usa Katakana)", L"(empty - uses Katakana)", L"(vacío - usa Katakana)") : g_cfg.rainCustomChars.c_str());
                 rpill(r, kRainCustomChars, b, 300 * s);
             }});
-            advanced(rows, kSecRain, std::move(adv));
+            advanced(rows, kSecRainAdv, std::move(adv));
         }
     }
     drawSection(T(L"Temas", L"Themes", L"Temas"), rows);
@@ -4644,6 +4645,7 @@ static void RunSelfTest() {
 int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmd, int) {
     g_inst = inst;
     g_mainThread = GetCurrentThreadId();
+    diag::g_version = upd::kVersion; // antes de qualquer registro no erros.log
     SetUnhandledExceptionFilter(CrashFilter);
     std::set_terminate([] { WriteCrashLog("terminate", 0, nullptr); TerminateProcess(GetCurrentProcess(), 3); });
     i18n::Load();

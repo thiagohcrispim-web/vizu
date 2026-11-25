@@ -162,7 +162,7 @@ inline void DrawFrame() {
     float r = ((g_cfg.color >> 16) & 0xFF) / 255.0f, g = ((g_cfg.color >> 8) & 0xFF) / 255.0f, b = (g_cfg.color & 0xFF) / 255.0f;
     ID2D1SolidColorBrush* brush = nullptr; ID2D1SolidColorBrush* head = nullptr;
     g_rt->CreateSolidColorBrush(D2D1::ColorF(r, g, b), &brush);
-    g_rt->CreateSolidColorBrush(D2D1::ColorF(r + (1 - r) * 0.6f, g + (1 - g) * 0.6f, b + (1 - b) * 0.6f), &head); // cabeça mais clara
+    g_rt->CreateSolidColorBrush(D2D1::ColorF(r + (1 - r) * 0.85f, g + (1 - g) * 0.85f, b + (1 - b) * 0.85f), &head); // cabeça quase branca: aparece até com a cor grafite
     int frame = (int)(elapsedMs / (1000.0f / std::max(1, g_cfg.fps)));
     for (int col = 0; brush && head && col < g_cols; ++col) {
         float x = col * g_charW;
@@ -173,7 +173,7 @@ inline void DrawFrame() {
         for (int i = 0; i < length; ++i) {
             int row = headRow - i;
             if (row < 0 || row >= g_rows) continue;
-            float alpha = (i < headN ? 1.0f : 1.0f - (float)i / length) * g_cfg.opacity;
+            float alpha = i < headN ? std::min(1.0f, g_cfg.opacity * 3.0f) : (1.0f - (float)i / length) * g_cfg.opacity;
             if (alpha < 0.004f) continue;
             uint32_t cs = (col * 73856093u) ^ (row * 19349663u) ^ ((uint32_t)(frame / 6) * 83492791u);
             cs ^= cs << 13; cs ^= cs >> 17; cs ^= cs << 5;
@@ -220,9 +220,13 @@ inline bool CreateRainWindow() {
         registered = true;
     }
     // Filha comum (sem camadas): desenhamos o papel de parede e a chuva por cima, opaco.
-    g_rainWnd = CreateWindowExW(WS_EX_NOACTIVATE | WS_EX_TRANSPARENT, L"VizuRain", L"", WS_CHILD | WS_VISIBLE | WS_DISABLED,
+    // No 24H2 o Progman é composto pelo DWM sem bitmap próprio: uma filha comum fica invisível ali.
+    // Filha "em camadas" com opacidade total (Windows 8+, o manifesto declara Windows 10) aparece e o Direct2D desenha nela.
+    DWORD ex = WS_EX_NOACTIVATE | WS_EX_TRANSPARENT | (g_insertAfter ? WS_EX_LAYERED : 0);
+    g_rainWnd = CreateWindowExW(ex, L"VizuRain", L"", WS_CHILD | WS_VISIBLE | WS_DISABLED,
                                 0, 0, w, h, g_workerW, nullptr, GetModuleHandleW(nullptr), nullptr);
     if (!g_rainWnd) { diag::Note("chuva", "CreateWindow", HRESULT_FROM_WIN32(GetLastError())); return false; }
+    if (ex & WS_EX_LAYERED) SetLayeredWindowAttributes(g_rainWnd, 0, 255, LWA_ALPHA);
     if (g_insertAfter) SetWindowPos(g_rainWnd, g_insertAfter, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE); // logo abaixo dos ícones
 
     if (!g_font && FAILED(g_dw->CreateTextFormat(L"Consolas", nullptr, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL,
