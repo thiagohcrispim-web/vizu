@@ -58,8 +58,7 @@ add_compile_definitions(
 # Encontra dependências
 # ============================================================================
 
-# Windows SDK
-find_package(WindowsSDK REQUIRED)
+# Windows SDK libraries (resolved individually via find_library below; no dedicated FindWindowsSDK module needed)
 
 # Direct2D / DirectWrite / WIC
 find_library(D2D1 d2d1)
@@ -233,7 +232,7 @@ set_target_properties(DesignThumbs PROPERTIES
 # ============================================================================
 enable_testing()
 
-if(BUILD_TESTING)
+if(BUILD_TESTING AND WIN32)
     add_subdirectory(tests)
 endif()
 
@@ -247,14 +246,12 @@ install(TARGETS Vizu DesignThumbs
 )
 
 install(FILES
-    fonts/Inter-Regular.ttf
-    fonts/Inter-Medium.ttf
-    fonts/Inter-SemiBold.ttf
-    fonts/Inter-Bold.ttf
-    fonts/SpaceGrotesk-Regular.ttf
-    fonts/SpaceGrotesk-Medium.ttf
-    fonts/SpaceGrotesk-SemiBold.ttf
-    fonts/SpaceGrotesk-Bold.ttf
+    fonts/Inter-400.otf
+    fonts/Inter-500.otf
+    fonts/Inter-600.otf
+    fonts/Inter-700.otf
+    fonts/SpaceGrotesk-500.ttf
+    fonts/SpaceGrotesk-700.ttf
     DESTINATION share/vizu/fonts
 )
 
