@@ -123,7 +123,7 @@ inline Result Run(const std::vector<std::wstring>& files, const Job& j, const st
     if (files.empty()) return r;
 
     // Vector exports MUST precede Frames(): a rendered thumbnail has already lost the vectors.
-    if (j.action == kToFormat && (j.format == ops::kSvg || j.format == ops::kEps || j.format == ops::kPdf)) {
+    if (j.action == kToFormat && (j.format == ops::kSvg || j.format == ops::kEps)) {
         for (size_t i = 0; i < files.size(); ++i) {
             if (j.edit.Any() || !j.pages.empty()) {
                 ++r.failed;
@@ -131,55 +131,17 @@ inline Result Run(const std::vector<std::wstring>& files, const Job& j, const st
             } else {
                 std::wstring out = UniquePath(DirOf(files[i]), Named(BaseOf(files[i]), j.suffix), ops::Ext(j.format));
                 cdrv::Drawing d; std::wstring err;
-
-                // Use engines::VectorSink for all vector outputs (SVG, EPS, PDF)
-                // This replaces the Inkscape-based vec::Convert
-                engines::VectorWriterFactory::Type writerType = engines::VectorWriterFactory::SVG;
-                if (j.format == ops::kEps) writerType = engines::VectorWriterFactory::EPS;
-                else if (j.format == ops::kPdf) writerType = engines::VectorWriterFactory::PDF;
-
-                if (cdrv::IsCdr(files[i])) { // CDR/CMX
+                if (j.format == ops::kSvg && cdrv::IsCdr(files[i])) { // SVG direto da libcdr, sem o Inkscape
                     if (!cdrv::Read(files[i], d, err)) { ++r.failed; r.errors.push_back(BaseOf(files[i]) + L": " + err); done(i); continue; }
-
-                    // Apply page range filter if specified
-                    std::vector<int> keep = pdfedit::ParseRange(j.pages, (int)d.pages.size());
-                    if (!keep.empty()) {
-                        cdrv::Drawing sel;
-                        for (int p : keep) if (p >= 0 && p < (int)d.pages.size()) sel.pages.push_back(d.pages[p]);
-                        if (!sel.pages.empty()) d = std::move(sel);
-                    }
-
-                    // Create appropriate writer and convert
-                    engines::Size pageSize{ (float)d.pages[0].w, (float)d.pages[0].h };
-                    engines::VectorSink* sink = engines::VectorWriterFactory::Create(writerType, pageSize);
-                    if (sink) {
-                        if (j.textToPaths) {
-                            // Text is already converted to curves by cdrv::Collector
-                        }
-                        if (sink->BeginDocument(pageSize)) {
-                            engines::ConvertDrawingToVectorSink(d, sink);
-                            if (sink->EndDocument()) {
-                                if (sink->SaveToFile(out.c_str())) {
-                                    r.outputs.push_back(out);
-                                } else {
-                                    ++r.failed; r.errors.push_back(BaseOf(files[i]) + L": não foi possível gravar o arquivo");
-                                }
-                            } else {
-                                ++r.failed; r.errors.push_back(BaseOf(files[i]) + L": falha ao finalizar documento");
-                            }
-                        } else {
-                            ++r.failed; r.errors.push_back(BaseOf(files[i]) + L": falha ao iniciar documento");
-                        }
-                        engines::VectorWriterFactory::Destroy(sink);
-                    } else {
-                        ++r.failed; r.errors.push_back(BaseOf(files[i]) + L": falha ao criar writer vetorial");
+                    for (size_t p = 0; p < d.pages.size(); ++p) {
+                        std::wstring o = d.pages.size() == 1 ? out : UniquePath(DirOf(files[i]), Named(BaseOf(files[i]), j.suffix) + L" - p" + std::to_wstring(p + 1), L".svg");
+                        std::string svg = cdrv::Svg(d.pages[p]);
+                        if (ops::WriteFileBytes(o, svg.data(), svg.size())) r.outputs.push_back(o);
+                        else { ++r.failed; r.errors.push_back(BaseOf(files[i]) + L": não foi possível gravar o SVG"); }
                     }
                     done(i);
                     continue;
                 }
-
-                // SVG input: still use Inkscape for now (would need SVG parser)
-                // This path is hit when source is .svg and target is .eps or .pdf
                 vec::Result v = vec::Convert(files[i], out, j.format == ops::kEps, j.textToPaths);
                 if (v.ok) r.outputs.push_back(out);
                 else { ++r.failed; r.errors.push_back(BaseOf(files[i]) + L": " + v.error); }
@@ -193,7 +155,7 @@ inline Result Run(const std::vector<std::wstring>& files, const Job& j, const st
     if (j.action == kToFormat && j.format == ops::kPdf) {
         bool allCdr = !j.edit.Any();
         for (auto& f : files) allCdr &= cdrv::IsCdr(f);
-        if (allCdr) { // CorelDRAW: PDF vetorial (múltiplos arquivos unidos em um só)
+        if (allCdr) { // CorelDRAW: PDF vetorial (um por arquivo; vários são juntados em um só)
             std::vector<std::wstring> made; std::vector<pdfedit::File> pf(files.size()); std::vector<pdfedit::Part> parts;
             std::wstring base = BaseOf(files[0]) + (files.size() > 1 ? L" (+" + std::to_wstring(files.size() - 1) + L")" : L"");
             std::wstring out = UniquePath(DirOf(files[0]), Named(base, j.suffix), L".pdf");
@@ -204,30 +166,10 @@ inline Result Run(const std::vector<std::wstring>& files, const Job& j, const st
                 std::vector<int> keep = pdfedit::ParseRange(j.pages, (int)d.pages.size());
                 cdrv::Drawing sel; for (int p : keep) if (p >= 0 && p < (int)d.pages.size()) sel.pages.push_back(d.pages[p]);
                 if (sel.pages.empty()) sel = d;
-                // Use VectorSink for individual PDF pages, then merge
-                engines::Size pageSize{ (float)sel.pages[0].w, (float)sel.pages[0].h };
-                engines::VectorSink* sink = engines::VectorWriterFactory::Create(engines::VectorWriterFactory::PDF, pageSize);
-                if (sink) {
-                    if (sink->BeginDocument(pageSize)) {
-                        engines::ConvertDrawingToVectorSink(sel, sink);
-                        if (sink->EndDocument()) {
-                            std::vector<uint8_t> buffer = sink->GetBuffer();
-                            std::wstring target = files.size() == 1 ? out : UniquePath(DirOf(files[0]), L"~vizu-" + std::to_wstring(GetCurrentProcessId()) + L"-" + std::to_wstring(i), L".pdf");
-                            if (ops::WriteFileBytes(target, reinterpret_cast<const char*>(buffer.data()), buffer.size())) {
-                                made.push_back(target);
-                            } else {
-                                ok = false;
-                            }
-                        } else {
-                            ok = false;
-                        }
-                    } else {
-                        ok = false;
-                    }
-                    engines::VectorWriterFactory::Destroy(sink);
-                } else {
-                    ok = false;
-                }
+                std::string pdf = cdrv::Pdf(sel);
+                std::wstring target = files.size() == 1 ? out : UniquePath(DirOf(files[0]), L"~vizu-" + std::to_wstring(GetCurrentProcessId()) + L"-" + std::to_wstring(i), L".pdf");
+                if (!ops::WriteFileBytes(target, pdf.data(), pdf.size())) { ok = false; break; }
+                made.push_back(target);
                 done(i);
             }
             if (ok && files.size() > 1) {
