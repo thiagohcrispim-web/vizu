@@ -18,8 +18,8 @@
 323 RCDATA "pptx/defaultTextStyle.xml"
 330 RCDATA "build/pdfium.dll.gz"
 VS_VERSION_INFO VERSIONINFO
-FILEVERSION 19,5,0,0
-PRODUCTVERSION 19,5,0,0
+FILEVERSION 19,5,1,0
+PRODUCTVERSION 19,5,1,0
 FILEOS VOS_NT_WINDOWS32
 FILETYPE VFT_APP
 BEGIN
@@ -29,12 +29,12 @@ BEGIN
     BEGIN
       VALUE "CompanyName", "Thiago Crispim"
       VALUE "FileDescription", "Vizu"
-      VALUE "FileVersion", "19.5.0"
+      VALUE "FileVersion", "19.5.1"
       VALUE "InternalName", "Vizu"
       VALUE "OriginalFilename", "Vizu.exe"
       VALUE "LegalCopyright", "MIT License - Thiago Crispim"
       VALUE "ProductName", "Vizu"
-      VALUE "ProductVersion", "19.5.0"
+      VALUE "ProductVersion", "19.5.1"
     END
   END
   BLOCK "VarFileInfo"
