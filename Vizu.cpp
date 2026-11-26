@@ -148,6 +148,7 @@ static const float kCaption = 56, kPad = 18;
 static ui::Theme g_theme = ui::MakeTheme(ui::kThemeDark, false);
 static std::wstring g_uiFont; // fonte da interface escolhida pelo usuário (vazio = padrão: Inter)
 static void ClockRender();
+void ClockSync();
 static bool FontInstalled(const wchar_t* face) {
     HDC dc = GetDC(nullptr);
     LOGFONTW lf = {}; lf.lfCharSet = DEFAULT_CHARSET; wcsncpy(lf.lfFaceName, face, LF_FACESIZE - 1);
@@ -2797,7 +2798,7 @@ enum { kTogSpace = 1, kTogAlt, kDelayMinus, kDelayPlus, kDpi72, kDpi300, kPdfSma
        kClockOn, kClockFont, kPomoT0, kPomoT1, kPomoT2, kPomoC0, kPomoC1, kPomoC2, kPomoC3, kTheftHist, kUiFont, kOcrOn, kOcrKeep, kOcrJoin, kOcrLang, kClk100, kClk90, kClk70, kClockDock, kSte, kTheme4, kTheftOn, kFocoOn, kAgendaOn, kVecText, kVecCurves, kSysToggle,
        kClOpen, kAge1, kAge7, kAge30, kTogCleanBin, kTogDiskW, kTogDiskWarn, kDiskLimMinus, kDiskLimPlus, kDiskAll0, kDiskAll1, kTogPerfW, kTogAiW, kTogBatW, kAiInstall, kAiEdge0, kAiEdge1, kAiEdge2, kAiEdge3, kAiRecenter, kAiShowLeft, kAiWarnMinus, kAiWarnPlus, kAiCritMinus, kAiCritPlus, kAiLimReset,
        kAiWeek0, kAiWeek1, kAiWeek2, kAiShow0, kAiShow1, kAiShow2, kAiHideFull, kAiNotify, kAiSound, kAiPreview, kAiSize0, kAiSize1, kAiSize2, kTogBatDock, kTogClockClean, kPrimao,
-       kPreset0, kPreset1, kPreset2, kTogOcrBtn, kHkOcr, kHkClean, kAdv0, kAdv1, kAdv2, kAdv3, kAdv4, kAdv5, kLinkAbout, kLinkThanks, kBack, kBtnUninstall, kBtnLiteUpgrade, kTogChat, kChatEdit, kRingReset, kInspect, kTogReports,
+       kPreset0, kPreset1, kPreset2, kTogOcrBtn, kHkOcr, kHkClean, kAdv0, kAdv1, kAdv2, kAdv3, kAdv4, kAdv5, kLinkAbout, kLinkThanks, kBack, kBtnUninstall, kBtnLiteUpgrade, kTogChat, kChatEdit, kRingReset, kInspect, kTogReports, kLinkTerms,
        // Chuva digital (tema Classic) - PLANO-CHUVA-DIGITAL
        kRainEnabled, kRainColor0, kRainColor1, kRainColor2, kRainColor3, kRainColor4, kRainColorCustom,
        kRainOpacityMinus, kRainOpacityPlus, kRainCycleMinus, kRainCyclePlus,
@@ -2809,6 +2810,9 @@ static const UINT kNeonPresets[6] = {0xFF6633, 0xFF2D95, 0x00E5FF, 0xB6FF3B, 0xA
 static std::vector<std::wstring> FolderList();
 static std::wstring FolderListPath(bool create);
 static void CheckForUpdates(bool manual);
+
+static const wchar_t* kTerms = L"Termos de uso\n1. O Vizu é um programa da CrispyPixel. Ao instalar ou usar, você concorda com estes termos. Se não concordar, desinstale.\n2. Você pode usar o Vizu em quantos computadores quiser, para uso pessoal ou profissional. Não é permitido vender, alugar, redistribuir modificado ou se apresentar como autor do programa.\n3. O Vizu é fornecido \"como está\". Fazemos o possível para que funcione bem, mas não garantimos que estará livre de erros ou que servirá para um fim específico.\n4. Seus arquivos são responsabilidade sua. Conversões criam arquivos novos e não sobrescrevem os originais; a Limpeza move itens para a Lixeira ou apaga temporários que você escolheu. Mantenha cópias de segurança do que for importante.\n5. Na extensão permitida pela lei, a CrispyPixel não responde por perdas de dados, lucros cessantes, prazos perdidos ou danos indiretos decorrentes do uso ou da impossibilidade de uso do Vizu.\n6. Marcas citadas (Adobe, Photoshop, Illustrator, InDesign, CorelDRAW, Windows e outras) pertencem a seus donos. O Vizu não é afiliado a elas. Componentes de código aberto seguem suas próprias licenças.\n7. Os termos podem mudar em versões novas; a versão em vigor é sempre a que aparece aqui.\n\nPrivacidade\n• Seus arquivos nunca saem do computador. Prévias, miniaturas, conversões, OCR e Limpeza acontecem só no seu PC.\n• Relatórios de erro anônimos (ligados por padrão; desligue em Configurações › Sistema): quando algo falha, o Vizu envia versão do Vizu e do Windows, escala da tela, tema, idioma, edição, recursos ligados, onde e qual foi o erro, o resultado do autoteste e um número aleatório da instalação. Nunca envia nomes de arquivo, pastas, conteúdo, nome de usuário ou do computador.\n• Para que servem: só para encontrar e corrigir defeitos. Não vendemos, não usamos para publicidade e não juntamos com outros dados.\n• Onde ficam: o relatório passa por um servidor da Cloudflare, que apaga caminhos e e-mails por segurança, e vira uma issue pública no repositório do Vizu no GitHub (github.com/thiagohcrispim-web/vizu). Por isso ele não contém nada que identifique você.\n• O registro local de erros fica em %LOCALAPPDATA%\\DesignThumbs\\erros.log e você pode apagá-lo quando quiser.\n• Atualizações: o Vizu consulta o GitHub para saber se há versão nova; essa consulta não envia dados seus.\n• Seus direitos (LGPD): você pode desligar o envio a qualquer momento e pedir a remoção de um relatório pelo GitHub do Vizu.";
+static const wchar_t* kTermsEn = L"Terms of use\n1. Vizu is made by CrispyPixel. By installing or using it you agree to these terms. If you don't agree, uninstall it.\n2. You may use Vizu on as many computers as you like, for personal or professional work. You may not sell, rent, redistribute modified copies or claim authorship.\n3. Vizu is provided \"as is\", without warranty that it is error-free or fit for a particular purpose.\n4. Your files are your responsibility. Conversions create new files and never overwrite originals; Cleanup moves items to the Recycle Bin or deletes temporary files you chose. Keep backups of anything important.\n5. To the extent permitted by law, CrispyPixel is not liable for data loss, lost profits, missed deadlines or indirect damages arising from using or being unable to use Vizu.\n6. Trademarks mentioned belong to their owners; Vizu is not affiliated with them. Open-source components keep their own licenses.\n7. These terms may change in new versions; the one shown here is the one in force.\n\nPrivacy\n• Your files never leave your computer.\n• Anonymous error reports (on by default; turn off in Settings › System): Vizu and Windows version, display scale, theme, language, edition, features in use, where and what failed, the self-test result and a random install number. Never file names, folders, contents, user or computer names.\n• Used only to find and fix bugs. Never sold or used for ads.\n• Reports pass through a Cloudflare server, which strips paths and e-mails, and become public issues in Vizu's GitHub repository (github.com/thiagohcrispim-web/vizu), so they contain nothing that identifies you.\n• The local log is %LOCALAPPDATA%\\DesignThumbs\\erros.log; delete it whenever you like.\n• You can turn sending off at any time and ask for a report to be removed through Vizu's GitHub.";
 
 static const wchar_t* kAbout =
     L"O Vizu ensina o Explorer a entender arquivos de design e fotografia: miniaturas e painel de visualização (Alt+P) "
@@ -2947,7 +2951,7 @@ static void ApplyPreset(int pr) {
         WriteDword(L"OcrOn", 1); WriteDword(L"ClockOcr", full); WriteDword(L"ClockChat", full);
         WriteDword(L"CleanRecycle", 0); // Lixeira fora da análise nos dois presets
         for (int k : {kWDisk, kWPerf, kWAi, kWBat}) if (WidgetOn(k)) { WriteDword(WKey(k), 0); WidgetEnable(k, false); }
-        if (!g_lite && g_clock.on != full) { if (!full && g_clock.docked) ClockDock(false); ClockEnable(full); }
+        if (!g_lite && g_clock.time != full) { if (!full && g_clock.docked) ClockDock(false); ClockEnable(full); }
         RegisterGlobalHotkeys();
         ClockRender();
     }
@@ -2957,8 +2961,8 @@ static void ApplyPreset(int pr) {
 // Sem preset guardado (quem vem da 9.11): reconhece se as opções batem com um dos presets; senão, Custom.
 static int DetectPreset() {
     bool base = g_cfg.space && g_clock.ocr && !g_cfg.tempPermanent && !ReadDword(L"CleanRecycle", 1) && !WidgetOn(kWDisk) && !WidgetOn(kWPerf);
-    bool on = g_cfg.picker && g_cfg.alt && g_clock.on && g_clock.agendaOn && g_clock.theftOn && g_clock.pomoOn && g_clock.clean && g_clock.ocrBtn && g_clock.chat;
-    bool off = !g_cfg.picker && !g_cfg.alt && !g_clock.on && !g_clock.agendaOn && !g_clock.theftOn && !g_clock.pomoOn && !g_clock.clean && !g_clock.ocrBtn && !g_clock.chat;
+    bool on = g_cfg.picker && g_cfg.alt && g_clock.time && g_clock.agendaOn && g_clock.theftOn && g_clock.pomoOn && g_clock.clean && g_clock.ocrBtn && g_clock.chat;
+    bool off = !g_cfg.picker && !g_cfg.alt && !g_clock.time && !g_clock.agendaOn && !g_clock.theftOn && !g_clock.pomoOn && !g_clock.clean && !g_clock.ocrBtn && !g_clock.chat;
     return !base ? kPresetCustom : on ? kPresetDesign : off ? kPresetMinimal : kPresetCustom;
 }
 static void LoadPreset() {
@@ -3041,6 +3045,7 @@ static void EditChatButton(HWND owner) {
     if (g_chatEditResult == IDOK) { g_clock.app = NormalizeChatTarget(g_chatEditText); ClockSave(); ClockRender(); }
 }
 
+static std::string RunSelfTest();
 #include "Inspect.inc.h" // Configurações › Sistema › Avançado › Inspeção do Vizu
 
 static void SettingsAction(int id) {
@@ -3048,12 +3053,13 @@ static void SettingsAction(int id) {
     if (!g_lite && g_preset != kPresetCustom && PresetOption(id)) { g_preset = kPresetCustom; WriteDword(L"SettingsPreset", kPresetCustom); }
     switch (id) {
     case kPreset0: case kPreset1: case kPreset2: ApplyPreset(id - kPreset0); return;
-    case kTogChat: g_clock.chat = !g_clock.chat; WriteDword(L"ClockChat", g_clock.chat); ClockRender(); return;
+    case kTogChat: g_clock.chat = !g_clock.chat; WriteDword(L"ClockChat", g_clock.chat); ClockSync(); return;
     case kChatEdit: EditChatButton(g_settingsWnd); return;
-    case kTogOcrBtn: g_clock.ocrBtn = !g_clock.ocrBtn; WriteDword(L"ClockOcr", g_clock.ocrBtn); ClockRender(); return;
+    case kTogOcrBtn: g_clock.ocrBtn = !g_clock.ocrBtn; WriteDword(L"ClockOcr", g_clock.ocrBtn); ClockSync(); return;
     case kHkOcr: case kHkClean: CaptureHotkey(id); return;
     case kAdv0: case kAdv1: case kAdv2: case kAdv3: case kAdv4: case kAdv5: g_advOpen[id - kAdv0] = !g_advOpen[id - kAdv0]; return;
     case kLinkAbout: case kLinkThanks: g_setPage = id == kLinkAbout ? 1 : 2; g_setScroll = 0; return;
+    case kLinkTerms: g_setPage = 3; g_setScroll = 0; return;
     case kBack: g_setPage = 0; g_setScroll = 0; return;
     case kBtnUninstall: { // o desinstalador pergunta antes e fecha o Vizu
         wchar_t exe[MAX_PATH]; GetModuleFileNameW(nullptr, exe, MAX_PATH);
@@ -3097,7 +3103,7 @@ static void SettingsAction(int id) {
         }
         return;
     }
-    case kClockOn: ClockEnable(!g_clock.on); break;
+    case kClockOn: ClockEnable(!g_clock.time); break;
     case kClockFont: if (PickFont(g_settingsWnd, &g_clock.font, &g_clock.fontPx)) { ClockSave(); ClockRender(); } break;
     case kPomoT0: case kPomoT1: case kPomoT2: g_clock.pomoTimes = id - kPomoT0; ClockSave(); break;
     case kPomoC0: case kPomoC1: case kPomoC2: case kPomoC3: g_clock.pomoColors = id - kPomoC0; ClockSave(); ClockRender(); break;
@@ -3119,7 +3125,7 @@ static void SettingsAction(int id) {
     }
     case kTogTempDel: g_cfg.tempPermanent = !g_cfg.tempPermanent; break;
     case kClOpen: OpenCleanWindow(); return;
-    case kTogClockClean: g_clock.clean = !g_clock.clean; WriteDword(L"ClockClean", g_clock.clean); ClockRender(); return;
+    case kTogClockClean: g_clock.clean = !g_clock.clean; WriteDword(L"ClockClean", g_clock.clean); ClockSync(); return;
     case kAge1: case kAge7: case kAge30: WriteDword(L"CleanAgeDays", id == kAge1 ? 1 : id == kAge7 ? 7 : 30); return;
     case kTogCleanBin: WriteDword(L"CleanRecycle", !ReadDword(L"CleanRecycle", 1)); return;
     case kTogDiskW: WriteDword(L"DiskWidget", !WidgetOn(kWDisk)); WidgetEnable(kWDisk, WidgetOn(kWDisk)); return;
@@ -3150,8 +3156,8 @@ static void SettingsAction(int id) {
         WriteDword(L"DiskAll", id == kDiskAll1); WidgetsRenderAll();
         if (ReadDword(L"PerfWidgetX", 0x80000000) == 0x80000000 && WidgetOn(kWPerf)) { WidgetEnable(kWPerf, false); WidgetEnable(kWPerf, true); } // não arrastado: desce junto
         return;
-    case kTheftOn: if (g_clock.theft) ToggleTheft(); g_clock.theftOn = !g_clock.theftOn; WriteDword(L"ClockTheft", g_clock.theftOn); ClockRender(); break;
-    case kFocoOn: if (g_clock.phase) PomoStop(); g_clock.pomoOn = !g_clock.pomoOn; WriteDword(L"ClockPomo", g_clock.pomoOn); ClockRender(); break;
+    case kTheftOn: if (g_clock.theft) ToggleTheft(); g_clock.theftOn = !g_clock.theftOn; WriteDword(L"ClockTheft", g_clock.theftOn); ClockSync(); break;
+    case kFocoOn: if (g_clock.phase) PomoStop(); g_clock.pomoOn = !g_clock.pomoOn; WriteDword(L"ClockPomo", g_clock.pomoOn); ClockSync(); break;
     case kAgendaOn: g_clock.agendaOn = !g_clock.agendaOn; WriteDword(L"ClockAgenda", g_clock.agendaOn); ClockRender(); break;
     case kTheme0: case kTheme1: case kTheme2: case kTheme3: case kTheme4:
         g_cfg.themeMode = id == kTheme4 ? ui::kThemeClassic : id - kTheme0; SaveConfig(); ApplyTheme();
@@ -3324,7 +3330,7 @@ static void PaintSettings(HWND h) {
     ui::Brand(rt, th, x0, 26 * s, 24 * s);
     p.Text(T(L"Configurações", L"Settings", L"Configuración"), D2D1::RectF(x0, 52 * s, x0 + colW, 72 * s), 12, th.text2);
     D2D1_RECT_F close = D2D1::RectF(sz.width - pad - 32 * s, 28 * s, sz.width - pad, 60 * s);
-    p.CircleButton(close, L"", hit(kBtnClose, close), kBtnClose, th.neon); // no Crispy: X laranja com contorno e neon
+    p.CircleButton(close, L"\xE711", hit(kBtnClose, close), kBtnClose, th.neon); // X (Feather "x"); o caractere sem escape se perdia ao salvar // no Crispy: X laranja com contorno e neon
     {
         std::wstring ver = (g_lite ? L"Lite · v " : L"v ") + ShortVersion();
         float vw = p.Measure(ver, 12) + 44 * s;
@@ -3489,12 +3495,12 @@ static void PaintSettings(HWND h) {
         D2D1_RECT_F back = D2D1::RectF(x0, y, x0 + 110 * s, y + 34 * s);
         p.Pill(back, T(L"‹  Voltar", L"‹  Back", L"‹  Volver"), hit(kBack, back), false, kBack);
         y = back.bottom + 26 * s;
-        const wchar_t* title = g_setPage == 1 ? T(L"Sobre o programa", L"About", L"Acerca del programa") : T(L"Agradecimentos", L"Thanks", L"Agradecimientos");
+        const wchar_t* title = g_setPage == 1 ? T(L"Sobre o programa", L"About", L"Acerca del programa") : g_setPage == 3 ? T(L"Termos de uso e privacidade", L"Terms of use and privacy", L"Términos de uso y privacidad") : T(L"Agradecimentos", L"Thanks", L"Agradecimientos");
         p.Text(title, D2D1::RectF(x0, y, sz.width - pad, y + 28 * s), 18, th.text, DWRITE_FONT_WEIGHT_MEDIUM);
         y += 44 * s;
         float tw = sz.width - 2 * pad;
-        if (g_setPage == 1) {
-            const wchar_t* aboutText = T(kAbout, kAboutEn, kAboutEs);
+        if (g_setPage == 1 || g_setPage == 3) {
+            const wchar_t* aboutText = g_setPage == 3 ? T(kTerms, kTermsEn, kTermsEn) : T(kAbout, kAboutEn, kAboutEs);
             float ph = p.Paragraph(aboutText, x0 + 20 * s, y + 18 * s, tw - 40 * s, 12.5f, th.text2, false);
             D2D1_RECT_F about = D2D1::RectF(x0, y, x0 + tw, y + ph + 36 * s);
             p.Glass(about, 16 * s);
@@ -3546,7 +3552,7 @@ static void PaintSettings(HWND h) {
 
     // TEMPO: Relógio e Agenda; o resto em Avançado
     rows = {
-        {RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Relógio na área de trabalho", L"Desktop clock", L"Reloj en el escritorio"), T(L"Mostra hora e data no fundo do Windows", L"Shows time and date on the Windows desktop", L"Muestra hora y fecha en el escritorio de Windows")); rtoggle(kClockOn, r, g_clock.on); }},
+        {RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Relógio na área de trabalho", L"Desktop clock", L"Reloj en el escritorio"), T(L"Mostra hora e data no fundo do Windows", L"Shows time and date on the Windows desktop", L"Muestra hora y fecha en el escritorio de Windows")); rtoggle(kClockOn, r, g_clock.time); }},
         {RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Ativar Agenda", L"Enable Agenda", L"Activar Agenda"), T(L"Mostra seus próximos compromissos", L"Shows your upcoming appointments", L"Muestra tus próximos compromisos")); rtoggle(kAgendaOn, r, g_clock.agendaOn); }},
     };
     {
@@ -3582,7 +3588,7 @@ static void PaintSettings(HWND h) {
     // LIMPEZA
     rows = {
         {RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Abrir a Limpeza", L"Open Cleanup", L"Abrir Limpieza"), T(L"Também no botão direito do fundo da pasta e na bandeja", L"Also from a folder's background right-click and the tray", L"También con clic derecho en el fondo de la carpeta y en la bandeja")); rpill(r, kClOpen, T(L"Abrir", L"Open", L"Abrir"), 90 * s); }},
-        {RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Botão no relógio", L"Button on the clock", L"Botón en el reloj"), T(L"A vassoura antes do OCR abre a Limpeza", L"The broom before OCR opens Cleanup", L"La escoba antes del OCR abre Limpieza")); rtoggle(kTogClockClean, r, g_clock.clean); }},
+        {RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Botão na caixa", L"Button in the box", L"Botón en la caja"), T(L"A vassoura antes do OCR abre a Limpeza", L"The broom before OCR opens Cleanup", L"La escoba antes del OCR abre Limpieza")); rtoggle(kTogClockClean, r, g_clock.clean); }},
         hotkeyRow(kHkClean, CleanHotkey(), T(L"da Limpeza", L"Cleanup", L"Limpieza")),
     };
     {
@@ -3640,7 +3646,7 @@ static void PaintSettings(HWND h) {
     std::wstring ocrSub = std::wstring(T(L"Lê o texto de qualquer área da tela", L"Reads text from any area of the screen", L"Lee el texto de cualquier área de la pantalla"));
     if (!HotkeyName(OcrHotkey()).empty()) ocrSub += L" · " + HotkeyName(OcrHotkey());
     rows = {{RH, 0, [&](D2D1_RECT_F r) { rlabel(r, L"OCR", ocrSub.c_str()); rtoggle(kOcrOn, r, g_clock.ocr); }}};
-    if (!g_lite) rows.push_back({RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Botão no relógio", L"Button on the clock", L"Botón en el reloj"), T(L"O botão de ler texto no relógio abre o OCR", L"The read-text button on the clock opens OCR", L"El botón de leer texto en el reloj abre el OCR")); rtoggle(kTogOcrBtn, r, g_clock.ocrBtn); }});
+    if (!g_lite) rows.push_back({RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Botão na caixa", L"Button in the box", L"Botón en la caja"), T(L"O botão de ler texto no relógio abre o OCR", L"The read-text button on the clock opens OCR", L"El botón de leer texto en el reloj abre el OCR")); rtoggle(kTogOcrBtn, r, g_clock.ocrBtn); }});
     rows.push_back(hotkeyRow(kHkOcr, OcrHotkey(), T(L"do OCR", L"OCR", L"del OCR")));
     std::wstring chatSub; // o que o botão abre hoje
     if (!g_lite) {
@@ -3689,6 +3695,10 @@ static void PaintSettings(HWND h) {
             rlabel(r, T(L"Enviar relatórios de erro anônimos", L"Send anonymous error reports", L"Enviar informes de error anónimos"),
                    T(L"Versão, Windows, tema e onde deu erro. Nunca arquivos, pastas ou nomes.", L"Version, Windows, theme and where it failed. Never files, folders or names.", L"Versión, Windows, tema y dónde falló. Nunca archivos, carpetas ni nombres."));
             rtoggle(kTogReports, r, diag::Consent()); }},
+        {SH, 1, [&](D2D1_RECT_F r) {
+            rlabel(r, T(L"Termos de uso e privacidade", L"Terms of use and privacy", L"Términos de uso y privacidad"),
+                   T(L"O que você aceita ao instalar e o que o Vizu envia", L"What you accept when installing and what Vizu sends", L"Lo que aceptas al instalar y lo que envía Vizu"));
+            rpill(r, kLinkTerms, T(L"Ler", L"Read", L"Leer"), 110 * s); }},
     });
     drawSection(T(L"Sistema", L"System", L"Sistema"), rows);
 
@@ -3735,8 +3745,8 @@ static void PaintSettings(HWND h) {
                 if (sel || hh) p.Stroke(D2D1::RectF(rr.left - 4 * s, rr.top - 4 * s, rr.right + 4 * s, rr.bottom + 4 * s), d / 2 + 4 * s, sel ? ui::Rgba(0xFFFFFF, 0.9f) : ui::Rgba(0xFFFFFF, 0.35f), 1.4f * s);
             }
         }});
-    // Chuva digital - apenas para tema Classic
-    if (g_cfg.themeMode == ui::kThemeClassic) {
+    // Chuva digital: temas Classic e Crispy
+    if (g_cfg.themeMode == ui::kThemeClassic || g_cfg.themeMode == ui::kThemeCrispy) { // chuva: Classic e Crispy
         rows.push_back({RH, 0, [&](D2D1_RECT_F r) {
             rlabel(r, T(L"Chuva no fundo", L"Rain in background", L"Lluvia en el fondo"), T(L"Ativa a chuva digital no papel de parede", L"Enable digital rain on the wallpaper", L"Activa la lluvia digital en el fondo de pantalla"));
             rtoggle(kRainEnabled, r, g_cfg.rainEnabled);
@@ -4585,7 +4595,7 @@ static std::wstring DiagContext() {
     DWORD ed = vec::Edition(); c += ed == vec::kLite ? L" edicao=Lite" : ed == vec::kUltra ? L" edicao=Ultra" : L" edicao=Vizu";
     c += std::wstring(L" idioma=") + (i18n::Current() == 0 ? L"pt" : i18n::Current() == 1 ? L"en" : L"es");
     c += L" recursos=";
-    if (g_clock.on) c += L"relogio,"; if (g_cfg.space) c += L"espaco,"; if (g_cfg.alt) c += L"alt,";
+    if (g_clock.time) c += L"relogio,"; if (g_clock.on) c += L"caixa,"; if (g_cfg.space) c += L"espaco,"; if (g_cfg.alt) c += L"alt,";
     for (int k = 0; k < kWCount; ++k) if (WidgetOn(k)) c += std::wstring(WKey(k)) + L",";
     if (g_cfg.rainEnabled) c += L"chuva,";
     return c;
@@ -4612,7 +4622,7 @@ static bool SelfTestDraw(const char* name, std::string& out) {
     out += std::string(name) + (ok ? "=ok " : "=vazio ");
     return ok;
 }
-static void RunSelfTest() {
+static std::string RunSelfTest() {
     std::string out; std::vector<const char*> failed;
     // 1-2) duas superfícies seguidas (fábricas diferentes), com formas do mesmo tamanho
     if (!SelfTestDraw("desenho1", out)) failed.push_back("desenho1");
@@ -4642,6 +4652,7 @@ static void RunSelfTest() {
         if (diag::Consent() && diag::kReportHost[0] && diag::FirstToday(std::string("autoteste|") + f))
             diag::Send(diag::Report("autoteste", f, "", out));
     }
+    return failed.empty() ? out : out + " (FALHOU)";
 }
 
 int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmd, int) {

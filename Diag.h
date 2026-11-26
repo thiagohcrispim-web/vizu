@@ -1,7 +1,7 @@
 // Diag.h - registro de erros, vigia de travamento e envio anônimo (só com o aceite).
 //
 // Tudo fica em %LOCALAPPDATA%\DesignThumbs\erros.log (no máximo ~64 KB; as linhas antigas saem).
-// Com o aceite (HKCU\Software\DesignThumbs\SendReports = 1), cada tipo de erro é enviado no máximo
+// Ligado por padrão (aceito nos Termos ao instalar); SendReports = 0 desliga., cada tipo de erro é enviado no máximo
 // uma vez por dia para o receptor (Cloudflare Worker, ver server/report-worker), que abre uma issue no GitHub.
 //
 // O relatório NUNCA leva nomes de arquivo, caminhos, nome de usuário ou do PC. Só: versão, Windows,
@@ -31,7 +31,7 @@ inline DWORD RegDword(const wchar_t* name, DWORD def) {
     return RegGetValueW(HKEY_CURRENT_USER, kCfgKey, name, RRF_RT_REG_DWORD, nullptr, &v, &sz) == ERROR_SUCCESS ? v : def;
 }
 inline void RegSetDword(const wchar_t* name, DWORD v) { RegSetKeyValueW(HKEY_CURRENT_USER, kCfgKey, name, REG_DWORD, &v, sizeof(v)); }
-inline bool Consent() { return RegDword(L"SendReports", 0) != 0; }
+inline bool Consent() { return RegDword(L"SendReports", 1) != 0; } // ligado por padrão: aceito nos Termos ao instalar; desligável em Configurações › Sistema
 inline void SetConsent(bool on) { RegSetDword(L"SendReports", on ? 1 : 0); }
 
 inline std::wstring Dir() {

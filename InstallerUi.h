@@ -108,10 +108,11 @@ struct Window {
         };
         bool done = page == 2;
         ui::Brand(rt, body, L*s, 44*s, 32*s); // logotipo 125 x 32, como no protótipo
-        p.Text(L"19.5.8", rect(R-120, 44, R, 76), tk.t_caption.size, text2, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_TRAILING);
+        p.Text(L"19.5.9", rect(R-120, 44, R, 76), tk.t_caption.size, text2, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_TRAILING);
         if (page == 0) {
             ph.Text(installed ? T(L"Atualize ou troque a versão:",L"Update or switch edition:",L"Actualiza o cambia la versión:") : T(L"Escolha uma versão:",L"Choose an edition:",L"Elige una versión:"), rect(L,102,R,138), tk.t_title.size, text, DWRITE_FONT_WEIGHT_BOLD);
             p.Text(T(L"Para trocar depois, rode o instalador de novo.",L"To switch later, run the installer again.",L"Para cambiar después, ejecuta el instalador de nuevo."), rect(L,146,R,168), tk.t_caption.size, text2);
+            p.Text(T(L"Ao instalar, você aceita os Termos de uso e a Privacidade (veja em Configurações › Sistema).",L"By installing, you accept the Terms of use and Privacy (see Settings › System).",L"Al instalar, aceptas los Términos de uso y la Privacidad (ver Configuración › Sistema)."), rect(L,168,R,188), tk.t_caption.size, text2);
             struct Ed { const wchar_t* name; const wchar_t* desc; const wchar_t* size; int bar; };
             Ed eds[3] = {
                 {L"Lite", T(L"Prévia com Espaço e miniaturas",L"Space preview and thumbnails",L"Vista con Espacio y miniaturas"), L"2 MB", 2},

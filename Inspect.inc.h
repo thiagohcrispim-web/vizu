@@ -400,7 +400,9 @@ static void InspMail(const std::wstring& report, const std::wstring& summary) {
 }
 
 // Miniaturas da pasta escolhida + relatório (Markdown com bloco JSON) + e-mail.
+static void InspFunctional();
 static void InspThumbsAndReport() {
+    InspFunctional();
     std::wstring folder = PickFolder();
     std::vector<InspThumb> thumbs;
     if (!folder.empty()) {
@@ -463,6 +465,8 @@ static void InspThumbsAndReport() {
               L"Vizu em branco também = o próprio arquivo não traz imagem utilizável ou falta suporte no leitor.\n";
     }
     md += L"\n## Registro do teclado (últimas linhas de %TEMP%\\Vizu-teclado.log)\n\n```\n" + g_insp.keylogDuring + L"\n```\n";
+    std::wstring errLog = ReadTail(diag::Dir() + L"\\erros.log", 30);
+    md += L"\n## Registro de erros (últimas linhas de %LOCALAPPDATA%\\DesignThumbs\\erros.log)\n\n```\n" + errLog + L"\n```\n";
     // JSON
     std::string js = "{\n  \"report\": \"vizu-inspection\",\n  \"version\": 1,\n  \"generated\": " + JsonStr(stamp) + ",\n  \"environment\": {";
     for (size_t i = 0; i < g_insp.env.size(); ++i) js += std::string(i ? ", " : "") + JsonStr(g_insp.env[i].first) + ": " + JsonStr(g_insp.env[i].second);
@@ -479,7 +483,7 @@ static void InspThumbsAndReport() {
               ", \"vizu_hresult\": \"" + hr + "\", \"vizu_white_percent\": " + std::to_string(t.vizuWhite) + ", \"vizu_ms\": " + std::to_string(t.ms) +
               ", \"explorer_white_percent\": " + std::to_string(t.shellWhite) + ", \"note\": " + JsonStr(t.psd) + "}";
     }
-    js += "\n  ],\n  \"key_log\": " + JsonStr(g_insp.keylogDuring) + "\n}\n";
+    js += "\n  ],\n  \"key_log\": " + JsonStr(g_insp.keylogDuring) + ",\n  \"error_log\": " + JsonStr(ReadTail(diag::Dir() + L"\\erros.log", 30)) + "\n}\n";
     std::string out = "\xEF\xBB\xBF" + Utf8(md) + "\n## Dados (JSON)\n\n```json\n" + js + "```\n";
     HANDLE f = CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, 0, nullptr);
     if (f != INVALID_HANDLE_VALUE) { DWORD w; WriteFile(f, out.data(), (DWORD)out.size(), &w, nullptr); CloseHandle(f); }
@@ -495,4 +499,65 @@ static void InspThumbsAndReport() {
                        T(L"\n\nAbrir um e-mail para o suporte com o relatório?", L"\n\nOpen an e-mail to support with the report?", L"\n\n¿Abrir un correo a soporte con el informe?");
     if (MessageBoxW(nullptr, msg.c_str(), T(L"Inspeção do Vizu", L"Vizu inspection", L"Inspección de Vizu"), MB_YESNO | (fails ? MB_ICONWARNING : MB_ICONINFORMATION) | MB_SETFOREGROUND) == IDYES)
         InspMail(path, summary);
+}
+
+// Testes de função que não precisam de clique (rodam no fim da inspeção). Nada é apagado fora da pasta de teste.
+static void InspFunctional() {
+    // 1) autoteste de desenho, registro, versão e fonte (o mesmo da abertura)
+    {
+        std::string st = RunSelfTest();
+        std::wstring w(st.begin(), st.end());
+        InspAdd("autoteste", st.find("FALHOU") == std::string::npos ? 1 : 0, w);
+    }
+    // 2) conversões a partir do PSD de teste (PNG, JPG, PDF, WEBP); as saídas são apagadas em seguida
+    if (vec::Edition() == vec::kLite) InspAdd("conversoes", 2, L"não testado: edição Lite não converte");
+    else if (GetFileAttributesW(g_insp.testFile.c_str()) == INVALID_FILE_ATTRIBUTES) InspAdd("conversoes", 2, L"não testado: arquivo de teste ausente");
+    else {
+        struct { ops::Format f; const wchar_t* n; } fmts[] = {{ops::kPng, L"PNG"}, {ops::kJpg, L"JPG"}, {ops::kPdf, L"PDF"}, {ops::kWebp, L"WEBP"}};
+        std::wstring ok, bad;
+        for (auto& f : fmts) {
+            jobs::Job j; j.format = f.f; j.suffix = L"(inspecao)";
+            jobs::Result r;
+            try { r = jobs::Run({g_insp.testFile}, j, [](size_t, size_t) {}); } catch (...) { r.failed = 1; }
+            bool good = r.failed == 0 && !r.outputs.empty();
+            for (auto& o : r.outputs) {
+                WIN32_FILE_ATTRIBUTE_DATA fa;
+                if (!GetFileAttributesExW(o.c_str(), GetFileExInfoStandard, &fa) || (fa.nFileSizeLow == 0 && fa.nFileSizeHigh == 0)) good = false;
+                if (o.rfind(g_insp.dir, 0) == 0) DeleteFileW(o.c_str()); // só dentro da pasta de teste
+            }
+            (good ? ok : bad) += std::wstring(f.n) + (good ? L" " : (r.errors.empty() ? L" " : L" (" + r.errors[0] + L") "));
+        }
+        InspAdd("conversoes", bad.empty() ? 1 : 0, bad.empty() ? L"funcionaram: " + ok : L"falharam: " + bad + L"· funcionaram: " + (ok.empty() ? L"nenhuma" : ok));
+    }
+    // 3) motor vetorial (CDR → SVG/EPS na edição Ultra)
+    InspAdd("motor_vetorial", 2, vec::Edition() == vec::kUltra ? L"edição Ultra: CDR → SVG/EPS pelo motor instalado" : L"edição sem SVG/EPS vetorial (CDR → PDF/PNG pelo leitor próprio)");
+    // 4) OCR: idiomas de reconhecimento instalados no Windows
+    if (!g_clock.ocr) InspAdd("ocr", 2, L"não testado: OCR desligado nas Configurações");
+    else {
+        std::vector<std::wstring> langs;
+        try { langs = ocr::Languages(); } catch (...) {}
+        std::wstring l; for (auto& x : langs) l += (l.empty() ? L"" : L", ") + x;
+        InspAdd("ocr", langs.empty() ? 0 : 1, langs.empty() ? L"o Windows não tem nenhum idioma de OCR instalado (Configurações do Windows › Idioma › recursos de idioma)" : L"idiomas: " + l);
+    }
+    // 5) caixa do relógio e botões
+    {
+        std::wstring b = std::wstring(L"hora ") + (g_clock.time ? L"ligada" : L"desligada") + L"; botões: " +
+                         (g_clock.theftOn ? L"roubo " : L"") + (g_clock.pomoOn ? L"pomodoro " : L"") + (g_clock.chat ? L"app " : L"") +
+                         (g_clock.clean ? L"limpeza " : L"") + (g_clock.ocr && g_clock.ocrBtn ? L"ocr " : L"");
+        bool want = g_clock.time || g_clock.theftOn || g_clock.pomoOn || g_clock.chat || g_clock.clean || (g_clock.ocr && g_clock.ocrBtn);
+        bool has = g_clock.wnd && IsWindowVisible(g_clock.wnd);
+        if (g_lite) InspAdd("caixa_relogio", 2, L"edição Lite: sem relógio");
+        else InspAdd("caixa_relogio", want == has ? 1 : 0, b + (want == has ? L"" : has ? L"; a caixa aparece mas devia estar fechada" : L"; a caixa devia aparecer e NÃO está na tela") +
+                     L"; tamanho " + std::to_wstring(g_clock.scalePct) + L"%");
+    }
+    // 6) chuva no fundo
+    {
+        bool want = rain::ShouldRun((int)g_cfg.themeMode);
+        if (!g_cfg.rainEnabled) InspAdd("chuva", 2, L"desligada nas Configurações");
+        else if (!want) InspAdd("chuva", 2, L"ligada, mas o tema atual não tem chuva (só Classic e Crispy)");
+        else InspAdd("chuva", rain::g_running && rain::g_rainWnd && IsWindow(rain::g_rainWnd) ? 1 : 0,
+                     rain::g_running ? std::wstring(L"rodando na camada ") + (rain::g_insertAfter ? L"Progman (Windows 11 24H2+)" : L"WorkerW") : L"devia estar rodando e NÃO está (veja o erros.log)");
+    }
+    // 7) relatórios anônimos
+    InspAdd("relatorios", 2, diag::Consent() ? L"envio ligado" : L"envio desligado pelo usuário");
 }

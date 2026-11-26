@@ -302,7 +302,7 @@ inline void UpdateConfig(const Config& cfg) {
 
 // Verifica se deve rodar (tema Classic ativo + enabled)
 inline bool ShouldRun(int currentTheme) {
-    return currentTheme == ui::kThemeClassic && g_cfg.enabled;
+    return (currentTheme == ui::kThemeClassic || currentTheme == ui::kThemeCrispy) && g_cfg.enabled; // Classic e Crispy
 }
 
 } // namespace rain
