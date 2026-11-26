@@ -3,7 +3,7 @@
 <h3 align="center">Veja todos os seus arquivos de design no Windows,<br>mesmo sem os programas instalados.</h3>
 
 <p align="center">
-  <a href="https://github.com/thiagohcrispim-web/vizu/releases/latest/download/Vizu_Setup_19.5.10_x64.exe"><b>⬇ Baixar o Vizu para Windows</b></a> &nbsp;·&nbsp; grátis e de código aberto (MIT)
+  <a href="https://github.com/thiagohcrispim-web/vizu/releases/latest/download/Vizu_Setup_19.6.0_x64.exe"><b>⬇ Baixar o Vizu para Windows</b></a> &nbsp;·&nbsp; grátis e de código aberto (MIT)
 </p>
 
 ---
@@ -99,7 +99,7 @@ desligado nas Configurações.
 
 ## Instalar
 
-1. Baixe o **[instalador](https://github.com/thiagohcrispim-web/vizu/releases/latest/download/Vizu_Setup_19.5.10_x64.exe)** e abra. Não precisa de administrador.
+1. Baixe o **[instalador](https://github.com/thiagohcrispim-web/vizu/releases/latest/download/Vizu_Setup_19.6.0_x64.exe)** e abra. Não precisa de administrador.
 2. Pronto: as miniaturas aparecem conforme você navega pelas pastas.
 
 Para atualizar, o Vizu avisa sozinho quando sai versão nova. Para desinstalar, rode o instalador de novo ou use
@@ -160,7 +160,7 @@ https://docs.github.com/site-policy/privacy-policies/github-general-privacy-stat
 
 - Compilar no Linux: `./build.sh` (MinGW `g++-mingw-w64-x86-64-posix`; os headers mais novos do mingw-w64 estão em `third_party/`).
 - O GitHub Actions compila a cada envio e publica o instalador como artefato (`.github/workflows/build.yml`).
-- Instalação silenciosa: `Vizu_Setup_19.5.10_x64.exe /install /S` · desinstalar: `Vizu.exe /uninstall [/S]`.
+- Instalação silenciosa: `Vizu_Setup_19.6.0_x64.exe /install /S` · desinstalar: `Vizu.exe /uninstall [/S]`.
 - Diagnóstico de um arquivo: `Vizu.exe /diag "arquivo"` ou arraste o arquivo sobre `diagnostico.bat`. Sem arquivo (`Vizu.exe /diag` ou dois cliques no `.bat`): diagnóstico do Espaço e do Alt.
 - A biblioteca `DesignThumbs.dll` (miniaturas do Explorer) e a chave de registro `HKCU\Software\DesignThumbs` mantêm o
   nome antigo, para não quebrar as miniaturas nem as configurações de quem já usa.
@@ -169,6 +169,7 @@ https://docs.github.com/site-policy/privacy-policies/github-general-privacy-stat
 <details>
 <summary><b>Histórico de versões</b></summary>
 
+- **v19.6.0** — Agenda conectada ao Google Agenda (só leitura): em Configurações › Tempo › Google Agenda, cole o endereço secreto iCal e seus eventos aparecem em azul na Agenda, com os avisos de 10 e 5 min. O link fica criptografado no seu Windows e a agenda atualiza a cada 20 min, funcionando também sem internet com a última cópia.
 - **v19.5.10** — Chuva não congela mais: só pausa quando todos os monitores estão cobertos por janelas, com a tela bloqueada ou na bateria fraca (antes, uma janela maximizada em qualquer monitor parava tudo). O motivo da pausa vai para o erros.log e para a inspeção.
 - **v19.5.9** — Caixa do relógio volta ao tamanho certo e começa em 70%. Os botões (Limpeza, Ler texto, App, Pomodoro, Roubo de tempo) funcionam sem a hora: desligar o relógio só tira a hora. Botões mais discretos e ícones maiores. X das Configurações de volta e engrenagem no Preview. Termos de uso e privacidade em Configurações › Sistema; relatórios anônimos ligados por padrão. Chuva também no tema Crispy. Inspeção agora testa conversões, OCR, caixa do relógio, chuva e autoteste, e traz o erros.log.
 - **v19.5.8** — Aviso de atualização volta a mostrar "Clique para atualizar", e o botão Atualizações nas Configurações instala direto.
