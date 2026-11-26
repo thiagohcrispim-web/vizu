@@ -117,3 +117,9 @@ arquivos: Clock.inc.h
 proibido: float H = tk\.sp_8 \* 8
 motivo: na 19.5 a caixa do relógio virou 256 px de altura (tokens multiplicados errado); a altura certa é 64 px x escala
 origem: v19.5.8
+
+id: chuva-pausa-so-sem-visao
+arquivos: Rain.inc.h
+exigido: inline bool MonitorCovered\(
+motivo: na 19.5.9 uma janela maximizada em qualquer monitor (ou "Mostrar animações" desligado) congelava a chuva toda; ela só pausa com TODOS os monitores cobertos, tela bloqueada ou bateria fraca
+origem: v19.5.9

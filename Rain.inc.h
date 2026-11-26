@@ -9,6 +9,7 @@
 #include <random>
 #include <algorithm>
 #include <wincodec.h>
+#include <dwmapi.h>
 #include "Ui.h"
 
 namespace rain {
@@ -112,20 +113,46 @@ inline void LoadWallpaper() {
     if (cv) cv->Release(); if (fr) fr->Release(); if (dec) dec->Release(); if (wic) wic->Release();
 }
 
-// Pausar quando não aparece ou não convém (janela em tela cheia/maximizada, bateria baixa, animações desligadas)
+// Pausar só quando não dá para ver a chuva: TODOS os monitores cobertos por janelas maximizadas/tela cheia,
+// tela bloqueada, ou na bateria fraca. (Na 19.5.9 uma janela maximizada em QUALQUER monitor, ou "Mostrar animações"
+// desligado no Windows, congelava a chuva inteira.)
+inline const char* g_pauseReason = "";
+inline unsigned long long g_frames = 0;
+inline bool MonitorCovered(HMONITOR mon) {
+    MONITORINFO mi = {sizeof(mi)}; if (!GetMonitorInfoW(mon, &mi)) return false;
+    struct Ctx { RECT work; bool covered; } c = {mi.rcWork, false};
+    EnumWindows([](HWND w, LPARAM lp) -> BOOL {
+        auto* c = (Ctx*)lp;
+        if (!IsWindowVisible(w) || IsIconic(w)) return TRUE;
+        BOOL cloaked = FALSE; DwmGetWindowAttribute(w, DWMWA_CLOAKED, &cloaked, sizeof(cloaked));
+        if (cloaked) return TRUE;
+        LONG ex = GetWindowLongW(w, GWL_EXSTYLE);
+        if (ex & (WS_EX_TOOLWINDOW | WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE)) return TRUE; // relógio, widgets, sobreposições
+        wchar_t cls[64] = {}; GetClassNameW(w, cls, 64);
+        if (!wcscmp(cls, L"Progman") || !wcscmp(cls, L"WorkerW") || !wcscmp(cls, L"Shell_TrayWnd") || !wcscmp(cls, L"Shell_SecondaryTrayWnd")) return TRUE;
+        RECT r; if (!GetWindowRect(w, &r)) return TRUE;
+        if (r.left <= c->work.left + 8 && r.top <= c->work.top + 8 && r.right >= c->work.right - 8 && r.bottom >= c->work.bottom - 8) { c->covered = true; return FALSE; }
+        return TRUE;
+    }, (LPARAM)&c);
+    return c.covered;
+}
 inline bool ShouldPause() {
-    HWND fg = GetForegroundWindow();
-    if (!fg) return true; // tela bloqueada
-    wchar_t cls[64] = {}; GetClassNameW(fg, cls, 64);
-    if (wcscmp(cls, L"Progman") && wcscmp(cls, L"WorkerW")) { // a própria área de trabalho em foco não conta
-        RECT rc; GetWindowRect(fg, &rc);
-        MONITORINFO mi = {sizeof(mi)}; GetMonitorInfoW(MonitorFromWindow(fg, MONITOR_DEFAULTTONEAREST), &mi);
-        if (rc.left <= mi.rcWork.left && rc.right >= mi.rcWork.right && rc.top <= mi.rcWork.top && rc.bottom >= mi.rcWork.bottom) return true;
+    const char* why = "";
+    if (!GetForegroundWindow()) why = "tela bloqueada";
+    else {
+        SYSTEM_POWER_STATUS ps;
+        if (GetSystemPowerStatus(&ps) && ps.ACLineStatus == 0 && (ps.BatteryFlag & (2 | 4))) why = "bateria fraca";
+        else {
+            bool all = true;
+            EnumDisplayMonitors(nullptr, nullptr, [](HMONITOR m, HDC, LPRECT, LPARAM lp) -> BOOL { if (!MonitorCovered(m)) { *(bool*)lp = false; return FALSE; } return TRUE; }, (LPARAM)&all);
+            if (all) why = "todos os monitores cobertos por janelas";
+        }
     }
-    SYSTEM_POWER_STATUS ps;
-    if (GetSystemPowerStatus(&ps) && ps.ACLineStatus == 0 && (ps.BatteryFlag & (2 | 4))) return true; // na bateria e baixa
-    BOOL animOn = TRUE; SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, &animOn, 0);
-    return !animOn;
+    if (strcmp(why, g_pauseReason)) { // registra só quando muda
+        diag::Log(std::string("chuva: ") + (why[0] ? std::string("pausada (") + why + ")" : std::string("andando")));
+        g_pauseReason = why;
+    }
+    return why[0] != 0;
 }
 
 // Desenha um quadro: papel de parede (em cada monitor, preenchendo) e a chuva por cima.
@@ -143,6 +170,7 @@ inline void DrawFrame() {
     float elapsedMs = (float)((now.QuadPart - g_startTime.QuadPart) * 1000.0 / g_freq.QuadPart);
     float cycleProgress = fmodf(elapsedMs, (float)g_cfg.cycleMs) / g_cfg.cycleMs; // loop perfeito
 
+    ++g_frames;
     g_rt->BeginDraw();
     COLORREF bg = GetSysColor(COLOR_DESKTOP);
     g_rt->Clear(D2D1::ColorF(GetRValue(bg) / 255.f, GetGValue(bg) / 255.f, GetBValue(bg) / 255.f));

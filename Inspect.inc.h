@@ -556,7 +556,7 @@ static void InspFunctional() {
         if (!g_cfg.rainEnabled) InspAdd("chuva", 2, L"desligada nas Configurações");
         else if (!want) InspAdd("chuva", 2, L"ligada, mas o tema atual não tem chuva (só Classic e Crispy)");
         else InspAdd("chuva", rain::g_running && rain::g_rainWnd && IsWindow(rain::g_rainWnd) ? 1 : 0,
-                     rain::g_running ? std::wstring(L"rodando na camada ") + (rain::g_insertAfter ? L"Progman (Windows 11 24H2+)" : L"WorkerW") : L"devia estar rodando e NÃO está (veja o erros.log)");
+                     rain::g_running ? std::wstring(L"rodando na camada ") + (rain::g_insertAfter ? L"Progman (Windows 11 24H2+)" : L"WorkerW") + L"; " + std::to_wstring(rain::g_frames) + L" quadros desenhados" + (rain::g_pauseReason[0] ? L"; PAUSADA agora: " + std::wstring(rain::g_pauseReason, rain::g_pauseReason + strlen(rain::g_pauseReason)) : std::wstring(L"; andando")) : L"devia estar rodando e NÃO está (veja o erros.log)");
     }
     // 7) relatórios anônimos
     InspAdd("relatorios", 2, diag::Consent() ? L"envio ligado" : L"envio desligado pelo usuário");
