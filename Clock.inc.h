@@ -65,7 +65,7 @@ static ULONGLONG ClockLeft() {
 // linhas antigas sem d/a valem 30 min com avisos de 10 e 5 min).
 
 enum { kAlert10 = 1, kAlert5 = 2, kAlert0 = 4 };
-struct AgendaItem { SYSTEMTIME when; std::wstring title; int dur = 30; int alerts = kAlert10 | kAlert5; };
+struct AgendaItem { SYSTEMTIME when; std::wstring title; int dur = 30; int alerts = kAlert10 | kAlert5; bool ext = false; }; // ext = veio do iCal (só leitura)
 static std::vector<AgendaItem> LoadAgenda() {
     std::vector<AgendaItem> r;
     FILE* f = _wfopen(DataPath(L"agenda.txt").c_str(), L"rt, ccs=UTF-8");
@@ -111,12 +111,13 @@ static bool SaveAgenda(const std::vector<AgendaItem>& v) {
     if (fclose(f) != 0) { DeleteFileW(temp.c_str()); return false; }
     return MoveFileExW(temp.c_str(), target.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != FALSE;
 }
+static std::vector<AgendaItem> LoadAgendaView(int* nLocal = nullptr); // IcalAgenda.inc.h: locais + iCal
 static LONGLONG Minutes(const SYSTEMTIME& t) { FILETIME f; SystemTimeToFileTime(&t, &f); return (LONGLONG)(((ULONGLONG)f.dwHighDateTime << 32 | f.dwLowDateTime) / 600000000ull); }
 static bool AgendaSoon(std::wstring* next) { // evento na próxima hora?
     SYSTEMTIME now; GetLocalTime(&now);
     LONGLONG m = Minutes(now), best = LLONG_MAX;
     static std::vector<AgendaItem> cache; static ULONGLONG at = 0; // relê o arquivo no máximo a cada 10 s
-    if (!at || GetTickCount64() - at > 10000) { cache = LoadAgenda(); at = GetTickCount64(); }
+    if (!at || GetTickCount64() - at > 10000) { cache = LoadAgendaView(); at = GetTickCount64(); }
     for (auto& a : cache) {
         LONGLONG d = Minutes(a.when) - m;
         if (d >= 0 && d <= 60 && d < best) { best = d; if (next) { wchar_t b[16]; swprintf(b, 16, L"%02d:%02d ", a.when.wHour, a.when.wMinute); *next = b + a.title; } }

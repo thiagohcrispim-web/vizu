@@ -125,7 +125,7 @@ static void PaintAgenda(HWND h) {
     }
     y += 64 * s;
 
-    auto items = LoadAgenda();
+    auto items = LoadAgendaView(); // locais primeiro (índices da edição), depois os do Google (ext, só leitura)
     // semana (segunda a domingo)
     SYSTEMTIME mon = AddDays(g_ag.day, -((dow + 6) % 7));
     float cw = (W - 2 * x - 6 * tk.sp_2 * s) / 7;
@@ -190,12 +190,12 @@ static void PaintAgenda(HWND h) {
         float y0 = ys0[i], y1 = ys1[i];
         float cwid = (tlR - ex - (ncol[i] - 1) * tk.sp_1 * s) / ncol[i];
         D2D1_RECT_F r = D2D1::RectF(ex + col[i] * (cwid + tk.sp_1 * s), y0 + 1 * s, ex + col[i] * (cwid + tk.sp_1 * s) + cwid, y1);
-        bool past = Minutes(a.when) + a.dur < nowM, next = i == nextIdx, editing = i == g_ag.editIdx, hv = hit(kAgEvent0 + i, r);
+        bool past = Minutes(a.when) + a.dur < nowM, next = i == nextIdx, editing = i == g_ag.editIdx, hv = !a.ext && hit(kAgEvent0 + i, r); // externo não abre edição
         D2D1_COLOR_F bg = next || editing ? (th.neon ? ui::Rgba(ui::NeonColor(), 0.14f) : th.dark ? ui::Rgba(0xFFFFFF, 0.10f) : ui::Rgba(0x000000, 0.07f)) : field;
         if (hv) bg = th.dark ? ui::Rgba(0xFFFFFF, 0.12f) : ui::Rgba(0x000000, 0.08f);
         if (next && th.neon) p.Glow(r, tk.r_control * s * 1.25f);
         p.Fill(r, ui::InnerRadius(tk.r_card, tk.sp_2) * s, bg);
-        D2D1_COLOR_F bar = next || editing ? acc : (th.dark ? ui::Rgba(0xFFFFFF, 0.25f) : ui::Rgba(0x000000, 0.25f));
+        D2D1_COLOR_F bar = next || editing ? acc : a.ext ? ui::Rgba(0x4285F4) : (th.dark ? ui::Rgba(0xFFFFFF, 0.25f) : ui::Rgba(0x000000, 0.25f)); // azul = Google
         p.Fill(D2D1::RectF(r.left, r.top + 4 * s, r.left + 3 * s, r.bottom - 4 * s), tk.sp_1 * s * 0.375f, bar);
         D2D1_COLOR_F tc = th.text, t2 = th.text2;
         if (past) { tc.a *= 0.5f; t2.a *= 0.5f; }
@@ -204,7 +204,7 @@ static void PaintAgenda(HWND h) {
         swprintf(when, 48, L"%02d:%02d – %02d:%02d", a.when.wHour, a.when.wMinute, e.wHour, e.wMinute);
         bool tall = r.bottom - r.top > 40 * s;
         p.Text(a.title, D2D1::RectF(r.left + 12 * s, r.top + 4 * s, r.right - (r.right - r.left > 260 * s ? 112 : 8) * s, r.top + (tall ? 22 : r.bottom - r.top - 4) * s), 13, tc, next ? DWRITE_FONT_WEIGHT_BOLD : DWRITE_FONT_WEIGHT_SEMI_BOLD);
-        if (tall) p.Text(when, D2D1::RectF(r.left + 12 * s, r.top + 22 * s, r.right - 12 * s, r.top + 38 * s), tk.t_section.size, t2);
+        if (tall) p.Text(a.ext ? std::wstring(when) + L"  ·  Google" : std::wstring(when), D2D1::RectF(r.left + 12 * s, r.top + 22 * s, r.right - 12 * s, r.top + 38 * s), tk.t_section.size, t2);
         else if (r.right - r.left > 260 * s) p.Text(when, D2D1::RectF(r.right - 110 * s, r.top, r.right - 10 * s, r.bottom), tk.t_section.size, t2, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_TRAILING);
         if (next) {
             LONGLONG left = Minutes(a.when) - nowM;
@@ -613,8 +613,8 @@ static void ShowReminder(const AgendaItem& a, int level) {
 static void CheckReminders() {
     static ULONGLONG lastLoad = 0;
     static std::vector<AgendaItem> cache;
-    if (GetTickCount64() - lastLoad > 10000 || lastLoad == 0) { cache = LoadAgenda(); lastLoad = GetTickCount64(); }
-    if (g_ag.wnd) cache = LoadAgenda(), lastLoad = GetTickCount64(); // a agenda pode ter acabado de mudar
+    if (GetTickCount64() - lastLoad > 10000 || lastLoad == 0) { cache = LoadAgendaView(); lastLoad = GetTickCount64(); }
+    if (g_ag.wnd) cache = LoadAgendaView(), lastLoad = GetTickCount64(); // a agenda pode ter acabado de mudar
     SYSTEMTIME now; GetLocalTime(&now);
     LONGLONG m = Minutes(now);
     for (size_t i = 0; i < g_remSnooze.size(); ++i)

@@ -2777,6 +2777,7 @@ static void SetAutostart(bool on);
 static bool AutostartEnabled();
 
 #include "Clock.inc.h"
+#include "IcalAgenda.inc.h" // Google Agenda via link iCal (só leitura)
 #include "OcrUi.inc.h"
 #include "Agenda.inc.h"
 #include "Hearts.inc.h"
@@ -2798,7 +2799,7 @@ enum { kTogSpace = 1, kTogAlt, kDelayMinus, kDelayPlus, kDpi72, kDpi300, kPdfSma
        kClockOn, kClockFont, kPomoT0, kPomoT1, kPomoT2, kPomoC0, kPomoC1, kPomoC2, kPomoC3, kTheftHist, kUiFont, kOcrOn, kOcrKeep, kOcrJoin, kOcrLang, kClk100, kClk90, kClk70, kClockDock, kSte, kTheme4, kTheftOn, kFocoOn, kAgendaOn, kVecText, kVecCurves, kSysToggle,
        kClOpen, kAge1, kAge7, kAge30, kTogCleanBin, kTogDiskW, kTogDiskWarn, kDiskLimMinus, kDiskLimPlus, kDiskAll0, kDiskAll1, kTogPerfW, kTogAiW, kTogBatW, kAiInstall, kAiEdge0, kAiEdge1, kAiEdge2, kAiEdge3, kAiRecenter, kAiShowLeft, kAiWarnMinus, kAiWarnPlus, kAiCritMinus, kAiCritPlus, kAiLimReset,
        kAiWeek0, kAiWeek1, kAiWeek2, kAiShow0, kAiShow1, kAiShow2, kAiHideFull, kAiNotify, kAiSound, kAiPreview, kAiSize0, kAiSize1, kAiSize2, kTogBatDock, kTogClockClean, kPrimao,
-       kPreset0, kPreset1, kPreset2, kTogOcrBtn, kHkOcr, kHkClean, kAdv0, kAdv1, kAdv2, kAdv3, kAdv4, kAdv5, kLinkAbout, kLinkThanks, kBack, kBtnUninstall, kBtnLiteUpgrade, kTogChat, kChatEdit, kRingReset, kInspect, kTogReports, kLinkTerms,
+       kPreset0, kPreset1, kPreset2, kTogOcrBtn, kHkOcr, kHkClean, kAdv0, kAdv1, kAdv2, kAdv3, kAdv4, kAdv5, kLinkAbout, kLinkThanks, kBack, kBtnUninstall, kBtnLiteUpgrade, kTogChat, kChatEdit, kAgIcal, kRingReset, kInspect, kTogReports, kLinkTerms,
        // Chuva digital (tema Classic) - PLANO-CHUVA-DIGITAL
        kRainEnabled, kRainColor0, kRainColor1, kRainColor2, kRainColor3, kRainColor4, kRainColorCustom,
        kRainOpacityMinus, kRainOpacityPlus, kRainCycleMinus, kRainCyclePlus,
@@ -3045,6 +3046,57 @@ static void EditChatButton(HWND owner) {
     if (g_chatEditResult == IDOK) { g_clock.app = NormalizeChatTarget(g_chatEditText); ClockSave(); ClockRender(); }
 }
 
+// Configurações › Tempo › Google Agenda: cola o "Endereço secreto no formato iCal" (só leitura). Em branco desconecta.
+static void EditIcalLink(HWND owner) {
+    static bool reg = false;
+    if (!reg) { WNDCLASSW wc = {}; wc.lpfnWndProc = ChatEditProc; wc.hInstance = g_inst; wc.lpszClassName = L"VizuChatEdit"; wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
+                wc.hbrBackground = GetSysColorBrush(COLOR_BTNFACE); wc.hIcon = LoadIcon(g_inst, MAKEINTRESOURCE(1)); RegisterClassW(&wc); reg = true; } // já registrada pelo EditChatButton: sem efeito
+    UINT dpi = owner ? GetDpiForWindow(owner) : 96;
+    auto S = [dpi](int v) { return MulDiv(v, (int)dpi, 96); };
+    RECT orc = {0, 0, 800, 600}; if (owner) GetWindowRect(owner, &orc);
+    RECT rc = {0, 0, S(520), S(196)};
+    AdjustWindowRectExForDpi(&rc, WS_CAPTION | WS_SYSMENU, FALSE, WS_EX_DLGMODALFRAME, dpi);
+    int w = rc.right - rc.left, hh = rc.bottom - rc.top;
+    HWND d = CreateWindowExW(WS_EX_DLGMODALFRAME | WS_EX_TOPMOST, L"VizuChatEdit", T(L"Google Agenda", L"Google Calendar", L"Google Calendar"), WS_CAPTION | WS_SYSMENU | WS_POPUP,
+                             (orc.left + orc.right - w) / 2, (orc.top + orc.bottom - hh) / 2, w, hh, owner, nullptr, g_inst, nullptr);
+    if (!d) return;
+    NONCLIENTMETRICSW ncm = {sizeof(ncm)}; SystemParametersInfoForDpi(SPI_GETNONCLIENTMETRICS, sizeof(ncm), &ncm, 0, dpi);
+    HFONT font = CreateFontIndirectW(&ncm.lfMessageFont);
+    HWND lab = CreateWindowExW(0, L"STATIC", T(L"Cole o \"Endereço secreto no formato iCal\" da sua agenda:", L"Paste your calendar's \"Secret address in iCal format\":", L"Pega la \"Dirección secreta en formato iCal\" de tu calendario:"),
+                               WS_CHILD | WS_VISIBLE, S(16), S(14), S(488), S(20), d, nullptr, g_inst, nullptr);
+    std::wstring cur = ical::GetUrl();
+    HWND ed = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", cur.c_str(), WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL, S(16), S(40), S(488), S(26), d, (HMENU)100, g_inst, nullptr);
+    HWND hint = CreateWindowExW(0, L"STATIC", T(L"No Google Agenda (web): Configurações › sua agenda › Integrar agenda. Os eventos aparecem em azul e só podem ser editados no Google. Em branco desconecta.",
+                                                L"In Google Calendar (web): Settings › your calendar › Integrate calendar. Events show in blue and can only be edited in Google. Leave blank to disconnect.",
+                                                L"En Google Calendar (web): Configuración › tu calendario › Integrar calendario. Los eventos se ven en azul y solo se editan en Google. En blanco desconecta."),
+                                WS_CHILD | WS_VISIBLE, S(16), S(74), S(488), S(64), d, nullptr, g_inst, nullptr);
+    HWND ok = CreateWindowExW(0, L"BUTTON", T(L"Salvar", L"Save", L"Guardar"), WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON, S(308), S(152), S(96), S(30), d, (HMENU)IDOK, g_inst, nullptr);
+    HWND ca = CreateWindowExW(0, L"BUTTON", T(L"Cancelar", L"Cancel", L"Cancelar"), WS_CHILD | WS_VISIBLE | WS_TABSTOP, S(408), S(152), S(96), S(30), d, (HMENU)IDCANCEL, g_inst, nullptr);
+    for (HWND c : {lab, ed, hint, ok, ca}) SendMessageW(c, WM_SETFONT, (WPARAM)font, TRUE);
+    SendMessageW(ed, EM_SETSEL, 0, -1);
+    g_chatEditResult = 0;
+    if (owner) EnableWindow(owner, FALSE);
+    ShowWindow(d, SW_SHOW); SetForegroundWindow(d); SetFocus(ed);
+    MSG m = {};
+    bool quit = false;
+    while (IsWindow(d)) {
+        if (GetMessageW(&m, nullptr, 0, 0) <= 0) { quit = true; break; }
+        if (m.message == WM_KEYDOWN && m.wParam == VK_ESCAPE) { SendMessageW(d, WM_COMMAND, IDCANCEL, 0); continue; }
+        if (!IsDialogMessageW(d, &m)) { TranslateMessage(&m); DispatchMessageW(&m); }
+    }
+    if (owner) { EnableWindow(owner, TRUE); SetForegroundWindow(owner); }
+    DeleteObject(font);
+    if (quit) { PostQuitMessage((int)m.wParam); return; }
+    if (g_chatEditResult != IDOK) return;
+    if (!ical::SetUrl(g_chatEditText)) {
+        MessageBoxW(owner, T(L"Esse link não parece um endereço iCal (precisa começar com https:// ou webcal://).", L"That doesn't look like an iCal address (it must start with https:// or webcal://).", L"Ese enlace no parece una dirección iCal (debe empezar con https:// o webcal://)."), L"Vizu", MB_ICONWARNING);
+        return;
+    }
+    ical::Refresh(true);
+    ClockRender();
+    if (owner) InvalidateRect(owner, nullptr, FALSE);
+}
+
 static std::string RunSelfTest();
 #include "Inspect.inc.h" // Configurações › Sistema › Avançado › Inspeção do Vizu
 
@@ -3055,6 +3107,7 @@ static void SettingsAction(int id) {
     case kPreset0: case kPreset1: case kPreset2: ApplyPreset(id - kPreset0); return;
     case kTogChat: g_clock.chat = !g_clock.chat; WriteDword(L"ClockChat", g_clock.chat); ClockSync(); return;
     case kChatEdit: EditChatButton(g_settingsWnd); return;
+    case kAgIcal: EditIcalLink(g_settingsWnd); return;
     case kTogOcrBtn: g_clock.ocrBtn = !g_clock.ocrBtn; WriteDword(L"ClockOcr", g_clock.ocrBtn); ClockSync(); return;
     case kHkOcr: case kHkClean: CaptureHotkey(id); return;
     case kAdv0: case kAdv1: case kAdv2: case kAdv3: case kAdv4: case kAdv5: g_advOpen[id - kAdv0] = !g_advOpen[id - kAdv0]; return;
@@ -3554,6 +3607,7 @@ static void PaintSettings(HWND h) {
     rows = {
         {RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Relógio na área de trabalho", L"Desktop clock", L"Reloj en el escritorio"), T(L"Mostra hora e data no fundo do Windows", L"Shows time and date on the Windows desktop", L"Muestra hora y fecha en el escritorio de Windows")); rtoggle(kClockOn, r, g_clock.time); }},
         {RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Ativar Agenda", L"Enable Agenda", L"Activar Agenda"), T(L"Mostra seus próximos compromissos", L"Shows your upcoming appointments", L"Muestra tus próximos compromisos")); rtoggle(kAgendaOn, r, g_clock.agendaOn); }},
+        {RH, 0, [&](D2D1_RECT_F r) { static std::wstring st; st = ical::StatusText(); rlabel(r, T(L"Google Agenda", L"Google Calendar", L"Google Calendar"), st.c_str()); rpill(r, kAgIcal, ical::HasUrl() ? T(L"Trocar link", L"Change link", L"Cambiar enlace") : T(L"Conectar", L"Connect", L"Conectar"), 120 * s); }},
     };
     {
         std::vector<SRow> adv;
