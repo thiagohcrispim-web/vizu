@@ -123,3 +123,15 @@ arquivos: Rain.inc.h
 exigido: inline bool MonitorCovered\(
 motivo: na 19.5.9 uma janela maximizada em qualquer monitor (ou "Mostrar animações" desligado) congelava a chuva toda; ela só pausa com TODOS os monitores cobertos, tela bloqueada ou bateria fraca
 origem: v19.5.9
+
+id: else-dentro-de-comentario
+arquivos: *.h *.cpp *.inc.h
+proibido: //[^"\n]*\belse [A-Za-z_:.]+\([^\n]*\);
+motivo: um "else ...;" escrito depois de "//" vira comentário e o código some sem erro (os widgets perderam o contorno assim). Ponha o else na linha de baixo
+origem: v9.13.1 (6cbecad)
+
+id: widgets-medidas
+arquivos: Widgets.inc.h
+exigido: float W = \(wd\.open \? \(k == kWPerf \? 280 : 260\) : 220\) \* s
+motivo: a troca por tokens da v19.5.0 dobrou as medidas dos widgets (220 virou sp_8*13.75 = 440) e jogou a barra do disco para fora do cartão. Mantenha as medidas em px testadas
+origem: v19.5.0 (f0f9868)
