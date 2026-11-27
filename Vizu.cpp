@@ -2049,14 +2049,18 @@ static void RenderRing() {
                 float ex = min(dA0, dA1), ey = min(r - ri, ro - r), dist;
                 if (ex < rad && ey < rad && min(ex, ey) > -999) { float qx = rad - ex, qy = rad - ey; dist = (qx > 0 && qy > 0) ? rad - sqrtf(qx * qx + qy * qy) : min(ex, ey); }
                 else dist = min(ex, ey);
-                if (dist > 0) {
+                float hotCov = max(0.0f, min(1.0f, dist + 0.5f)); // borda da fatia suavizada (antes: corte seco em dist > 0, serrilhado)
+                if (hotCov > 0) {
+                    float R0 = R, G0 = G, B0 = B, A0 = A;
                     float tt = (r - ri) / (ro - ri);
                     float al = (st.hotOut + (st.hotIn - st.hotOut) * powf(max(0.0f, 1 - tt), 2.0f)) * hotK;
                     if (crispy) { R = R * (1 - al) + st.hot[0] * al; G = G * (1 - al) + st.hot[1] * al; B = B * (1 - al) + st.hot[2] * al; R *= 0.92f; G *= 0.92f; B *= 0.92f; }
                     else mixv(st.hot, al);
                     A = max(A, 0.99f);
-                    if (st.edgeA > 0 && dist < 1.4f * s) mixv(st.edge, (1 - dist / (1.4f * s)) * st.edgeA);
-                } else if (st.haloA > 0 && dist > -16 * s) {
+                    if (st.edgeA > 0 && dist < 1.4f * s) mixv(st.edge, (1 - max(0.0f, dist) / (1.4f * s)) * st.edgeA);
+                    R = R0 + (R - R0) * hotCov; G = G0 + (G - G0) * hotCov; B = B0 + (B - B0) * hotCov; A = A0 + (A - A0) * hotCov;
+                }
+                if (hotCov < 1 && st.haloA > 0 && dist > -16 * s && dist <= 0) {
                     float k = 1 + dist / (16 * s); mixv(st.halo, k * k * st.haloA);
                 }
             }

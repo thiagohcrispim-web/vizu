@@ -135,3 +135,9 @@ arquivos: Widgets.inc.h
 exigido: float W = \(wd\.open \? \(k == kWPerf \? 280 : 260\) : 220\) \* s
 motivo: a troca por tokens da v19.5.0 dobrou as medidas dos widgets (220 virou sp_8*13.75 = 440) e jogou a barra do disco para fora do cartão. Mantenha as medidas em px testadas
 origem: v19.5.0 (f0f9868)
+
+id: anel-fatia-suavizada
+arquivos: Vizu.cpp
+exigido: float hotCov = max\(0\.0f, min\(1\.0f, dist \+ 0\.5f\)\)
+motivo: a fatia acesa do menu circular era decidida com "if (dist > 0)", sem meio-termo, e a borda ficava serrilhada. Mantenha a cobertura parcial (hotCov) na borda
+origem: v19.5.10
