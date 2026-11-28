@@ -3354,7 +3354,7 @@ static void PaintSettings(HWND h) {
         p.Fill(vp, p.tk.r_control, th.track); // pílula desabilitada: só informa
         p.Text(ver, vp, 12, th.text2, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER);
         if (!g_lite) {
-            const wchar_t* lab = T(L"Aplicar presets:", L"Apply presets:", L"Aplicar presets:");
+            const wchar_t* lab = T(L"Presets", L"Presets", L"Presets");
             float lw = p.Measure(lab, 12, DWRITE_FONT_WEIGHT_MEDIUM);
             float lx = th.neon ? x0 + colW + colGap - 16 * s : rx; // Crispy: alinhado com o início dos cartões
             p.Text(lab, D2D1::RectF(lx, 28 * s, lx + lw + 4 * s, 60 * s), 12, th.text, DWRITE_FONT_WEIGHT_MEDIUM);
@@ -3425,12 +3425,28 @@ static void PaintSettings(HWND h) {
         }
         y = max(yy, y + 50 * s) + 34 * s; // mais respiro entre as seções
     };
+    // Título da linha; a tecla citada (ALT, BARRA DE ESPAÇO) sai em negrito na cor de destaque do tema.
+    auto rtitle = [&](const wchar_t* t, D2D1_RECT_F tr) {
+        std::wstring w = t;
+        size_t at = std::wstring::npos, len = 0;
+        for (const wchar_t* key : {L"BARRA DE ESPAÇO", L"BARRA ESPACIADORA", L"SPACE BAR", L"ALT"}) {
+            size_t f = w.find(key);
+            if (f != std::wstring::npos) { at = f; len = wcslen(key); break; }
+        }
+        if (at == std::wstring::npos) { p.Text(w, tr, 13, th.text, DWRITE_FONT_WEIGHT_MEDIUM); return; }
+        std::wstring pre = w.substr(0, at), key = w.substr(at, len), post = w.substr(at + len);
+        float x = tr.left;
+        if (!pre.empty()) { p.Text(pre, D2D1::RectF(x, tr.top, tr.right, tr.bottom), 13, th.text, DWRITE_FONT_WEIGHT_MEDIUM); x += p.Measure(pre, 13, DWRITE_FONT_WEIGHT_MEDIUM); }
+        p.Text(key, D2D1::RectF(x, tr.top, tr.right, tr.bottom), 13, th.accent, DWRITE_FONT_WEIGHT_BOLD);
+        x += p.Measure(key, 13, DWRITE_FONT_WEIGHT_BOLD);
+        if (!post.empty() && x < tr.right) p.Text(post, D2D1::RectF(x, tr.top, tr.right, tr.bottom), 13, th.text, DWRITE_FONT_WEIGHT_MEDIUM);
+    };
     auto rlabel = [&](D2D1_RECT_F r, const wchar_t* t, const wchar_t* sub) {
         if (sub && *sub) {
             float cy = (r.top + r.bottom) / 2;
-            p.Text(t, D2D1::RectF(r.left + 16 * s, cy - 19 * s, r.right - 240 * s, cy + 1 * s), 13, th.text, DWRITE_FONT_WEIGHT_MEDIUM);
+            rtitle(t, D2D1::RectF(r.left + 16 * s, cy - 19 * s, r.right - 240 * s, cy + 1 * s));
             p.Text(sub, D2D1::RectF(r.left + 16 * s, cy + 1 * s, r.right - 240 * s, cy + 19 * s), 11, th.text2);
-        } else p.Text(t, D2D1::RectF(r.left + 16 * s, r.top, r.right - 240 * s, r.bottom), 13, th.text, DWRITE_FONT_WEIGHT_MEDIUM);
+        } else rtitle(t, D2D1::RectF(r.left + 16 * s, r.top, r.right - 240 * s, r.bottom));
     };
     auto rbox = [&](D2D1_RECT_F r, float bw, float bh = 30) { float cy = (r.top + r.bottom) / 2; return D2D1::RectF(r.right - 16 * s - bw, cy - bh * s / 2, r.right - 16 * s, cy + bh * s / 2); };
     auto rtoggle = [&](int id, D2D1_RECT_F r, bool on) { // OFF [chave] ON: o lado ativo fica destacado
@@ -3545,14 +3561,14 @@ static void PaintSettings(HWND h) {
 
     // VER
     rows = {
-        {RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Ver com a barra de espaço", L"View with the Space bar", L"Ver con la barra espaciadora"), T(L"Selecione um arquivo e aperte Espaço", L"Select a file and press Space", L"Selecciona un archivo y pulsa Espacio")); rtoggle(kTogSpace, r, g_cfg.space); }},
-        {RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Conta-gotas", L"Color picker", L"Cuentagotas"), T(L"HEX, CMYK e PANTONE sugeridos; clique copia o HEX", L"HEX, CMYK and suggested PANTONE; click copies the HEX", L"HEX, CMYK y PANTONE sugeridos; clic copia el HEX")); rtoggle(kTogPicker, r, g_cfg.picker); }},
+        {RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Visualizar pressionando a BARRA DE ESPAÇO", L"Preview by pressing the SPACE BAR", L"Ver pulsando la BARRA ESPACIADORA"), T(L"Selecione um arquivo e aperte Espaço", L"Select a file and press Space", L"Selecciona un archivo y pulsa Espacio")); rtoggle(kTogSpace, r, g_cfg.space); }},
+        {RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Ativar Conta-gotas", L"Enable color picker", L"Activar cuentagotas"), T(L"HEX, CMYK e PANTONE sugeridos; clique copia o HEX", L"HEX, CMYK and suggested PANTONE; click copies the HEX", L"HEX, CMYK y PANTONE sugeridos; clic copia el HEX")); rtoggle(kTogPicker, r, g_cfg.picker); }},
     };
     drawSection(T(L"Ver", L"View", L"Ver"), rows);
 
     if (!g_lite) { // Lite: VER, OUTROS (OCR) e SISTEMA
     // CONVERTER
-    rows = {{RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Menu circular ao segurar Alt", L"Radial menu when holding Alt", L"Menú circular al mantener Alt"), T(L"Roda do mouse ou clique no centro troca de lado", L"Mouse wheel or center click flips sides", L"Rueda del ratón o clic al centro cambia de lado")); rtoggle(kTogAlt, r, g_cfg.alt); }}};
+    rows = {{RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Pressione ALT para converter o arquivo", L"Press ALT to convert the file", L"Pulsa ALT para convertir el archivo"), T(L"Roda do mouse ou clique no centro troca de lado", L"Mouse wheel or center click flips sides", L"Rueda del ratón o clic al centro cambia de lado")); rtoggle(kTogAlt, r, g_cfg.alt); }}};
     {
         std::vector<SRow> adv = {
             {SH, 1, [&](D2D1_RECT_F r) { rlabel(r, T(L"Tempo segurando", L"Hold time", L"Tiempo manteniendo"), T(L"Quanto tempo Alt precisa ficar pressionado", L"How long Alt must be held", L"Cuánto tiempo hay que mantener Alt")); rstep(r, kDelayMinus, kDelayPlus, std::to_wstring(g_cfg.altDelay) + L" ms"); }},
@@ -3568,7 +3584,7 @@ static void PaintSettings(HWND h) {
 
     // TEMPO: Relógio e Agenda; o resto em Avançado
     rows = {
-        {RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Relógio na área de trabalho", L"Desktop clock", L"Reloj en el escritorio"), T(L"Mostra hora e data no fundo do Windows", L"Shows time and date on the Windows desktop", L"Muestra hora y fecha en el escritorio de Windows")); rtoggle(kClockOn, r, g_clock.time); }},
+        {RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Ativar Mini-relógio flutuante", L"Enable floating mini clock", L"Activar mini reloj flotante"), T(L"Mostra hora e data no fundo do Windows", L"Shows time and date on the Windows desktop", L"Muestra hora y fecha en el escritorio de Windows")); rtoggle(kClockOn, r, g_clock.time); }},
         {RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Ativar Agenda", L"Enable Agenda", L"Activar Agenda"), T(L"Mostra seus próximos compromissos", L"Shows your upcoming appointments", L"Muestra tus próximos compromisos")); rtoggle(kAgendaOn, r, g_clock.agendaOn); }},
     };
     {
@@ -3604,7 +3620,7 @@ static void PaintSettings(HWND h) {
     // LIMPEZA
     rows = {
         {RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Abrir a Limpeza", L"Open Cleanup", L"Abrir Limpieza"), T(L"Também no botão direito do fundo da pasta e na bandeja", L"Also from a folder's background right-click and the tray", L"También con clic derecho en el fondo de la carpeta y en la bandeja")); rpill(r, kClOpen, T(L"Abrir", L"Open", L"Abrir"), 90 * s); }},
-        {RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Botão na caixa", L"Button in the box", L"Botón en la caja"), T(L"A vassoura antes do OCR abre a Limpeza", L"The broom before OCR opens Cleanup", L"La escoba antes del OCR abre Limpieza")); rtoggle(kTogClockClean, r, g_clock.clean); }},
+        {RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Ativar botão no box", L"Enable button in the box", L"Activar botón en la caja"), T(L"A vassoura antes do OCR abre a Limpeza", L"The broom before OCR opens Cleanup", L"La escoba antes del OCR abre Limpieza")); rtoggle(kTogClockClean, r, g_clock.clean); }},
         hotkeyRow(kHkClean, CleanHotkey(), T(L"da Limpeza", L"Cleanup", L"Limpieza")),
     };
     {
@@ -3662,11 +3678,11 @@ static void PaintSettings(HWND h) {
     std::wstring ocrSub = std::wstring(T(L"Lê o texto de qualquer área da tela", L"Reads text from any area of the screen", L"Lee el texto de cualquier área de la pantalla"));
     if (!HotkeyName(OcrHotkey()).empty()) ocrSub += L" · " + HotkeyName(OcrHotkey());
     rows = {{RH, 0, [&](D2D1_RECT_F r) { rlabel(r, L"OCR", ocrSub.c_str()); rtoggle(kOcrOn, r, g_clock.ocr); }}};
-    if (!g_lite) rows.push_back({RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Botão na caixa", L"Button in the box", L"Botón en la caja"), T(L"O botão de ler texto no relógio abre o OCR", L"The read-text button on the clock opens OCR", L"El botón de leer texto en el reloj abre el OCR")); rtoggle(kTogOcrBtn, r, g_clock.ocrBtn); }});
+    if (!g_lite) rows.push_back({RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Ativar botão no box", L"Enable button in the box", L"Activar botón en la caja"), T(L"O botão de ler texto no relógio abre o OCR", L"The read-text button on the clock opens OCR", L"El botón de leer texto en el reloj abre el OCR")); rtoggle(kTogOcrBtn, r, g_clock.ocrBtn); }});
     rows.push_back(hotkeyRow(kHkOcr, OcrHotkey(), T(L"do OCR", L"OCR", L"del OCR")));
     if (!g_lite) { // Gravar tela
         rows.push_back({RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Gravar tela", L"Record screen", L"Grabar pantalla"), T(L"Vídeo MP4 com som do computador e microfone, salvo na pasta Vídeos", L"MP4 video with computer sound and microphone, saved to Videos", L"Video MP4 con sonido del equipo y micrófono, guardado en Videos")); rpill(r, kRecOpen, T(L"Abrir", L"Open", L"Abrir"), 90 * s); }});
-        rows.push_back({RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Botão na caixa", L"Button in the box", L"Botón en la caja"), T(L"A bolinha vermelha no relógio abre a barra de gravação", L"The red dot on the clock opens the recording bar", L"El punto rojo del reloj abre la barra de grabación")); rtoggle(kTogRecBtn, r, g_clock.recBtn); }});
+        rows.push_back({RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Ativar botão no box", L"Enable button in the box", L"Activar botón en la caja"), T(L"A bolinha vermelha no relógio abre a barra de gravação", L"The red dot on the clock opens the recording bar", L"El punto rojo del reloj abre la barra de grabación")); rtoggle(kTogRecBtn, r, g_clock.recBtn); }});
         rows.push_back(hotkeyRow(kHkRec, RecHotkey(), T(L"de gravar a tela", L"screen recording", L"de grabar la pantalla")));
     }
     std::wstring chatSub; // o que o botão abre hoje

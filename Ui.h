@@ -949,10 +949,13 @@ public:
         float h = r.bottom - r.top;
         float trackRad = tk.r_control * s;
         float indRad = ui::InnerRadius(tk.r_control, tk.sp_1) * s; // r_chip = 8
-        Fill(r, trackRad, th.track);
+        // Trilho translúcido e opção afastada 4 px da borda: o selecionado se destaca sem o trilho chamar atenção (v19.8).
+        D2D1_COLOR_F segTrack = th.classic ? Rgba(0x5C6472, 0.45f) : th.neon ? Rgba(0xFFFFFF, 0.035f) : th.dark ? Rgba(0xFFFFFF, 0.06f) : Rgba(0x000000, 0.05f);
+        Fill(r, trackRad, segTrack);
         if (th.neon) Stroke(r, trackRad, Rgba(0xFFFFFF, 0.06f));
-        float w = (r.right - r.left - 4 * s) / n;
-        for (int i = 0; i < n; ++i) parts[i] = D2D1::RectF(r.left + 2 * s + i * w, r.top + 2 * s, r.left + 2 * s + (i + 1) * w, r.bottom - 2 * s);
+        const float inset = 4 * s;
+        float w = (r.right - r.left - 2 * inset) / n;
+        for (int i = 0; i < n; ++i) parts[i] = D2D1::RectF(r.left + inset + i * w, r.top + inset, r.left + inset + (i + 1) * w, r.bottom - inset);
         for (int i = 0; i < n; ++i) if (i == hot && i != sel) Fill(parts[i], indRad, Rgba(th.dark ? 0xFFFFFF : 0x000000, 0.06f));
         if (sel >= 0 && sel < n) {
             float x;
@@ -966,7 +969,7 @@ public:
             } else {
                 x = A(key ? key * 4 + 1 : 0, (float)sel, 220, true, true);
             }
-            D2D1_RECT_F ind = D2D1::RectF(r.left + 2 * s + x * w, r.top + 2 * s, r.left + 2 * s + (x + 1) * w, r.bottom - 2 * s);
+            D2D1_RECT_F ind = D2D1::RectF(r.left + inset + x * w, r.top + inset, r.left + inset + (x + 1) * w, r.bottom - inset);
             if (th.neon) Neon(ind, indRad, 0.7f);
             Fill(ind, indRad, th.neon ? Rgba(0x1A1410) : th.segFill);
             if (th.neon) Fill(ind, indRad, th.segFill);
