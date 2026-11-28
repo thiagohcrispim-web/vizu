@@ -8,7 +8,7 @@
 
 namespace upd {
 
-static const wchar_t* kVersion = L"19.7.0";
+static const wchar_t* kVersion = L"19.8.0";
 // Arquivo no próprio repositório com a versão, o link do instalador e o SHA-256 dele.
 static const wchar_t* kLatestJson = L"/thiagohcrispim-web/vizu/main/latest.json";
 

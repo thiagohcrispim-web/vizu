@@ -159,3 +159,21 @@ arquivos: Record.h
 exigido: crop = EvenRect\(
 motivo: o H.264 recusa largura ou altura ímpar (barra de tarefas de 41 px, telas 1366x767). Passe o recorte por EvenRect
 origem: v19.6.0
+
+id: calendario-fundo-no-fundo
+arquivos: WallCal.inc.h
+exigido: hwndInsertAfter = HWND_BOTTOM
+motivo: o calendário do WallEngine é uma janela; sem forçar HWND_BOTTOM em WM_WINDOWPOSCHANGING ele sobe por cima dos programas ao ser clicado
+origem: v19.8.0
+
+id: tutorial-pular-grava
+arquivos: Tutorial.inc.h
+exigido: WriteDword\(L"TutorialRev", kTutorialRev\)
+motivo: pular ou concluir o tutorial precisa gravar a revisão, senão ele volta a cada abertura do Vizu
+origem: v19.8.0
+
+id: config-campo-array
+arquivos: .github/scripts/precheck.py
+exigido: \\\[\\w\*\\\]
+motivo: campos de array na struct Config (wcColor[3]) eram dados como inexistentes pelo pré-teste
+origem: v19.8.0
