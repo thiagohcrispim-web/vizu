@@ -2835,6 +2835,7 @@ static bool AutostartEnabled();
 #include "RecordUi.inc.h"
 #include "Agenda.inc.h"
 #include "WallCal.inc.h"
+#include "Tutorial.inc.h"
 #include "Hearts.inc.h"
 #include "CleanUi.inc.h"
 #include "Widgets.inc.h"
@@ -2862,7 +2863,7 @@ enum { kTogSpace = 1, kTogAlt, kDelayMinus, kDelayPlus, kDpi72, kDpi300, kPdfSma
        kRainFps0, kRainFps1, kRainFps2, kRainCustomChars, kSecRain,
        // WallEngine (v19.8): WallClock e Calendário no fundo
        kWcOn, kWcFont, kWcCol0, kWcCol1, kWcCol2, kWcColMinus, kWcColPlus, kWcOpMinus, kWcOpPlus, kWcSizeMinus, kWcSizePlus, kWcGlass,
-       kCalOn, kCalBox, kCalOpMinus, kCalOpPlus, kCalNum, kCalReset };
+       kCalOn, kCalBox, kCalOpMinus, kCalOpPlus, kCalNum, kCalReset, kTutOpen };
 static const UINT kNeonPresets[6] = {0xFF6633, 0xFF2D95, 0x00E5FF, 0xB6FF3B, 0xA855F7, 0xFFD400};
 
 
@@ -3253,6 +3254,7 @@ static void SettingsAction(int id) {
         return;
     }
     // WallEngine: WallClock e calendário no fundo
+    case kTutOpen: OpenTutorial(); return;
     case kWcOn: g_cfg.wcOn = !g_cfg.wcOn; SaveConfig(); WallApply(); return;
     case kWcGlass: g_cfg.wcGlass = !g_cfg.wcGlass; SaveConfig(); WallApply(); return;
     case kWcFont: { std::wstring f = g_cfg.wcFont.empty() ? std::wstring(g_uiFont.empty() ? DefaultUiFont() : g_uiFont.c_str()) : g_cfg.wcFont;
@@ -3593,7 +3595,11 @@ static void PaintSettings(HWND h) {
         }
     } else {
 
-    // VER
+    // VER (antes dele, o tutorial)
+    if (!g_lite) {
+        rows = {{RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Tutorial", L"Tutorial", L"Tutorial"), T(L"Clique para ver o tutorial de como usar o Vizu", L"Click to see the tutorial on how to use Vizu", L"Haz clic para ver el tutorial de cómo usar Vizu")); rpill(r, kTutOpen, T(L"Ver tutorial", L"See tutorial", L"Ver tutorial"), 130 * s); }}};
+        drawSection(T(L"Introdução", L"Introduction", L"Introducción"), rows);
+    }
     rows = {
         {RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Visualizar pressionando a BARRA DE ESPAÇO", L"Preview by pressing the SPACE BAR", L"Ver pulsando la BARRA ESPACIADORA"), T(L"Selecione um arquivo e aperte Espaço", L"Select a file and press Space", L"Selecciona un archivo y pulsa Espacio")); rtoggle(kTogSpace, r, g_cfg.space); }},
         {RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Ativar Conta-gotas", L"Enable color picker", L"Activar cuentagotas"), T(L"HEX, CMYK e PANTONE sugeridos; clique copia o HEX", L"HEX, CMYK and suggested PANTONE; click copies the HEX", L"HEX, CMYK y PANTONE sugeridos; clic copia el HEX")); rtoggle(kTogPicker, r, g_cfg.picker); }},
@@ -4884,6 +4890,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmd, int) {
 
     ClockLoad();
     WallCalEnable(g_cfg.calOn && !g_lite); // calendário no fundo (WallEngine)
+    TutorialAtStartup(); // 8 telas; só volta quando houver função nova
     LoadPreset();
     RegisterGlobalHotkeys(); // OCR funciona mesmo com o relógio desligado
     g_taskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
