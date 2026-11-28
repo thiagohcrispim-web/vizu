@@ -3,7 +3,7 @@
 // o tutorial só volta sozinho quando kTutorialRev subir (função nova). Configurações › "Clique para ver o tutorial" abre de novo.
 // Incluído no Vizu.cpp depois do WallCal.inc.h (usa WallApply, OpenSettings, SaveConfig).
 
-static const DWORD kTutorialRev = 1; // suba quando houver função nova para mostrar
+static const DWORD kTutorialRev = 2; // suba quando houver função nova para mostrar
 struct TutUi { HWND wnd = nullptr; int step = 0, hot = 0; std::vector<std::pair<int, D2D1_RECT_F>> hits; };
 static TutUi g_tut;
 static const int kTutSteps = 8;
@@ -25,7 +25,7 @@ static const TutSlide* TutSlides() {
         {L"LIMPEZA", L"Espaço de volta", {L"Clique com o botão direito no *fundo de uma pasta* ou use a bandeja.", L"O Vizu acha *temporários e caches* do Windows, navegadores e Adobe.", L"Marque o que quer e clique em *Limpar*."},
          L"Arquivos de trabalho #(PSD, AI, INDD, PDF)# e o que está em uso nunca saem."},
         {L"MONITOR", L"De olho no PC", {L"O widget de *desempenho* avisa quando o PC fica lento e mostra o que está pesando.", L"O widget de *uso de IA* mostra os limites do Claude e do ChatGPT na borda da tela.", L"Ligue os dois em *Configurações › Monitor*."},
-         L"O anel fica amarelo em 75% e vermelho em 90%."},
+         L"O anel fica\u00A0^amarelo^ em 75% e\u00A0~vermelho~ em\u00A090%."},
         {L"EXPERIMENTE", L"WallEngine", {L"Um *relógio gigante* acima do seu papel de parede.", L"A *chuva digital* passando atrás de tudo.", L"Um *calendário de vidro* no canto, pronto para a Agenda."},
          L"Use os três juntos e ajuste cada um em #Configurações › WallEngine#."},
     };
@@ -43,7 +43,7 @@ static const TutSlide* TutSlides() {
         {L"CLEANUP", L"Space back", {L"Right-click the *background of a folder* or use the tray.", L"Vizu finds *temp files and caches* from Windows, browsers and Adobe.", L"Tick what you want and click *Clean*."},
          L"Work files #(PSD, AI, INDD, PDF)# and anything in use never leave."},
         {L"MONITOR", L"An eye on your PC", {L"The *performance* widget warns when the PC gets slow and shows what is heavy.", L"The *AI usage* widget shows Claude and ChatGPT limits at the screen's edge.", L"Turn both on in *Settings › Monitor*."},
-         L"The ring turns yellow at 75% and red at 90%."},
+         L"The ring turns\u00A0^yellow^ at 75% and\u00A0~red~ at\u00A090%."},
         {L"TRY IT", L"WallEngine", {L"A *giant clock* on your wallpaper.", L"The *digital rain* running behind everything.", L"A *glass calendar* in the corner, ready for the Agenda."},
          L"Use all three together and tune each one in #Settings › WallEngine#."},
     };
@@ -51,12 +51,13 @@ static const TutSlide* TutSlides() {
 }
 
 // Desenha um parágrafo com os destaques; devolve a altura usada.
-static float TutRich(ui::Painter& p, ID2D1RenderTarget* rt, const wchar_t* src, float x, float y, float w, float size, D2D1_COLOR_F base, D2D1_COLOR_F accent) {
-    std::wstring txt; std::vector<std::pair<DWRITE_TEXT_RANGE, int>> ranges; // 1 laranja, 2 branco
+// *x* laranja negrito, #x# branco negrito, ^x^ amarelo negrito, ~x~ vermelho negrito.
+static float TutRich(ui::Painter& p, ID2D1RenderTarget* rt, const wchar_t* src, float x, float y, float w, float size, D2D1_COLOR_F base, float lineH) {
+    std::wstring txt; std::vector<std::pair<DWRITE_TEXT_RANGE, int>> ranges;
     int mode = 0; UINT32 start = 0;
     for (const wchar_t* c = src; *c; ++c) {
-        if (*c == L'*' || *c == L'#') {
-            int m = *c == L'*' ? 1 : 2;
+        int m = *c == L'*' ? 1 : *c == L'#' ? 2 : *c == L'^' ? 3 : *c == L'~' ? 4 : 0;
+        if (m) {
             if (mode == m) { ranges.push_back({{start, (UINT32)txt.size() - start}, m}); mode = 0; }
             else if (!mode) { mode = m; start = (UINT32)txt.size(); }
             continue;
@@ -65,104 +66,329 @@ static float TutRich(ui::Painter& p, ID2D1RenderTarget* rt, const wchar_t* src, 
     }
     IDWriteTextFormat* f = p.Format(size, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_LEADING, nullptr, true);
     if (!f) return 0;
+    f->SetLineSpacing(DWRITE_LINE_SPACING_METHOD_UNIFORM, lineH, lineH * 0.8f);
     IDWriteTextLayout* lay = nullptr; float h = 0;
-    if (SUCCEEDED(g_dw->CreateTextLayout(txt.c_str(), (UINT32)txt.size(), f, w, 1000, &lay))) {
-        ID2D1SolidColorBrush *bb = nullptr, *ba = nullptr, *bw = nullptr;
-        rt->CreateSolidColorBrush(base, &bb); rt->CreateSolidColorBrush(accent, &ba); rt->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 1), &bw);
-        for (auto& r : ranges) { lay->SetFontWeight(DWRITE_FONT_WEIGHT_BOLD, r.first); lay->SetDrawingEffect(r.second == 1 ? (IUnknown*)ba : (IUnknown*)bw, r.first); }
+    if (SUCCEEDED(g_dw->CreateTextLayout(txt.c_str(), (UINT32)txt.size(), f, w, 10000, &lay))) {
+        static const UINT cols[5] = {0, 0xFF6633, 0xFFFFFF, 0xFFB020, 0xFF4D3D};
+        ID2D1SolidColorBrush* bb = nullptr; ID2D1SolidColorBrush* hb[5] = {};
+        rt->CreateSolidColorBrush(base, &bb);
+        for (int i = 1; i < 5; ++i) rt->CreateSolidColorBrush(ui::Rgba(cols[i]), &hb[i]);
+        for (auto& r : ranges) { lay->SetFontWeight(DWRITE_FONT_WEIGHT_BOLD, r.first); lay->SetDrawingEffect(hb[r.second], r.first); }
         rt->DrawTextLayout(D2D1::Point2F(x, y), lay, bb);
         DWRITE_TEXT_METRICS m{}; lay->GetMetrics(&m); h = m.height;
-        if (bb) bb->Release(); if (ba) ba->Release(); if (bw) bw->Release();
+        if (bb) bb->Release();
+        for (auto* b : hb) if (b) b->Release();
         lay->Release();
     }
     f->Release();
     return h;
 }
 
+// Igual ao protótipo (Design, página 2 · Introdução): tela de 1280×720 escalada para o monitor, fundo preto a 85%,
+// texto à esquerda (x 160) e a ilustração da função à direita (x 700).
 static void TutRender() {
     HWND w = g_tut.wnd;
     if (!w) return;
     RECT wr; GetWindowRect(w, &wr);
-    UINT dx = 96, dy = 96; GetDpiForMonitor(MonitorFromWindow(w, MONITOR_DEFAULTTOPRIMARY), MDT_EFFECTIVE_DPI, &dx, &dy);
-    float s = dx / 96.0f;
     UINT CW = (UINT)(wr.right - wr.left), CH = (UINT)(wr.bottom - wr.top);
     fmt::Canvas cv(CW, CH);
     if (!cv.rt) return;
     ID2D1RenderTarget* rt = cv.rt;
     rt->Clear(D2D1::ColorF(0, 0.85f));
     rt->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
-    ui::Theme th = g_theme; th.classic = true; th.neon = false; // sempre Vizu Classic
-    th.accent = ui::Rgba(0xFF6633); th.text = ui::Rgba(0xFFFFFF); th.text2 = ui::Rgba(0xCDD2DA);
+    float k = min(CW / 1280.0f, CH / 720.0f), OX = (CW - 1280 * k) / 2, OY = (CH - 720 * k) / 2;
+    ui::Theme th = g_theme; th.classic = true; th.neon = false; th.dark = true; // sempre Vizu Classic
+    th.accent = ui::Rgba(0xFF6633); th.text = ui::Rgba(0xFFFFFF); th.text2 = ui::Rgba(0xBCC2CC);
     ui::Tokens tk = ui::MakeTokens(th);
-    ui::Painter p(rt, g_dw, th, tk, s);
-    const D2D1_COLOR_F acc = ui::Rgba(0xFF6633), soft = ui::Rgba(0xCDD2DA), panel = ui::Rgba(0x4A4F57), panel2 = ui::Rgba(0x5C6472);
+    ui::Painter p(rt, g_dw, th, tk, k);
     g_tut.hits.clear();
+    auto R = [&](float x, float y, float ww, float hh) { return D2D1::RectF(OX + x * k, OY + y * k, OX + (x + ww) * k, OY + (y + hh) * k); };
+    auto fill = [&](float x, float y, float ww, float hh, float rad, UINT c, float a = 1) { p.Fill(R(x, y, ww, hh), rad * k, ui::Rgba(c, a)); };
+    auto line = [&](float x, float y, float ww, float hh, float rad, UINT c, float a, float sw) { p.Stroke(R(x, y, ww, hh), rad * k, ui::Rgba(c, a), sw * k); };
+    auto grad = [&](float x, float y, float ww, float hh, float rad, float deg, UINT c1, UINT c2) {
+        D2D1_RECT_F r = R(x, y, ww, hh); D2D1_GRADIENT_STOP st[2] = {{0, ui::Rgba(c1)}, {1, ui::Rgba(c2)}};
+        if (auto* b = p.Angle(r, deg, st, 2)) { p.FillBrush(r, rad * k, b); b->Release(); }
+    };
+    auto text = [&](const std::wstring& t, float x, float y, float ww, float hh, float size, UINT c, DWRITE_FONT_WEIGHT wt = DWRITE_FONT_WEIGHT_NORMAL,
+                    DWRITE_TEXT_ALIGNMENT al = DWRITE_TEXT_ALIGNMENT_LEADING, const wchar_t* fam = nullptr, float a = 1) {
+        IDWriteTextFormat* f = p.Format(size, wt, al, fam);
+        ID2D1SolidColorBrush* b = nullptr;
+        if (f && SUCCEEDED(rt->CreateSolidColorBrush(ui::Rgba(c, a), &b))) { rt->DrawText(t.c_str(), (UINT32)t.size(), f, R(x, y, ww, hh), b); b->Release(); }
+        if (f) f->Release();
+    };
     auto hit = [&](int id, D2D1_RECT_F r) { g_tut.hits.push_back({id, r}); return g_tut.hot == id; };
+    auto key = [&](float x, float y, float ww, float hh, const wchar_t* t, float fs) { // tecla: borda laranja, brilho e a "tampa" de dentro
+        line(x - 2, y - 2, ww + 4, hh + 4, 12, 0xFF6633, 0.18f, 4);
+        line(x, y, ww, hh, 10, 0xFF6633, 1, 1.5f);
+        line(x + 5, y + 4, ww - 10, hh - 15, 7, 0xFF6633, 1, 1.5f);
+        text(t, x + 5, y + 4, ww - 10, hh - 15, fs, 0xFF6633, DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER, L"Space Grotesk");
+    };
+    auto icon = [&](const char* name, float x, float y, float box, UINT c, float a) { p.FilledIcon(name, R(x, y, box, box), box * k, ui::Rgba(c, a)); };
+    auto clockPill = [&](float x, float y, float fs) {
+        fill(x, y, 500, 76, 26, 0x4A4F57); line(x, y, 500, 76, 26, 0x5C6472, 1, 1);
+    };
+    const wchar_t* clockFont = L"Bahnschrift";
 
     const TutSlide& S = TutSlides()[g_tut.step];
-    float W = 760 * s, H = 460 * s, L = (CW - W) / 2, Tp = (CH - H) / 2 - 20 * s;
-    D2D1_RECT_F card = D2D1::RectF(L, Tp, L + W, Tp + H);
-    p.Shadow(card, 16 * s);
-    p.Fill(card, 16 * s, panel);
-    float x = L + 48 * s, y = Tp + 44 * s, tw = W - 96 * s;
-    wchar_t kick[64]; swprintf(kick, 64, L"%d / %d  ·  %ls", g_tut.step + 1, kTutSteps, S.k);
-    p.Text(kick, D2D1::RectF(x, y, x + tw, y + 18 * s), 12, acc, DWRITE_FONT_WEIGHT_BOLD);
-    y += 26 * s;
-    p.Text(S.t, D2D1::RectF(x, y, x + tw, y + 44 * s), 32, ui::Rgba(0xFFFFFF), DWRITE_FONT_WEIGHT_SEMI_BOLD);
-    y += 66 * s;
-    for (int i = 0; i < 3; ++i) {
-        D2D1_RECT_F n = D2D1::RectF(x, y, x + 28 * s, y + 28 * s);
-        p.Fill(n, 14 * s, acc);
-        p.Text(std::to_wstring(i + 1), n, 13, ui::Rgba(0x000000), DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
-        float h = TutRich(p, rt, S.s[i], x + 44 * s, y + 3 * s, tw - 44 * s, 16, soft, acc);
-        y += max(28 * s, h + 6 * s) + 16 * s;
+    const int i = g_tut.step + 1;
+    wchar_t kick[64]; swprintf(kick, 64, L"%d %ls %d  ·  %ls", i, T(L"DE", L"OF", L"DE"), kTutSteps, S.k);
+    text(kick, 160, 150, 470, 20, 12, 0xFF6633, DWRITE_FONT_WEIGHT_SEMI_BOLD);
+    {
+        std::wstring t = S.t;
+        float tw = p.Measure(t, 46, DWRITE_FONT_WEIGHT_SEMI_BOLD) / k;
+        text(t, 160, 180, 560, 56, 46, 0xFFFFFF, DWRITE_FONT_WEIGHT_SEMI_BOLD);
+        text(L".", 160 + tw, 180, 40, 56, 46, 0xFF6633, DWRITE_FONT_WEIGHT_SEMI_BOLD);
     }
-    D2D1_RECT_F tip = D2D1::RectF(x, card.bottom - 40 * s - 56 * s, x + tw, card.bottom - 40 * s);
-    p.Fill(tip, 10 * s, panel2);
-    TutRich(p, rt, S.tip, tip.left + 20 * s, tip.top + 17 * s, tw - 40 * s, 14, soft, acc);
+    for (int n = 0; n < 3; ++n) {
+        float y = 290 + n * 66.0f;
+        fill(160, y - 2, 28, 28, 14, 0x4A4F57);
+        text(std::to_wstring(n + 1), 160, y - 2, 28, 28, 12, 0xFFFFFF, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
+        TutRich(p, rt, S.s[n], OX + 204 * k, OY + y * k, 426 * k, 17, ui::Rgba(0xE3E6EB), 24 * k);
+    }
+    fill(160, 500, 470, 1, 0, 0x4A4F57);
+    TutRich(p, rt, S.tip, OX + 160 * k, OY + 516 * k, 470 * k, 14, ui::Rgba(0xBCC2CC), 21 * k);
 
-    // setas dos lados (a da direita some na última tela, onde ficam os botões)
-    float ab = 52 * s, ay = (card.top + card.bottom) / 2 - ab / 2;
-    if (g_tut.step > 0) {
-        D2D1_RECT_F a = D2D1::RectF(card.left - 28 * s - ab, ay, card.left - 28 * s, ay + ab);
-        p.Fill(a, ab / 2, ui::Rgba(0xFFFFFF, hit(1, a) ? 0.22f : 0.10f));
-        p.Feather("m15 18-6-6 6-6", a, 22 * s, ui::Rgba(0xFFFFFF), 2);
+    // ilustração de cada tela
+    switch (i) {
+    case 1:
+        fill(700, 150, 150, 118, 8, 0x2E333B); line(700, 150, 150, 118, 8, 0xFF6633, 1, 2);
+        grad(710, 160, 130, 74, 4, 135, 0xFFB27A, 0xC2452A);
+        text(L"campanha_verao.psd", 710, 240, 134, 18, 11, 0xFFFFFF);
+        key(700, 330, 220, 60, T(L"ESPAÇO", L"SPACE", L"ESPACIO"), 18);
+        p.Feather("M4 20h78M70 8l12 12-12 12", R(870, 200, 90, 40), 24 * k, ui::Rgba(0xBCC2CC), 2); // seta (caixa 24 → a seta ocupa o retângulo)
+        p.Shadow(R(970, 120, 250, 330), 12 * k);
+        fill(970, 120, 250, 330, 12, 0x2E333B);
+        text(L"campanha_verao.psd", 970, 120, 250, 28, 10, 0xFFFFFF, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER);
+        grad(980, 148, 230, 230, 6, 135, 0xFFB27A, 0xC2452A);
+        {
+            float cx = 980; const wchar_t* chips[3] = {L"4000 × 2500 px", L"300 dpi", L"CMYK"};
+            for (auto* c : chips) { float cw = p.Measure(c, 9) / k + 12; fill(cx, 390, cw, 16, 4, 0x23272E); text(c, cx, 390, cw, 16, 9, 0xFFFFFF, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER); cx += cw + 4; }
+        }
+        break;
+    case 2: { // menu circular (Classic) em volta do mouse
+        float cx = 940, cy = 270, ro = 170, ri = 62;
+        D2D1_ELLIPSE eo = D2D1::Ellipse(D2D1::Point2F(OX + cx * k, OY + cy * k), ro * k, ro * k);
+        ID2D1SolidColorBrush* b = nullptr;
+        if (SUCCEEDED(rt->CreateSolidColorBrush(ui::Rgba(0x4A4F57, 0.96f), &b))) { rt->FillEllipse(eo, b); b->Release(); }
+        static const wchar_t* fmts[8] = {L"PNG", L"JPG", L"WEBP", L"PDF", L"SVG", L"TIFF", L"AVIF", L"ICO"};
+        for (int s8 = 0; s8 < 8; ++s8) {
+            float a = (s8 * 45.0f) * 3.14159265f / 180, a2 = (s8 * 45.0f + 22.5f) * 3.14159265f / 180;
+            ID2D1SolidColorBrush* lb = nullptr;
+            if (SUCCEEDED(rt->CreateSolidColorBrush(ui::Rgba(0x2E333B), &lb))) {
+                rt->DrawLine(D2D1::Point2F(OX + (cx + ri * sinf(a)) * k, OY + (cy - ri * cosf(a)) * k), D2D1::Point2F(OX + (cx + ro * sinf(a)) * k, OY + (cy - ro * cosf(a)) * k), lb, 2 * k);
+                lb->Release();
+            }
+            float lx = cx + 118 * sinf(a2), ly = cy - 118 * cosf(a2);
+            if (s8 == 0) { // fatia em destaque
+                D2D1_ELLIPSE h = D2D1::Ellipse(D2D1::Point2F(OX + lx * k, OY + ly * k), 30 * k, 30 * k);
+                ID2D1SolidColorBrush* hb = nullptr;
+                if (SUCCEEDED(rt->CreateSolidColorBrush(ui::Rgba(0xFF6633), &hb))) { rt->FillEllipse(h, hb); hb->Release(); }
+            }
+            text(fmts[s8], lx - 40, ly - 12, 80, 24, 14, s8 == 0 ? 0x000000 : 0xFFFFFF, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
+        }
+        D2D1_ELLIPSE ei = D2D1::Ellipse(D2D1::Point2F(OX + cx * k, OY + cy * k), ri * k, ri * k);
+        if (SUCCEEDED(rt->CreateSolidColorBrush(ui::Rgba(0x2E333B), &b))) { rt->FillEllipse(ei, b); b->Release(); }
+        text(T(L"Converter", L"Convert", L"Convertir"), cx - 60, cy - 12, 120, 24, 13, 0xFFFFFF, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
+        float sw = p.Measure(T(L"Segure", L"Hold", L"Mantén"), 14) / k, gx = 940 - (sw + 14 + 96) / 2;
+        text(T(L"Segure", L"Hold", L"Mantén"), gx, 478, sw + 4, 60, 14, 0xBCC2CC);
+        key(gx + sw + 14, 478, 96, 60, L"ALT", 18);
+        break;
+    }
+    case 3: {
+        clockPill(700, 170, 42);
+        p.Feather("M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01", R(714, 197, 22, 22), 22 * k, ui::Rgba(0xBCC2CC), 2);
+        text(L"14:32", 752, 170, 160, 76, 42, 0xFFFFFF, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_LEADING, clockFont);
+        const char* chips[5] = {"skull", "timer", "chat-ai", "broom", "scan-text"};
+        for (int c = 0; c < 5; ++c) { float x = 920 + c * 48.0f; fill(x, 188, 40, 40, 20, 0x23272E, 0.55f); icon(chips[c], x + 9, 197, 22, 0xFFFFFF, 0.55f); }
+        const wchar_t* lt[6][2] = {{L"Agenda", L"triângulo"}, {L"Roubo de tempo", L"caveira"}, {L"Foco", L"Pomodoro"}, {L"ChatGPT", L"ou outro site"}, {L"Limpeza", L"vassoura"}, {L"Ler texto", L"OCR"}};
+        for (int n = 0; n < 6; ++n) {
+            float bx = 700 + (n % 3) * 172.0f, by = 300 + (n / 3) * 70.0f;
+            fill(bx, by, 2, 52, 0, 0xFF6633);
+            text(lt[n][0], bx + 12, by + 6, 150, 20, 13, 0xFFFFFF, DWRITE_FONT_WEIGHT_SEMI_BOLD);
+            text(lt[n][1], bx + 12, by + 27, 150, 18, 12, 0xBCC2CC);
+        }
+        break;
+    }
+    case 4: {
+        key(720, 120, 84, 56, L"CTRL", 15); text(L"+", 804, 120, 32, 56, 22, 0xBCC2CC, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER);
+        key(836, 120, 84, 56, L"ALT", 15); text(L"+", 920, 120, 32, 56, 22, 0xBCC2CC, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER);
+        key(952, 120, 64, 56, L"T", 15);
+        grad(720, 220, 480, 120, 8, 135, 0xC9CED6, 0x8A919E);
+        text(L"Summer collection", 744, 244, 400, 36, 28, 0x141413, DWRITE_FONT_WEIGHT_SEMI_BOLD);
+        text(L"New arrivals every week", 744, 286, 400, 22, 15, 0x23272E);
+        line(736, 240, 290, 84, 0, 0xFF6633, 1, 2);
+        fill(736, 222, 66, 18, 0, 0xFF6633); text(L"290 × 84", 736, 222, 66, 18, 11, 0x000000, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER);
+        fill(880, 366, 320, 150, 12, 0x4A4F57); line(880, 366, 320, 150, 12, 0x5C6472, 1, 1);
+        text(T(L"✓ Copiado · inglês detectado", L"✓ Copied · English detected", L"✓ Copiado · inglés detectado"), 894, 380, 290, 16, 11, 0x30D158, DWRITE_FONT_WEIGHT_SEMI_BOLD);
+        fill(894, 404, 292, 40, 10, 0x23272E); text(L"Summer collection — new arrivals every week.", 904, 404, 280, 40, 13, 0xFFFFFF);
+        text(T(L"Traduzir:", L"Translate:", L"Traducir:"), 894, 454, 70, 28, 12, 0xBCC2CC);
+        fill(960, 454, 40, 28, 6, 0xFF6633); text(L"PT", 960, 454, 40, 28, 11, 0x000000, DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
+        line(1006, 454, 40, 28, 6, 0xFFFFFF, 0.16f, 1); text(L"ES", 1006, 454, 40, 28, 11, 0xFFFFFF, DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
+        line(1146, 454, 40, 28, 6, 0xFFFFFF, 0.16f, 1); text(L"A/a", 1146, 454, 40, 28, 11, 0xFFFFFF, DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
+        break;
+    }
+    case 5: {
+        clockPill(700, 120, 34);
+        text(L"14:32", 716, 120, 160, 76, 34, 0xFFFFFF, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_LEADING, clockFont);
+        fill(1050, 138, 40, 40, 20, 0x23272E, 0.55f); fill(1098, 138, 40, 40, 20, 0x23272E, 0.55f);
+        fill(1146, 138, 40, 40, 20, 0x23272E, 0.55f); line(1145, 137, 42, 42, 21, 0xFF6633, 1, 2); fill(1159, 151, 14, 14, 7, 0xFF3B30);
+        p.Shadow(R(700, 230, 520, 52), 26 * k);
+        fill(700, 230, 520, 52, 26, 0x4A4F57); line(700, 230, 520, 52, 26, 0xFF3B30, 0.85f, 1.2f);
+        fill(710, 238, 84, 36, 18, 0xFFFFFF, 0.05f); fill(720, 250, 12, 12, 6, 0xBCC2CC, 0.45f);
+        text(T(L"Gravar", L"Record", L"Grabar"), 738, 238, 54, 36, 13, 0xBCC2CC, DWRITE_FONT_WEIGHT_MEDIUM, DWRITE_TEXT_ALIGNMENT_LEADING, nullptr, 0.45f);
+        fill(802, 238, 68, 36, 18, 0xFFFFFF, 0.05f); text(T(L"Pausar", L"Pause", L"Pausar"), 802, 238, 68, 36, 13, 0xFFFFFF, DWRITE_FONT_WEIGHT_MEDIUM, DWRITE_TEXT_ALIGNMENT_CENTER);
+        fill(878, 238, 60, 36, 18, 0xFFFFFF, 0.05f); text(T(L"Parar", L"Stop", L"Detener"), 878, 238, 60, 36, 13, 0xFFFFFF, DWRITE_FONT_WEIGHT_MEDIUM, DWRITE_TEXT_ALIGNMENT_CENTER);
+        fill(948, 252, 8, 8, 4, 0xFF3B30); text(L"00:03:42", 964, 238, 100, 36, 15, 0xFFFFFF, DWRITE_FONT_WEIGHT_SEMI_BOLD);
+        grad(700, 310, 520, 200, 10, 135, 0xC9CED6, 0x4A4F57);
+        fill(720, 330, 72, 72, 12, 0x000000, 0.35f);
+        icon("play", 741, 351, 30, 0xFFFFFF, 1);
+        if (!feather::FindFilled("play")) { // triângulo de "play" desenhado à mão se o ícone não existir
+            ID2D1Factory* f = nullptr; rt->GetFactory(&f);
+            if (ID2D1PathGeometry* g = ui::SvgPath(f, "M8 5v14l11-7z", 30 * k / 24, OX + 741 * k, OY + 351 * k, true)) {
+                ID2D1SolidColorBrush* b = nullptr; if (SUCCEEDED(rt->CreateSolidColorBrush(ui::Rgba(0xFFFFFF), &b))) { rt->FillGeometry(g, b); b->Release(); }
+                g->Release();
+            }
+            if (f) f->Release();
+        }
+        text(L"Vizu Gravação 2026-11-28 14-32-05.mp4", 810, 340, 400, 20, 15, 0x141413, DWRITE_FONT_WEIGHT_SEMI_BOLD);
+        text(T(L"Vídeos", L"Videos", L"Vídeos"), 810, 364, 200, 18, 13, 0x23272E);
+        break;
+    }
+    case 6: {
+        fill(720, 130, 480, 400, 12, 0x2E333B);
+        text(T(L"Limpeza", L"Cleanup", L"Limpieza"), 740, 150, 300, 24, 18, 0xFFFFFF, DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_LEADING, L"Space Grotesk");
+        fill(740, 188, 440, 72, 12, 0x3A3F47);
+        text(T(L"Pronto para liberar", L"Ready to free", L"Listo para liberar"), 756, 200, 200, 16, 12, 0xBCC2CC);
+        text(L"11,7 GB", 756, 216, 200, 34, 26, 0xFFFFFF, DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_LEADING, L"Space Grotesk");
+        fill(1050, 207, 114, 34, 10, 0xFF6633); text(T(L"Limpar 11,7 GB", L"Clean 11.7 GB", L"Limpiar 11,7 GB"), 1050, 207, 114, 34, 13, 0x000000, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
+        const wchar_t* rows[5][2] = {{T(L"Sistema", L"System", L"Sistema"), L"3,8 GB"}, {T(L"Navegadores", L"Browsers", L"Navegadores"), L"2,1 GB"}, {L"Adobe", L"4,6 GB"}, {T(L"Mensageiros", L"Messengers", L"Mensajería"), L"1,2 GB"}, {T(L"Outros", L"Other", L"Otros"), L"700 MB"}};
+        for (int n = 0; n < 5; ++n) {
+            float y = 268 + n * 43.0f;
+            if (n < 4) { fill(748, y + 12, 18, 18, 9, 0xFF6633); text(L"✓", 748, y + 12, 18, 18, 11, 0x000000, DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER); }
+            else line(748, y + 12, 18, 18, 9, 0xB5BAC2, 1, 1.5f);
+            text(rows[n][0], 778, y + 8, 300, 26, 13, 0xFFFFFF);
+            text(rows[n][1], 1080, y + 8, 96, 26, 12, 0xBCC2CC, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_TRAILING);
+            fill(744, y + 41, 432, 1, 0, 0x4A4F57);
+        }
+        text(T(L"PSD, AI, INDD e PDF nunca saem.", L"PSD, AI, INDD and PDF never leave.", L"PSD, AI, INDD y PDF nunca salen."), 740, 492, 400, 18, 12, 0xBCC2CC);
+        break;
+    }
+    case 7: {
+        fill(720, 150, 330, 270, 14, 0x353A42); line(720, 150, 330, 270, 14, 0xFF6633, 1, 1.5f);
+        text(T(L"O PC está lento", L"The PC is slow", L"El PC está lento"), 738, 168, 290, 24, 18, 0xFFFFFF, DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_LEADING, L"Space Grotesk");
+        text(T(L"A memória está quase cheia.", L"Memory is almost full.", L"La memoria está casi llena."), 738, 194, 290, 16, 12, 0xBCC2CC);
+        const wchar_t* pn[3] = {L"CPU", T(L"Memória", L"Memory", L"Memoria"), T(L"Disco", L"Disk", L"Disco")}; int pv[3] = {34, 91, 8};
+        for (int n = 0; n < 3; ++n) {
+            float y = 222 + n * 38.0f;
+            text(pn[n], 738, y, 200, 18, 13, 0xFFFFFF);
+            text(std::to_wstring(pv[n]) + L"%", 940, y, 92, 18, 13, 0xFFFFFF, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_TRAILING);
+            fill(738, y + 22, 294, 6, 3, 0x2A2F36); fill(738, y + 22, 294 * pv[n] / 100.0f, 6, 3, n == 1 ? 0xFF6633 : 0x8A919C);
+        }
+        text(T(L"O QUE ESTÁ PESANDO", L"WHAT IS HEAVY", L"LO QUE PESA"), 738, 340, 290, 16, 12, 0xBCC2CC, DWRITE_FONT_WEIGHT_SEMI_BOLD);
+        text(L"Adobe Photoshop", 738, 362, 200, 18, 13, 0xFFFFFF);
+        text(L"6,2 GB", 940, 362, 92, 18, 12, 0xBCC2CC, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_TRAILING);
+        text(T(L"Desempenho", L"Performance", L"Rendimiento"), 720, 430, 330, 18, 12, 0xBCC2CC, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER);
+        fill(1110, 170, 90, 178, 14, 0x0E0E10, 0.97f); line(1110, 170, 90, 178, 14, 0xFFFFFF, 0.10f, 1);
+        int av[2] = {42, 78}; UINT ac[2] = {0x2BD97C, 0xFFB020};
+        for (int n = 0; n < 2; ++n) {
+            float cx = 1148, cy = 206 + n * 84.0f;
+            D2D1_POINT_2F c = D2D1::Point2F(OX + cx * k, OY + cy * k);
+            ID2D1SolidColorBrush* b = nullptr;
+            if (SUCCEEDED(rt->CreateSolidColorBrush(ui::Rgba(0xFFFFFF, 0.07f), &b))) { rt->FillEllipse(D2D1::Ellipse(c, 17 * k, 17 * k), b); b->Release(); }
+            if (SUCCEEDED(rt->CreateSolidColorBrush(ui::Rgba(0xFFFFFF, 0.12f), &b))) { rt->DrawEllipse(D2D1::Ellipse(c, 20 * k, 20 * k), b, 3 * k); b->Release(); }
+            ID2D1Factory* f = nullptr; rt->GetFactory(&f); ID2D1PathGeometry* g = nullptr; ID2D1GeometrySink* sk = nullptr;
+            if (f && SUCCEEDED(f->CreatePathGeometry(&g)) && SUCCEEDED(g->Open(&sk))) {
+                float a = av[n] / 100.0f * 6.2831853f;
+                sk->BeginFigure(D2D1::Point2F(c.x, c.y - 20 * k), D2D1_FIGURE_BEGIN_HOLLOW);
+                sk->AddArc(D2D1::ArcSegment(D2D1::Point2F(c.x + 20 * k * sinf(a), c.y - 20 * k * cosf(a)), D2D1::SizeF(20 * k, 20 * k), 0, D2D1_SWEEP_DIRECTION_CLOCKWISE, a > 3.14159f ? D2D1_ARC_SIZE_LARGE : D2D1_ARC_SIZE_SMALL));
+                sk->EndFigure(D2D1_FIGURE_END_OPEN); sk->Close();
+                ID2D1StrokeStyle* ss = nullptr;
+                f->CreateStrokeStyle(D2D1::StrokeStyleProperties(D2D1_CAP_STYLE_ROUND, D2D1_CAP_STYLE_ROUND), nullptr, 0, &ss);
+                if (SUCCEEDED(rt->CreateSolidColorBrush(ui::Rgba(ac[n]), &b))) { rt->DrawGeometry(g, b, 3 * k, ss); b->Release(); }
+                if (ss) ss->Release();
+            }
+            if (sk) sk->Release(); if (g) g->Release(); if (f) f->Release();
+            text(std::to_wstring(av[n]) + L"%", 1110, cy + 26, 76, 16, 12, 0xFFFFFF, DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
+        }
+        text(L"Claude · ChatGPT", 1090, 358, 130, 16, 12, 0xBCC2CC, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER);
+        break;
+    }
+    case 8: {
+        p.Shadow(R(700, 110, 520, 320), 12 * k);
+        { // papel de parede, relógio, chuva e calendário de vidro, na ordem das camadas
+            D2D1_RECT_F r = R(700, 110, 520, 320);
+            D2D1_GRADIENT_STOP st[3] = {{0, ui::Rgba(0x5B6F8C)}, {0.45f, ui::Rgba(0x2B3A52)}, {1, ui::Rgba(0x121822)}};
+            if (auto* b = p.Angle(r, 135, st, 3)) { p.FillBrush(r, 12 * k, b); b->Release(); }
+        }
+        text(L"14:32", 700, 110, 520, 320, 120, 0xFF6633, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER, nullptr, 0.55f);
+        for (int r = 0; r < 14; ++r) {
+            float x = 720 + r * 23.0f, y = 110 + (r * 53) % 220, hh = 40 + (r * 17) % 50;
+            D2D1_RECT_F rr = R(x, y, 2, hh); D2D1_GRADIENT_STOP st[2] = {{0, ui::Rgba(0xFF6633, 0)}, {1, ui::Rgba(0xFF6633, 0.55f)}};
+            if (auto* b = p.Angle(rr, 180, st, 2)) { rt->FillRectangle(rr, b); b->Release(); }
+        }
+        fill(1038, 128, 164, 150, 12, 0x0A0C10, 0.38f);
+        { D2D1_RECT_F rr = R(1038, 128, 164, 150); D2D1_GRADIENT_STOP st[2] = {{0, ui::Rgba(0xFFFFFF, 0.10f)}, {1, ui::Rgba(0xFFFFFF, 0.02f)}};
+          if (auto* b = p.Angle(rr, 160, st, 2)) { p.FillBrush(rr, 12 * k, b); b->Release(); } }
+        line(1038, 128, 164, 150, 12, 0xFFFFFF, 0.12f, 1); fill(1050, 128, 140, 1, 0, 0xFFFFFF, 0.35f);
+        {
+            std::wstring mn = MonthName(11); if (!mn.empty()) CharUpperBuffW(&mn[0], 1);
+            text(mn + L" 2026", 1048, 136, 150, 16, 11, 0xFFFFFF, DWRITE_FONT_WEIGHT_MEDIUM);
+            float cw = 144 / 7.0f;
+            for (int d = 0; d < 7; ++d) text(WallCalWeekLetter(d), 1048 + d * cw, 158, cw, 12, 8, 0xFFFFFF, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER, nullptr, 0.45f);
+            for (int n = 1; n <= 28; ++n) {
+                int idx = n - 1, c = idx % 7, rw = idx / 7; float x = 1048 + c * cw, y = 174 + rw * 15.0f;
+                if (n == 27) fill(x + 2, y - 1, cw - 4, 14, 6, 0xFF6633);
+                text(std::to_wstring(n), x, y, cw, 12, 8, n == 27 ? 0x000000 : 0xFFFFFF, n == 27 ? DWRITE_FONT_WEIGHT_SEMI_BOLD : DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER, nullptr, n == 27 ? 1 : 0.82f);
+            }
+        }
+        const wchar_t* lb[3] = {T(L"WallClock · camada de baixo", L"WallClock · bottom layer", L"WallClock · capa de abajo"), T(L"Chuva · meio", L"Rain · middle", L"Lluvia · medio"), T(L"Calendário · cima", L"Calendar · top", L"Calendario · arriba")};
+        float tot = 0, gw[3]; for (int n = 0; n < 3; ++n) { gw[n] = p.Measure(lb[n], 12) / k; tot += gw[n]; }
+        float lx = 960 - (tot + 48) / 2;
+        for (int n = 0; n < 3; ++n) { text(lb[n], lx, 446, gw[n] + 4, 18, 12, 0xBCC2CC); lx += gw[n] + 24; }
+        break;
+    }
+    }
+
+    // setas (56 px, contorno branco 28%)
+    {
+        D2D1_RECT_F a = R(32, 332, 56, 56);
+        bool on = g_tut.step > 0, hh = on && hit(1, a);
+        p.Fill(a, 28 * k, ui::Rgba(0xFFFFFF, (hh ? 0.16f : 0.06f) * (on ? 1 : 0.3f)));
+        p.Stroke(a, 28 * k, ui::Rgba(0xFFFFFF, 0.28f * (on ? 1 : 0.3f)), 1 * k);
+        p.Feather("m15 18-6-6 6-6", a, 22 * k, ui::Rgba(0xFFFFFF, on ? 1 : 0.3f), 2);
     }
     if (g_tut.step < kTutSteps - 1) {
-        D2D1_RECT_F a = D2D1::RectF(card.right + 28 * s, ay, card.right + 28 * s + ab, ay + ab);
-        p.Fill(a, ab / 2, hit(2, a) ? ui::Rgba(0xFF7A4D) : acc);
-        p.Feather("m9 18 6-6-6-6", a, 22 * s, ui::Rgba(0x000000), 2);
+        D2D1_RECT_F a = R(1192, 332, 56, 56);
+        bool hh = hit(2, a);
+        p.Fill(a, 28 * k, ui::Rgba(0xFFFFFF, hh ? 0.16f : 0.06f));
+        p.Stroke(a, 28 * k, ui::Rgba(0xFFFFFF, 0.28f), 1 * k);
+        p.Feather("m9 18 6-6-6-6", a, 22 * k, ui::Rgba(0xFFFFFF), 2);
     }
-    // pontos
-    float dd = 8 * s, gap = 10 * s, dw = kTutSteps * dd + (kTutSteps - 1) * gap + 16 * s, dx0 = (CW - dw) / 2, dyy = card.bottom + 28 * s;
-    for (int i = 0, xx = 0; i < kTutSteps; ++i) {
-        float wdt = i == g_tut.step ? 24 * s : dd;
-        D2D1_RECT_F d = D2D1::RectF(dx0 + xx, dyy, dx0 + xx + wdt, dyy + dd);
-        hit(20 + i, D2D1::RectF(d.left - 4 * s, d.top - 6 * s, d.right + 4 * s, d.bottom + 6 * s));
-        p.Fill(d, dd / 2, i == g_tut.step ? acc : ui::Rgba(0xFFFFFF, g_tut.hot == 20 + i ? 0.6f : 0.3f));
-        xx += (int)(wdt + gap);
-    }
-    // botões da última tela
-    if (g_tut.step == kTutSteps - 1) {
-        float bh = 44 * s, by = card.bottom + 56 * s;
-        const wchar_t* tryT = T(L"Experimentar o WallEngine", L"Try WallEngine", L"Probar WallEngine");
-        const wchar_t* doneT = T(L"Concluir", L"Done", L"Terminar");
-        float w1 = p.Measure(tryT, 15, DWRITE_FONT_WEIGHT_SEMI_BOLD) + 48 * s, w2 = p.Measure(doneT, 15, DWRITE_FONT_WEIGHT_SEMI_BOLD) + 48 * s, bx = (CW - w1 - w2 - 14 * s) / 2;
-        D2D1_RECT_F b1 = D2D1::RectF(bx, by, bx + w1, by + bh), b2 = D2D1::RectF(b1.right + 14 * s, by, b1.right + 14 * s + w2, by + bh);
-        p.Fill(b1, bh / 2, hit(3, b1) ? ui::Rgba(0xFF7A4D) : acc);
-        p.Text(tryT, b1, 15, ui::Rgba(0x000000), DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
-        p.Fill(b2, bh / 2, ui::Rgba(0xFFFFFF, hit(4, b2) ? 0.2f : 0.08f));
-        p.Stroke(b2, bh / 2, ui::Rgba(0xFFFFFF, 0.4f), 1 * s);
-        p.Text(doneT, b2, 15, ui::Rgba(0xFFFFFF), DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
-    }
-    // pular (canto superior direito)
+    // pontos (centralizados em 640, y 646)
     {
-        const wchar_t* sk = T(L"Pular tutorial  ✕", L"Skip tutorial  ✕", L"Saltar tutorial  ✕");
-        float sw = p.Measure(sk, 14, DWRITE_FONT_WEIGHT_MEDIUM) + 32 * s;
-        D2D1_RECT_F b = D2D1::RectF(CW - 32 * s - sw, 28 * s, CW - 32 * s, 28 * s + 38 * s);
+        float tot = (kTutSteps - 1) * 8 + 24 + (kTutSteps - 1) * 8.0f, x = 640 - tot / 2;
+        for (int n = 0; n < kTutSteps; ++n) {
+            float ww = n == g_tut.step ? 24.0f : 8.0f;
+            hit(20 + n, R(x - 3, 640, ww + 6, 20));
+            fill(x, 648, ww, 8, 4, n == g_tut.step ? 0xFF6633 : 0xFFFFFF, n == g_tut.step ? 1 : (g_tut.hot == 20 + n ? 0.6f : 0.35f));
+            x += ww + 8;
+        }
+    }
+    if (g_tut.step == kTutSteps - 1) { // última tela: os dois botões no lugar do "Pular"
+        D2D1_RECT_F b1 = R(160, 586, 250, 48), b2 = R(422, 586, 120, 48);
+        p.Fill(b1, 8 * k, hit(3, b1) ? ui::Rgba(0xFF7A4D) : ui::Rgba(0xFF6633));
+        text(T(L"Experimentar o WallEngine", L"Try WallEngine", L"Probar WallEngine"), 160, 586, 250, 48, 15, 0x000000, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
+        if (hit(4, b2)) p.Fill(b2, 8 * k, ui::Rgba(0xFFFFFF, 0.08f));
+        p.Stroke(b2, 8 * k, ui::Rgba(0x9AA1AD), 1 * k);
+        text(T(L"Concluir", L"Done", L"Terminar"), 422, 586, 120, 48, 15, 0xFFFFFF, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
+    } else {
+        const wchar_t* sk = T(L"Pular tutorial", L"Skip tutorial", L"Saltar tutorial");
+        float sw = p.Measure(sk, 13, DWRITE_FONT_WEIGHT_MEDIUM) / k;
+        D2D1_RECT_F b = R(1240 - sw - 24, 636, sw + 24, 32);
         bool hh = hit(5, b);
-        p.Fill(b, 19 * s, ui::Rgba(0xFFFFFF, hh ? 0.16f : 0.06f));
-        p.Text(sk, b, 14, ui::Rgba(0xFFFFFF, hh ? 1.0f : 0.75f), DWRITE_FONT_WEIGHT_MEDIUM, DWRITE_TEXT_ALIGNMENT_CENTER);
+        UINT c = hh ? 0xFFFFFF : 0xBCC2CC;
+        text(sk, 1240 - sw - 24, 636, sw + 2, 32, 13, c, DWRITE_FONT_WEIGHT_MEDIUM);
+        p.Feather("M18 6 6 18M6 6l12 12", R(1224, 644, 16, 16), 16 * k, ui::Rgba(c), 2);
     }
 
     HBITMAP bmp = nullptr;

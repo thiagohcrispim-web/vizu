@@ -117,15 +117,31 @@ static void WallCalRender() {
     ui::Painter p(rt, g_dw, th, tk, s);
     D2D1_RECT_F card = D2D1::RectF(M, M, M + W, M + H);
     float rad = 16 * s;
-    p.Shadow(card, rad);
+    { // sombra só por fora do cartão: por dentro ela escurecia o vidro e a opacidade baixa não ficava transparente
+        ID2D1Factory* f0 = nullptr; rt->GetFactory(&f0);
+        ID2D1RectangleGeometry* all = nullptr; ID2D1RoundedRectangleGeometry* in = nullptr; ID2D1PathGeometry* out = nullptr; ID2D1GeometrySink* sk = nullptr; ID2D1Layer* ly = nullptr;
+        if (f0 && SUCCEEDED(f0->CreateRectangleGeometry(D2D1::RectF(0, 0, (float)CW, (float)CH), &all)) && SUCCEEDED(f0->CreateRoundedRectangleGeometry(D2D1::RoundedRect(card, rad, rad), &in)) &&
+            SUCCEEDED(f0->CreatePathGeometry(&out)) && SUCCEEDED(out->Open(&sk)) && SUCCEEDED(all->CombineWithGeometry(in, D2D1_COMBINE_MODE_EXCLUDE, nullptr, sk)) && SUCCEEDED(sk->Close()) &&
+            SUCCEEDED(rt->CreateLayer(&ly))) {
+            rt->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), out), ly);
+            p.Shadow(card, rad);
+            rt->PopLayer();
+        }
+        if (ly) ly->Release(); if (sk) sk->Release(); if (out) out->Release(); if (in) in->Release(); if (all) all->Release(); if (f0) f0->Release();
+    }
 
     // vidro: o pedaço do papel de parede atrás da caixa, desfocado
     ID2D1Factory* fac = nullptr; rt->GetFactory(&fac);
     ID2D1RoundedRectangleGeometry* geo = nullptr; ID2D1Layer* layer = nullptr;
     bool clipped = fac && SUCCEEDED(fac->CreateRoundedRectangleGeometry(D2D1::RoundedRect(card, rad, rad), &geo)) && SUCCEEDED(rt->CreateLayer(&layer));
     if (clipped) rt->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), geo), layer);
-    WallCalLoadBlur(mi.rcMonitor);
-    if (!g_wcal.blur.empty()) {
+    // Com a chuva ligada, o que fica atrás do calendário é o fundo da chuva, não o arquivo do papel de parede:
+    // desfocar o arquivo mostrava uma imagem que não está na tela e a opacidade parecia não mudar nada.
+    // Nesse caso o vidro é um véu leve da cor da chuva e o que está atrás (chuva, WallClock) aparece.
+    bool overRain = g_cfg.rainEnabled && rain::g_running;
+    if (overRain) p.Fill(card, 0, ui::Rgba(g_cfg.rainColor, 0.35f));
+    else WallCalLoadBlur(mi.rcMonitor);
+    if (!overRain && !g_wcal.blur.empty()) {
         ID2D1Bitmap* b = nullptr;
         if (SUCCEEDED(rt->CreateBitmap(D2D1::SizeU(g_wcal.blurW, g_wcal.blurH), g_wcal.blur.data(), g_wcal.blurW * 4,
                                        D2D1::BitmapProperties(D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED)), &b))) {

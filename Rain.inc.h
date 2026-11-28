@@ -214,7 +214,26 @@ inline void DrawClock() {
     auto layoutAt = [&](float size) -> IDWriteTextLayout* {
         if (!g_clockFmt || g_clockFmtSize != size || g_clockFmtFont != fam) {
             if (g_clockFmt) { g_clockFmt->Release(); g_clockFmt = nullptr; }
-            if (FAILED(g_dw->CreateTextFormat(fam.c_str(), nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, size, L"pt-br", &g_clockFmt))) return nullptr;
+            // O seletor devolve o nome GDI ("Arial Black", "Bahnschrift SemiBold"); o DirectWrite quer a família + peso.
+            // Sem essa conversão a fonte não é achada e cai na padrão. As fontes que vêm no .exe (Inter...) usam a coleção própria.
+            std::wstring family = fam; DWRITE_FONT_WEIGHT wt = DWRITE_FONT_WEIGHT_SEMI_BOLD;
+            DWRITE_FONT_STRETCH st = DWRITE_FONT_STRETCH_NORMAL; DWRITE_FONT_STYLE sy = DWRITE_FONT_STYLE_NORMAL;
+            IDWriteFontCollection* coll = fonts::Has(fam.c_str()) ? fonts::Collection() : nullptr;
+            IDWriteGdiInterop* gi = nullptr;
+            if (!coll && SUCCEEDED(g_dw->GetGdiInterop(&gi))) {
+                LOGFONTW lf = {}; lf.lfWeight = FW_NORMAL; lf.lfCharSet = DEFAULT_CHARSET;
+                wcsncpy(lf.lfFaceName, fam.c_str(), LF_FACESIZE - 1);
+                IDWriteFont* f = nullptr; IDWriteFontFamily* ff = nullptr; IDWriteLocalizedStrings* names = nullptr;
+                if (SUCCEEDED(gi->CreateFontFromLOGFONT(&lf, &f)) && SUCCEEDED(f->GetFontFamily(&ff)) && SUCCEEDED(ff->GetFamilyNames(&names))) {
+                    UINT32 idx = 0; BOOL ex = FALSE; names->FindLocaleName(L"en-us", &idx, &ex); if (!ex) idx = 0;
+                    UINT32 len = 0; names->GetStringLength(idx, &len);
+                    std::wstring n(len + 1, L'\0'); names->GetString(idx, &n[0], len + 1); n.resize(len);
+                    if (!n.empty()) { family = n; wt = f->GetWeight(); st = f->GetStretch(); sy = f->GetStyle(); }
+                    if (wt == DWRITE_FONT_WEIGHT_NORMAL && family == fam) wt = DWRITE_FONT_WEIGHT_SEMI_BOLD; // nome simples: mantém o semi-negrito de antes
+                }
+                if (names) names->Release(); if (ff) ff->Release(); if (f) f->Release(); gi->Release();
+            }
+            if (FAILED(g_dw->CreateTextFormat(family.c_str(), coll, wt, sy, st, size, L"pt-br", &g_clockFmt))) return nullptr;
             g_clockFmt->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
             g_clockFmtSize = size; g_clockFmtFont = fam;
         }

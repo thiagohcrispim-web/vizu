@@ -177,3 +177,21 @@ arquivos: .github/scripts/precheck.py
 exigido: \\\[\\w\*\\\]
 motivo: campos de array na struct Config (wcColor[3]) eram dados como inexistentes pelo pré-teste
 origem: v19.8.0
+
+id: wallclock-fonte-gdi
+arquivos: Rain.inc.h
+exigido: CreateFontFromLOGFONT
+motivo: o seletor de fonte devolve o nome GDI (Arial Black, Bahnschrift SemiBold); passado direto ao DirectWrite a fonte não é achada e o WallClock cai na padrão
+origem: v19.8.1
+
+id: calendario-opacidade-sobre-chuva
+arquivos: WallCal.inc.h
+exigido: overRain
+motivo: com a chuva ligada, desfocar o arquivo do papel de parede mostrava uma imagem que não está na tela e a opacidade do box parecia não funcionar
+origem: v19.8.1
+
+id: calendario-sombra-por-fora
+arquivos: WallCal.inc.h
+exigido: D2D1_COMBINE_MODE_EXCLUDE
+motivo: a sombra desenhada por baixo do cartão escurecia o vidro e a opacidade baixa não ficava transparente
+origem: v19.8.1
