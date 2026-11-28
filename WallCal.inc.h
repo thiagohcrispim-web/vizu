@@ -139,8 +139,7 @@ static void WallCalRender() {
     // desfocar o arquivo mostrava uma imagem que não está na tela e a opacidade parecia não mudar nada.
     // Nesse caso o vidro é um véu leve da cor da chuva e o que está atrás (chuva, WallClock) aparece.
     bool overRain = g_cfg.rainEnabled && rain::g_running;
-    if (overRain) p.Fill(card, 0, ui::Rgba(g_cfg.rainColor, 0.35f));
-    else WallCalLoadBlur(mi.rcMonitor);
+    if (!overRain) WallCalLoadBlur(mi.rcMonitor);
     if (!overRain && !g_wcal.blur.empty()) {
         ID2D1Bitmap* b = nullptr;
         if (SUCCEEDED(rt->CreateBitmap(D2D1::SizeU(g_wcal.blurW, g_wcal.blurH), g_wcal.blur.data(), g_wcal.blurW * 4,
@@ -153,7 +152,7 @@ static void WallCalRender() {
     }
     p.Fill(card, 0, ui::Rgba(g_cfg.calBox, g_cfg.calOpacity / 100.0f));
     { // brilho do vidro: diagonal clara no alto, filetes de luz no topo e na lateral direita (sombra interna suave)
-        D2D1_GRADIENT_STOP sheen[3] = {{0, ui::Rgba(0xFFFFFF, 0.10f)}, {0.45f, ui::Rgba(0xFFFFFF, 0.02f)}, {1, ui::Rgba(0x000000, 0.10f)}};
+        D2D1_GRADIENT_STOP sheen[3] = {{0, ui::Rgba(0xFFFFFF, 0.10f)}, {0.45f, ui::Rgba(0xFFFFFF, 0.02f)}, {1, ui::Rgba(0xFFFFFF, 0)}}; // sem escurecer: a cor do box fica fiel
         if (auto* gb = p.Angle(card, 160, sheen, 3)) { rt->FillRectangle(card, gb); gb->Release(); }
         D2D1_GRADIENT_STOP topGlow[2] = {{0, ui::Rgba(0xFFFFFF, 0.16f)}, {1, ui::Rgba(0xFFFFFF, 0)}};
         D2D1_RECT_F tg = D2D1::RectF(card.left, card.top, card.right, card.top + 26 * s);
@@ -271,6 +270,22 @@ static int WallCalHit(POINT pt) {
     return 0;
 }
 
+// Janela logo acima da qual o calendário deve ficar: a que está imediatamente acima da área de trabalho (a janela dos ícones,
+// Progman ou o WorkerW com SHELLDLL_DefView). HWND_BOTTOM punha o calendário ABAIXO da área de trabalho e ele sumia
+// assim que se clicava no fundo. Devolve h quando o calendário já está no lugar.
+static HWND WallCalAfter(HWND h) {
+    HWND host = nullptr;
+    EnumWindows([](HWND w, LPARAM lp) -> BOOL {
+        if (FindWindowExW(w, nullptr, L"SHELLDLL_DefView", nullptr)) { *(HWND*)lp = w; return FALSE; }
+        return TRUE;
+    }, (LPARAM)&host);
+    if (!host) host = FindWindowW(L"Progman", nullptr);
+    if (!host) return HWND_BOTTOM;
+    HWND prev = GetWindow(host, GW_HWNDPREV);
+    if (prev == h) return h;
+    return prev ? prev : HWND_TOP; // nada acima da área de trabalho: fica no topo dessa pilha vazia
+}
+
 static LRESULT CALLBACK WallCalProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
     case WM_NCHITTEST: { // a sombra em volta deixa o clique passar para a área de trabalho
@@ -280,7 +295,9 @@ static LRESULT CALLBACK WallCalProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     case WM_MOUSEACTIVATE: return MA_NOACTIVATE;
     case WM_WINDOWPOSCHANGING: { // sempre no fundo: logo acima da área de trabalho, abaixo das outras janelas
         auto* wp2 = (WINDOWPOS*)lp;
-        wp2->hwndInsertAfter = HWND_BOTTOM; wp2->flags &= ~SWP_NOZORDER;
+        HWND after = WallCalAfter(h);
+        if (after == h) wp2->flags |= SWP_NOZORDER; // já está no lugar
+        else { wp2->hwndInsertAfter = after; wp2->flags &= ~SWP_NOZORDER; }
         return 0;
     }
     case WM_MOUSEMOVE: {
@@ -343,7 +360,13 @@ static LRESULT CALLBACK WallCalProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         if (g_wcal.resize) { g_wcal.resize = 0; ReleaseCapture(); WallCalSavePos(); WallCalRender(); }
         return 0;
     case WM_CAPTURECHANGED: if (g_wcal.resize) { g_wcal.resize = 0; WallCalSavePos(); } return 0;
-    case WM_TIMER: { // troca de dia (meia-noite) e eventos novos da Agenda
+    case WM_TIMER: if (wp == 2) { // "Mostrar área de trabalho" e cliques no fundo mexem na pilha: volta ao lugar
+            if (!IsWindowVisible(h)) ShowWindow(h, SW_SHOWNOACTIVATE);
+            HWND after = WallCalAfter(h);
+            if (after != h) SetWindowPos(h, after, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            return 0;
+        }
+        { // troca de dia (meia-noite) e eventos novos da Agenda
         static WORD lastDay = 0;
         SYSTEMTIME t; GetLocalTime(&t);
         if (t.wDay != lastDay) { lastDay = t.wDay; g_wcal.monthOff = 0; }
@@ -372,6 +395,7 @@ static void WallCalEnable(bool on) {
     if (!g_wcal.wnd) { diag::Note("calendário no fundo", "CreateWindow", HRESULT_FROM_WIN32(GetLastError())); return; }
     WallCalPlace();
     ShowWindow(g_wcal.wnd, SW_SHOWNOACTIVATE);
-    SetWindowPos(g_wcal.wnd, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    SetWindowPos(g_wcal.wnd, WallCalAfter(g_wcal.wnd), 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     SetTimer(g_wcal.wnd, 1, 60000, nullptr);
+    SetTimer(g_wcal.wnd, 2, 1000, nullptr);
 }

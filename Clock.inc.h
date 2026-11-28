@@ -573,18 +573,23 @@ static void ClockDefaultPos() { // canto inferior direito, acima da barra de tar
     SetWindowPos(g_clock.wnd, nullptr, mi.rcWork.right - (wr.right - wr.left) - 8, mi.rcWork.bottom - (wr.bottom - wr.top) - 8, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
 }
 
-static bool PickFont(HWND owner, std::wstring* face, DWORD* px) {
+// weight/italic (opcionais): o estilo escolhido em "Estilo da fonte" (Negrito, Itálico...).
+static bool PickFont(HWND owner, std::wstring* face, DWORD* px, DWORD* weight = nullptr, bool* italic = nullptr) {
     LOGFONTW lf = {};
     wcsncpy(lf.lfFaceName, face->c_str(), LF_FACESIZE - 1);
     HDC dc = GetDC(nullptr);
     lf.lfHeight = px ? -MulDiv((int)*px, GetDeviceCaps(dc, LOGPIXELSY), 96) : -16;
-    lf.lfWeight = FW_SEMIBOLD;
+    lf.lfWeight = weight ? (LONG)*weight : FW_SEMIBOLD;
+    lf.lfItalic = italic && *italic;
+    lf.lfCharSet = DEFAULT_CHARSET; // sem isso o quadro "Exemplo" fica vazio e algumas fontes não aparecem selecionadas
     CHOOSEFONTW cf = {sizeof(cf)};
     cf.hwndOwner = owner; cf.lpLogFont = &lf; cf.hDC = dc;
     cf.Flags = CF_SCREENFONTS | CF_INITTOLOGFONTSTRUCT | CF_NOSCRIPTSEL | (px ? 0 : CF_NOSIZESEL) | CF_NOVERTFONTS;
     bool ok = ChooseFontW(&cf) != FALSE;
     if (ok) {
         *face = lf.lfFaceName;
+        if (weight) *weight = (DWORD)(lf.lfWeight ? lf.lfWeight : FW_NORMAL);
+        if (italic) *italic = lf.lfItalic != 0;
         if (px) *px = max(18ul, min(96ul, (unsigned long)MulDiv(abs(lf.lfHeight), 96, GetDeviceCaps(dc, LOGPIXELSY))));
     }
     ReleaseDC(nullptr, dc);

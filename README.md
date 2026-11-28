@@ -3,7 +3,7 @@
 <h3 align="center">Veja todos os seus arquivos de design no Windows,<br>mesmo sem os programas instalados.</h3>
 
 <p align="center">
-  <a href="https://github.com/thiagohcrispim-web/vizu/releases/latest/download/Vizu_Setup_19.8.1_x64.exe"><b>⬇ Baixar o Vizu para Windows</b></a> &nbsp;·&nbsp; grátis e de código aberto (MIT)
+  <a href="https://github.com/thiagohcrispim-web/vizu/releases/latest/download/Vizu_Setup_19.8.2_x64.exe"><b>⬇ Baixar o Vizu para Windows</b></a> &nbsp;·&nbsp; grátis e de código aberto (MIT)
 </p>
 
 ---
@@ -99,7 +99,7 @@ desligado nas Configurações.
 
 ## Instalar
 
-1. Baixe o **[instalador](https://github.com/thiagohcrispim-web/vizu/releases/latest/download/Vizu_Setup_19.8.1_x64.exe)** e abra. Não precisa de administrador.
+1. Baixe o **[instalador](https://github.com/thiagohcrispim-web/vizu/releases/latest/download/Vizu_Setup_19.8.2_x64.exe)** e abra. Não precisa de administrador.
 2. Pronto: as miniaturas aparecem conforme você navega pelas pastas.
 
 Para atualizar, o Vizu avisa sozinho quando sai versão nova. Para desinstalar, rode o instalador de novo ou use
@@ -160,7 +160,7 @@ https://docs.github.com/site-policy/privacy-policies/github-general-privacy-stat
 
 - Compilar no Linux: `./build.sh` (MinGW `g++-mingw-w64-x86-64-posix`; os headers mais novos do mingw-w64 estão em `third_party/`).
 - O GitHub Actions compila a cada envio e publica o instalador como artefato (`.github/workflows/build.yml`).
-- Instalação silenciosa: `Vizu_Setup_19.8.1_x64.exe /install /S` · desinstalar: `Vizu.exe /uninstall [/S]`.
+- Instalação silenciosa: `Vizu_Setup_19.8.2_x64.exe /install /S` · desinstalar: `Vizu.exe /uninstall [/S]`.
 - Diagnóstico de um arquivo: `Vizu.exe /diag "arquivo"` ou arraste o arquivo sobre `diagnostico.bat`. Sem arquivo (`Vizu.exe /diag` ou dois cliques no `.bat`): diagnóstico do Espaço e do Alt.
 - A biblioteca `DesignThumbs.dll` (miniaturas do Explorer) e a chave de registro `HKCU\Software\DesignThumbs` mantêm o
   nome antigo, para não quebrar as miniaturas nem as configurações de quem já usa.
@@ -169,6 +169,7 @@ https://docs.github.com/site-policy/privacy-policies/github-general-privacy-stat
 <details>
 <summary><b>Histórico de versões</b></summary>
 
+- **v19.8.2** — Calendário no fundo não some mais ao clicar na área de trabalho ou em "Mostrar área de trabalho", e a cor escolhida para o box aparece fiel. WallClock funciona com qualquer fonte do seletor, inclusive itálicos, negritos e fontes do Adobe Fonts; o quadro Exemplo do seletor volta a mostrar a prévia. O tutorial usa o menu circular de verdade. O tempo da barra de gravação não corta mais o último número e ficou um pouco menor. [Baixar](https://github.com/thiagohcrispim-web/vizu/releases/download/v19.8.2/Vizu_Setup_19.8.2_x64.exe)
 - **v19.8.1** — Tutorial refeito igual ao protótipo: tela inteira escurecida, texto à esquerda e a ilustração de cada função à direita (aparece de novo para quem pulou o da 19.8.0). WallClock aceita qualquer fonte instalada (nomes como Arial Black ou Bahnschrift SemiBold eram trocados pela padrão). Calendário no fundo: a opacidade do box volta a funcionar com a chuva ligada e a sombra não escurece mais o vidro. [Baixar](https://github.com/thiagohcrispim-web/vizu/releases/download/v19.8.1/Vizu_Setup_19.8.1_x64.exe)
 - **v19.8.0** — WallEngine: nova seção nas Configurações, depois de Outros, com Chuva no fundo, WallClock (relógio grande no centro do papel de parede: fonte, até 3 cores em degradê, opacidade, tamanho e modo vidro) e Calendário no fundo (caixa de vidro com o papel de parede desfocado; arraste, puxe os cantos para o tamanho, troque de mês e clique num dia para abrir a Agenda). Cada um tem o próprio Avançado, que só aparece quando está ligado. Tutorial de 8 telas na primeira abertura, que pode ser pulado e reaberto em Configurações › Introdução. OCR: botão A/a troca o texto para CAIXA ALTA. Textos das Configurações revistos, com ALT e BARRA DE ESPAÇO em destaque, controles segmentados mais leves e menus circulares sem serrilhado. [Baixar](https://github.com/thiagohcrispim-web/vizu/releases/download/v19.8.0/Vizu_Setup_19.8.0_x64.exe)
 - **v19.7.0** — Gravar tela: a bolinha vermelha na caixa do relógio (ou Ctrl+Alt+R) abre uma barra no topo com Gravar, Pausar, Parar e o tempo. Grava em MP4 na pasta Vídeos, com som do computador e/ou microfone. A barra nunca aparece no vídeo; "Esconder botões, cursor e menu Iniciar" tira também a caixa do relógio, o cursor e a barra de tarefas.

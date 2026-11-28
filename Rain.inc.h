@@ -32,6 +32,8 @@ struct Config {
     int clockSize = 60;              // % da largura do monitor principal (1 a 100)
     bool clockGlass = false;         // vidro: o papel de parede desfocado dentro dos números
     std::wstring clockFont = L"Segoe UI";
+    int clockWeight = 600;           // peso escolhido no seletor (FW_*)
+    bool clockItalic = false;
 };
 
 inline Config g_cfg;
@@ -210,48 +212,52 @@ inline void DrawClock() {
     float mx = (float)(mi.rcMonitor.left - g_area.left), my = (float)(mi.rcMonitor.top - g_area.top);
     float mw = (float)(mi.rcMonitor.right - mi.rcMonitor.left), mh = (float)(mi.rcMonitor.bottom - mi.rcMonitor.top);
     const std::wstring& fam = g_cfg.clockFont.empty() ? std::wstring(L"Segoe UI") : g_cfg.clockFont;
-    // largura do texto a 100 px; o tamanho final sai por regra de três
-    auto layoutAt = [&](float size) -> IDWriteTextLayout* {
-        if (!g_clockFmt || g_clockFmtSize != size || g_clockFmtFont != fam) {
-            if (g_clockFmt) { g_clockFmt->Release(); g_clockFmt = nullptr; }
-            // O seletor devolve o nome GDI ("Arial Black", "Bahnschrift SemiBold"); o DirectWrite quer a família + peso.
-            // Sem essa conversão a fonte não é achada e cai na padrão. As fontes que vêm no .exe (Inter...) usam a coleção própria.
-            std::wstring family = fam; DWRITE_FONT_WEIGHT wt = DWRITE_FONT_WEIGHT_SEMI_BOLD;
-            DWRITE_FONT_STRETCH st = DWRITE_FONT_STRETCH_NORMAL; DWRITE_FONT_STYLE sy = DWRITE_FONT_STYLE_NORMAL;
-            IDWriteFontCollection* coll = fonts::Has(fam.c_str()) ? fonts::Collection() : nullptr;
-            IDWriteGdiInterop* gi = nullptr;
-            if (!coll && SUCCEEDED(g_dw->GetGdiInterop(&gi))) {
-                LOGFONTW lf = {}; lf.lfWeight = FW_NORMAL; lf.lfCharSet = DEFAULT_CHARSET;
-                wcsncpy(lf.lfFaceName, fam.c_str(), LF_FACESIZE - 1);
-                IDWriteFont* f = nullptr; IDWriteFontFamily* ff = nullptr; IDWriteLocalizedStrings* names = nullptr;
-                if (SUCCEEDED(gi->CreateFontFromLOGFONT(&lf, &f)) && SUCCEEDED(f->GetFontFamily(&ff)) && SUCCEEDED(ff->GetFamilyNames(&names))) {
-                    UINT32 idx = 0; BOOL ex = FALSE; names->FindLocaleName(L"en-us", &idx, &ex); if (!ex) idx = 0;
-                    UINT32 len = 0; names->GetStringLength(idx, &len);
-                    std::wstring n(len + 1, L'\0'); names->GetString(idx, &n[0], len + 1); n.resize(len);
-                    if (!n.empty()) { family = n; wt = f->GetWeight(); st = f->GetStretch(); sy = f->GetStyle(); }
-                    if (wt == DWRITE_FONT_WEIGHT_NORMAL && family == fam) wt = DWRITE_FONT_WEIGHT_SEMI_BOLD; // nome simples: mantém o semi-negrito de antes
-                }
-                if (names) names->Release(); if (ff) ff->Release(); if (f) f->Release(); gi->Release();
-            }
-            if (FAILED(g_dw->CreateTextFormat(family.c_str(), coll, wt, sy, st, size, L"pt-br", &g_clockFmt))) return nullptr;
-            g_clockFmt->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
-            g_clockFmtSize = size; g_clockFmtFont = fam;
+    // Contorno dos números pela fonte do GDI, a mesma lista do seletor: funciona com qualquer fonte que ele mostre
+    // (itálicos, pesos como "Arial Black", fontes do Adobe Fonts que o DirectWrite não enxerga). Guardado até mudar a hora ou a fonte.
+    static ID2D1PathGeometry* geo = nullptr; static std::wstring geoKey; static D2D1_RECT_F gb{};
+    std::wstring key = fam + L"|" + std::to_wstring(g_cfg.clockWeight) + (g_cfg.clockItalic ? L"i|" : L"|") + txt;
+    if (!geo || key != geoKey) {
+        if (geo) { geo->Release(); geo = nullptr; }
+        geoKey = key;
+        LOGFONTW lf = {}; lf.lfHeight = -100; lf.lfWeight = g_cfg.clockWeight; lf.lfItalic = g_cfg.clockItalic; lf.lfCharSet = DEFAULT_CHARSET;
+        lf.lfQuality = ANTIALIASED_QUALITY; wcsncpy(lf.lfFaceName, fam.c_str(), LF_FACESIZE - 1);
+        HFONT hf = CreateFontIndirectW(&lf);
+        HDC dc = CreateCompatibleDC(nullptr);
+        HGDIOBJ old = SelectObject(dc, hf);
+        IDWriteGdiInterop* gi = nullptr; IDWriteFontFace* face = nullptr;
+        if (IDWriteFontCollection* bc = fonts::Has(fam.c_str()) ? fonts::Collection() : nullptr) { // fontes que vêm no .exe (Inter): o GDI não as conhece
+            UINT32 fi = 0; BOOL ex = FALSE; IDWriteFontFamily* ff = nullptr; IDWriteFont* f = nullptr;
+            if (SUCCEEDED(bc->FindFamilyName(fam.c_str(), &fi, &ex)) && ex && SUCCEEDED(bc->GetFontFamily(fi, &ff)) &&
+                SUCCEEDED(ff->GetFirstMatchingFont((DWRITE_FONT_WEIGHT)g_cfg.clockWeight, DWRITE_FONT_STRETCH_NORMAL, g_cfg.clockItalic ? DWRITE_FONT_STYLE_ITALIC : DWRITE_FONT_STYLE_NORMAL, &f)))
+                f->CreateFontFace(&face);
+            if (f) f->Release(); if (ff) ff->Release();
         }
-        IDWriteTextLayout* l = nullptr;
-        g_dw->CreateTextLayout(txt, (UINT32)wcslen(txt), g_clockFmt, 100000, 100000, &l);
-        return l;
-    };
-    IDWriteTextLayout* probe = layoutAt(100);
-    if (!probe) return;
-    DWRITE_TEXT_METRICS pm; probe->GetMetrics(&pm); probe->Release();
-    if (pm.width < 1) return;
+        if (face || (SUCCEEDED(g_dw->GetGdiInterop(&gi)) && SUCCEEDED(gi->CreateFontFaceFromHdc(dc, &face)))) {
+            UINT32 n = (UINT32)wcslen(txt); UINT32 cps[8]; UINT16 idx[8]; FLOAT adv[8]; DWRITE_GLYPH_METRICS gm[8];
+            for (UINT32 i = 0; i < n; ++i) cps[i] = txt[i];
+            DWRITE_FONT_METRICS fm; face->GetMetrics(&fm);
+            ID2D1GeometrySink* sk = nullptr;
+            if (SUCCEEDED(face->GetGlyphIndices(cps, n, idx)) && SUCCEEDED(face->GetDesignGlyphMetrics(idx, n, gm, FALSE)) &&
+                SUCCEEDED(g_d2d->CreatePathGeometry(&geo)) && SUCCEEDED(geo->Open(&sk))) {
+                for (UINT32 i = 0; i < n; ++i) adv[i] = gm[i].advanceWidth * 100.0f / fm.designUnitsPerEm;
+                face->GetGlyphRunOutline(100, idx, adv, nullptr, n, FALSE, FALSE, sk);
+                sk->Close();
+            }
+            if (sk) sk->Release();
+        }
+        if (face) face->Release(); if (gi) gi->Release();
+        SelectObject(dc, old); DeleteDC(dc); DeleteObject(hf);
+        if (geo && FAILED(geo->GetBounds(nullptr, &gb))) { geo->Release(); geo = nullptr; }
+    }
+    if (!geo || gb.right - gb.left < 1) return;
+    float bw = gb.right - gb.left, bh = gb.bottom - gb.top;
     float target = mw * std::max(1, std::min(100, g_cfg.clockSize)) / 100.0f;
-    float size = std::max(4.0f, std::min(100.0f * target / pm.width, mh * 0.9f / (pm.height / 100.0f)));
-    size = floorf(size);
-    IDWriteTextLayout* lay = layoutAt(size);
-    if (!lay) return;
-    DWRITE_TEXT_METRICS m; lay->GetMetrics(&m);
-    float x = mx + (mw - m.width) / 2 - m.left, y = my + (mh - m.height) / 2 - m.top;
+    float k = std::min(target / bw, mh * 0.9f / bh);
+    float tx = mx + mw / 2 - (gb.left + gb.right) / 2 * k, ty = my + mh / 2 - (gb.top + gb.bottom) / 2 * k;
+    ID2D1TransformedGeometry* lay = nullptr;
+    if (FAILED(g_d2d->CreateTransformedGeometry(geo, D2D1::Matrix3x2F::Scale(k, k) * D2D1::Matrix3x2F::Translation(tx, ty), &lay))) return;
+    struct { float top, height; } m = {0, bh * k};
+    float y = ty + gb.top * k;
     float op = std::max(0.05f, std::min(1.0f, g_cfg.clockOpacity));
     if (g_cfg.clockGlass) { // vidro: o papel de parede desfocado preenche os números, com um véu claro por cima
         MakeBlur();
@@ -259,18 +265,18 @@ inline void DrawClock() {
             ID2D1BitmapBrush* bb = nullptr;
             if (SUCCEEDED(g_rt->CreateBitmapBrush(g_blur, D2D1::BitmapBrushProperties(D2D1_EXTEND_MODE_CLAMP, D2D1_EXTEND_MODE_CLAMP, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR), &bb))) {
                 bb->SetTransform(D2D1::Matrix3x2F::Scale(16, 16));
-                g_rt->DrawTextLayout(D2D1::Point2F(x, y), lay, bb);
+                g_rt->FillGeometry(lay, bb);
                 bb->Release();
             }
         }
         ID2D1SolidColorBrush* veil = nullptr;
-        if (SUCCEEDED(g_rt->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 0.18f * op + 0.04f), &veil))) { g_rt->DrawTextLayout(D2D1::Point2F(x, y), lay, veil); veil->Release(); }
+        if (SUCCEEDED(g_rt->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 0.18f * op + 0.04f), &veil))) { g_rt->FillGeometry(lay, veil); veil->Release(); }
     } else {
         int n = std::max(1, std::min(3, g_cfg.clockCount));
         auto col = [&](int i) { UINT c = g_cfg.clockColors[i]; return D2D1::ColorF(((c >> 16) & 255) / 255.0f, ((c >> 8) & 255) / 255.0f, (c & 255) / 255.0f, op); };
         if (n == 1) {
             ID2D1SolidColorBrush* b = nullptr;
-            if (SUCCEEDED(g_rt->CreateSolidColorBrush(col(0), &b))) { g_rt->DrawTextLayout(D2D1::Point2F(x, y), lay, b); b->Release(); }
+            if (SUCCEEDED(g_rt->CreateSolidColorBrush(col(0), &b))) { g_rt->FillGeometry(lay, b); b->Release(); }
         } else { // degradê sempre de cima para baixo (90°)
             D2D1_GRADIENT_STOP st[3];
             for (int i = 0; i < n; ++i) st[i] = {(float)i / (n - 1), col(i)};
@@ -278,7 +284,7 @@ inline void DrawClock() {
             float top = y + m.top, bottom = y + m.top + m.height;
             if (SUCCEEDED(g_rt->CreateGradientStopCollection(st, (UINT32)n, &sc)) &&
                 SUCCEEDED(g_rt->CreateLinearGradientBrush(D2D1::LinearGradientBrushProperties(D2D1::Point2F(0, top), D2D1::Point2F(0, bottom)), sc, &lb)))
-                g_rt->DrawTextLayout(D2D1::Point2F(x, y), lay, lb);
+                g_rt->FillGeometry(lay, lb);
             if (lb) lb->Release(); if (sc) sc->Release();
         }
     }

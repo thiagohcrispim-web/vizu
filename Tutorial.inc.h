@@ -165,30 +165,25 @@ static void TutRender() {
             for (auto* c : chips) { float cw = p.Measure(c, 9) / k + 12; fill(cx, 390, cw, 16, 4, 0x23272E); text(c, cx, 390, cw, 16, 9, 0xFFFFFF, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER); cx += cw + 4; }
         }
         break;
-    case 2: { // menu circular (Classic) em volta do mouse
-        float cx = 940, cy = 270, ro = 170, ri = 62;
-        D2D1_ELLIPSE eo = D2D1::Ellipse(D2D1::Point2F(OX + cx * k, OY + cy * k), ro * k, ro * k);
-        ID2D1SolidColorBrush* b = nullptr;
-        if (SUCCEEDED(rt->CreateSolidColorBrush(ui::Rgba(0x4A4F57, 0.96f), &b))) { rt->FillEllipse(eo, b); b->Release(); }
-        static const wchar_t* fmts[8] = {L"PNG", L"JPG", L"WEBP", L"PDF", L"SVG", L"TIFF", L"AVIF", L"ICO"};
-        for (int s8 = 0; s8 < 8; ++s8) {
-            float a = (s8 * 45.0f) * 3.14159265f / 180, a2 = (s8 * 45.0f + 22.5f) * 3.14159265f / 180;
-            ID2D1SolidColorBrush* lb = nullptr;
-            if (SUCCEEDED(rt->CreateSolidColorBrush(ui::Rgba(0x2E333B), &lb))) {
-                rt->DrawLine(D2D1::Point2F(OX + (cx + ri * sinf(a)) * k, OY + (cy - ri * cosf(a)) * k), D2D1::Point2F(OX + (cx + ro * sinf(a)) * k, OY + (cy - ro * cosf(a)) * k), lb, 2 * k);
-                lb->Release();
-            }
-            float lx = cx + 118 * sinf(a2), ly = cy - 118 * cosf(a2);
-            if (s8 == 0) { // fatia em destaque
-                D2D1_ELLIPSE h = D2D1::Ellipse(D2D1::Point2F(OX + lx * k, OY + ly * k), 30 * k, 30 * k);
-                ID2D1SolidColorBrush* hb = nullptr;
-                if (SUCCEEDED(rt->CreateSolidColorBrush(ui::Rgba(0xFF6633), &hb))) { rt->FillEllipse(h, hb); hb->Release(); }
-            }
-            text(fmts[s8], lx - 40, ly - 12, 80, 24, 14, s8 == 0 ? 0x000000 : 0xFFFFFF, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
+    case 2: { // o anel de verdade (RingBitmap), com o tema Classic e um PSD selecionado, como no protótipo
+        static HBITMAP ring = nullptr;
+        if (!ring) {
+            auto sides = std::move(g_sides); int side = g_side, hot = g_ringHot; float scale = g_ringScale;
+            double shown = g_ringShownAt, hotAt = g_ringHotAt; bool closing = g_ringClosing, launch = g_ringLaunch;
+            ui::Theme saved = g_theme; auto files = g_convFiles;
+            g_theme = ui::MakeTheme(ui::kThemeClassic, false);
+            g_convFiles = {L"C:\\campanha_verao.psd"}; g_ringLaunch = false;
+            BuildSides();
+            g_side = 0; g_ringHot = 0; g_ringScale = max(1.0f, k); g_ringShownAt = g_ringHotAt = 0; g_ringClosing = false;
+            ring = RingBitmap();
+            g_sides = std::move(sides); g_side = side; g_ringHot = hot; g_ringScale = scale;
+            g_ringShownAt = shown; g_ringHotAt = hotAt; g_ringClosing = closing; g_ringLaunch = launch; g_theme = saved; g_convFiles = files;
         }
-        D2D1_ELLIPSE ei = D2D1::Ellipse(D2D1::Point2F(OX + cx * k, OY + cy * k), ri * k, ri * k);
-        if (SUCCEEDED(rt->CreateSolidColorBrush(ui::Rgba(0x2E333B), &b))) { rt->FillEllipse(ei, b); b->Release(); }
-        text(T(L"Converter", L"Convert", L"Convertir"), cx - 60, cy - 12, 120, 24, 13, 0xFFFFFF, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
+        IWICImagingFactory* wic = nullptr; IWICBitmap* wb = nullptr; ID2D1Bitmap* bm = nullptr;
+        if (ring && SUCCEEDED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&wic))) &&
+            SUCCEEDED(wic->CreateBitmapFromHBITMAP(ring, nullptr, WICBitmapUsePremultipliedAlpha, &wb)) && SUCCEEDED(rt->CreateBitmapFromWicBitmap(wb, &bm)))
+            rt->DrawBitmap(bm, R(740, 70, 400, 400), 1.0f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
+        if (bm) bm->Release(); if (wb) wb->Release(); if (wic) wic->Release();
         float sw = p.Measure(T(L"Segure", L"Hold", L"Mantén"), 14) / k, gx = 940 - (sw + 14 + 96) / 2;
         text(T(L"Segure", L"Hold", L"Mantén"), gx, 478, sw + 4, 60, 14, 0xBCC2CC);
         key(gx + sw + 14, 478, 96, 60, L"ALT", 18);

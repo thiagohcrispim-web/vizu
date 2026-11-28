@@ -51,7 +51,7 @@ enum {
 struct Config { DWORD themeMode = 0, webpQuality = 75, neon = 0xFF6633; bool tray = true; bool space = true, alt = true, picker = true, autoUpdate = true, dpi300 = false, pdfRaw = false, vectorTextPaths = false, tempPermanent = false; DWORD altDelay = 500, quality = 75;
     bool rainEnabled = false; DWORD rainColor = 0x0E1014, rainOpacity = 22, rainCycleMs = 20000, rainHeadRatio = 15, rainCharset = 0, rainFps = 24; std::wstring rainCustomChars;
     // WallEngine (v19.8): WallClock e Calendário no fundo. Cores iniciais do tema Vizu Classic.
-    bool wcOn = false, wcGlass = false; DWORD wcColor[3] = {0xFF6633, 0xFFFFFF, 0x4A4F57}, wcCount = 1, wcOpacity = 60, wcSize = 60; std::wstring wcFont;
+    bool wcOn = false, wcGlass = false; DWORD wcColor[3] = {0xFF6633, 0xFFFFFF, 0x4A4F57}, wcCount = 1, wcOpacity = 60, wcSize = 60, wcFontWeight = 600; bool wcFontItalic = false; std::wstring wcFont;
     bool calOn = false; DWORD calBox = 0x000000, calOpacity = 40, calNum = 0xFFFFFF, calScale = 100; LONG calX = LONG_MIN, calY = LONG_MIN; };
 static Config g_cfg;
 static bool g_lite = false; // Vizu Lite: só prévia com Espaço e miniaturas
@@ -101,6 +101,8 @@ static void LoadConfig() {
     g_cfg.wcSize = max(1ul, min(100ul, (unsigned long)ReadDword(L"WallClockSize", 60)));
     { wchar_t buf[128] = {}; DWORD cb = sizeof(buf);
       g_cfg.wcFont = RegGetValueW(HKEY_CURRENT_USER, kCfgKey, L"WallClockFont", RRF_RT_REG_SZ, nullptr, buf, &cb) == ERROR_SUCCESS ? buf : L""; }
+    g_cfg.wcFontWeight = max(100ul, min(900ul, (unsigned long)ReadDword(L"WallClockFontWeight", 600)));
+    g_cfg.wcFontItalic = ReadDword(L"WallClockFontItalic", 0) != 0;
     g_cfg.calOn = ReadDword(L"WallCalendar", 0) != 0;
     g_cfg.calBox = ReadDword(L"WallCalBox", 0x000000) & 0xFFFFFF;
     g_cfg.calOpacity = max(0ul, min(95ul, (unsigned long)ReadDword(L"WallCalOpacity", 40)));
@@ -118,6 +120,7 @@ static void SaveConfig() {
     WriteDword(L"WallClock", g_cfg.wcOn); WriteDword(L"WallClockGlass", g_cfg.wcGlass); WriteDword(L"WallClockColors", g_cfg.wcCount);
     WriteDword(L"WallClockColor1", g_cfg.wcColor[0]); WriteDword(L"WallClockColor2", g_cfg.wcColor[1]); WriteDword(L"WallClockColor3", g_cfg.wcColor[2]);
     WriteDword(L"WallClockOpacity", g_cfg.wcOpacity); WriteDword(L"WallClockSize", g_cfg.wcSize);
+    WriteDword(L"WallClockFontWeight", g_cfg.wcFontWeight); WriteDword(L"WallClockFontItalic", g_cfg.wcFontItalic);
     RegSetKeyValueW(HKEY_CURRENT_USER, kCfgKey, L"WallClockFont", REG_SZ, g_cfg.wcFont.c_str(), (DWORD)((g_cfg.wcFont.size() + 1) * sizeof(wchar_t)));
     WriteDword(L"WallCalendar", g_cfg.calOn); WriteDword(L"WallCalBox", g_cfg.calBox); WriteDword(L"WallCalOpacity", g_cfg.calOpacity);
     WriteDword(L"WallCalNumbers", g_cfg.calNum); WriteDword(L"WallCalScale", g_cfg.calScale);
@@ -1378,6 +1381,7 @@ static rain::Config RainCfg() {
     for (int i = 0; i < 3; ++i) c.clockColors[i] = g_cfg.wcColor[i];
     c.clockCount = (int)g_cfg.wcCount; c.clockOpacity = g_cfg.wcOpacity / 100.0f; c.clockSize = (int)g_cfg.wcSize; c.clockGlass = g_cfg.wcGlass;
     c.clockFont = g_cfg.wcFont.empty() ? std::wstring(g_uiFont.empty() ? DefaultUiFont() : g_uiFont.c_str()) : g_cfg.wcFont;
+    c.clockWeight = (int)g_cfg.wcFontWeight; c.clockItalic = g_cfg.wcFontItalic;
     return c;
 }
 static void WallCalEnable(bool on);
@@ -1963,11 +1967,12 @@ static int RingHit(POINT p) {
 
 
 
-static void RenderRing() {
-    if (!g_altWnd || g_sides.empty()) return;
+// Desenha o anel (lado e fatia atuais, tema atual) num bitmap S×S com transparência. Usado pela janela do Alt e pelo tutorial.
+static HBITMAP RingBitmap() {
+    if (g_sides.empty()) return nullptr;
     UINT S = (UINT)RingS();
     fmt::Canvas cv(S, S); // bitmap com transparência (janela "layered", sem moldura)
-    if (!cv.rt) return;
+    if (!cv.rt) return nullptr;
     ID2D1RenderTarget* rt = cv.rt;
     rt->Clear(D2D1::ColorF(0, 0));
     rt->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
@@ -2223,7 +2228,15 @@ static void RenderRing() {
     if (br) br->Release();
     fac->Release();
     HBITMAP bmp = nullptr;
-    if (FAILED(cv.Finish(&bmp)) || !bmp) return;
+    if (FAILED(cv.Finish(&bmp))) return nullptr;
+    return bmp;
+}
+
+static void RenderRing() {
+    if (!g_altWnd || g_sides.empty()) return;
+    UINT S = (UINT)RingS();
+    HBITMAP bmp = RingBitmap();
+    if (!bmp) return;
     RECT wr; GetWindowRect(g_altWnd, &wr);
     HDC screen = GetDC(nullptr), mem = CreateCompatibleDC(screen);
     HGDIOBJ old = SelectObject(mem, bmp);
@@ -3258,7 +3271,7 @@ static void SettingsAction(int id) {
     case kWcOn: g_cfg.wcOn = !g_cfg.wcOn; SaveConfig(); WallApply(); return;
     case kWcGlass: g_cfg.wcGlass = !g_cfg.wcGlass; SaveConfig(); WallApply(); return;
     case kWcFont: { std::wstring f = g_cfg.wcFont.empty() ? std::wstring(g_uiFont.empty() ? DefaultUiFont() : g_uiFont.c_str()) : g_cfg.wcFont;
-        if (PickFont(g_settingsWnd, &f, nullptr)) { g_cfg.wcFont = f; SaveConfig(); WallApply(); } return; }
+        if (PickFont(g_settingsWnd, &f, nullptr, &g_cfg.wcFontWeight, &g_cfg.wcFontItalic)) { g_cfg.wcFont = f; SaveConfig(); WallApply(); } return; }
     case kWcCol0: case kWcCol1: case kWcCol2: if (PickRgb(g_cfg.wcColor[id - kWcCol0])) { SaveConfig(); WallApply(); } return;
     case kWcColMinus: if (g_cfg.wcCount > 1) { --g_cfg.wcCount; SaveConfig(); WallApply(); } return;
     case kWcColPlus: if (g_cfg.wcCount < 3) { ++g_cfg.wcCount; SaveConfig(); WallApply(); } return;
@@ -3812,7 +3825,10 @@ static void PaintSettings(HWND h) {
         if (g_cfg.wcOn) {
             rows.push_back({SH, 1, [&](D2D1_RECT_F r) {
                 rlabel(r, T(L"Fonte", L"Font", L"Fuente"), nullptr);
-                rpill(r, kWcFont, g_cfg.wcFont.empty() ? std::wstring(g_uiFont.empty() ? DefaultUiFont() : g_uiFont.c_str()) : g_cfg.wcFont, 170 * s); }});
+                std::wstring fl = g_cfg.wcFont.empty() ? std::wstring(g_uiFont.empty() ? DefaultUiFont() : g_uiFont.c_str()) : g_cfg.wcFont;
+                if (g_cfg.wcFontWeight >= 700) fl += T(L" Negrito", L" Bold", L" Negrita");
+                if (g_cfg.wcFontItalic) fl += T(L" Itálico", L" Italic", L" Cursiva");
+                rpill(r, kWcFont, fl, 200 * s); }});
             rows.push_back({SH, 1, [&](D2D1_RECT_F r) {
                 rlabel(r, T(L"Cores", L"Colors", L"Colores"), T(L"Até 3, em degradê de cima para baixo", L"Up to 3, as a top-to-bottom gradient", L"Hasta 3, en degradado de arriba abajo"));
                 D2D1_RECT_F box = rbox(r, 3 * 30 * s + 64 * s);

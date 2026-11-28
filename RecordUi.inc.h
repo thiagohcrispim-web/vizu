@@ -31,10 +31,11 @@ static void RecRender() {
     float H = 52 * s, M = 14 * s, gap = 8 * s, pad = 10 * s;
 
     // larguras pelo texto (os três idiomas cabem)
-    auto measure = [&](const std::wstring& t, float size) {
+    // mede com a mesma coleção de fontes do desenho (Inter vem no .exe; com nullptr media outra fonte e cortava o texto)
+    auto measure = [&](const std::wstring& t, float size, DWRITE_FONT_WEIGHT wt = DWRITE_FONT_WEIGHT_MEDIUM) {
         float wd = 0;
         IDWriteTextFormat* f = nullptr;
-        if (SUCCEEDED(g_dw->CreateTextFormat(th.font, nullptr, DWRITE_FONT_WEIGHT_MEDIUM, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, size * s, L"pt-br", &f))) {
+        if (SUCCEEDED(g_dw->CreateTextFormat(th.font, fonts::Has(th.font) ? fonts::Collection() : nullptr, wt, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, size * s, L"pt-br", &f))) {
             IDWriteTextLayout* l = nullptr; DWRITE_TEXT_METRICS m = {};
             if (SUCCEEDED(g_dw->CreateTextLayout(t.c_str(), (UINT32)t.size(), f, 4000, 100, &l))) { l->GetMetrics(&m); l->Release(); wd = m.widthIncludingTrailingWhitespace; }
             f->Release();
@@ -47,7 +48,7 @@ static void RecRender() {
     std::wstring lHide = T(L"Esconder botões, cursor e menu Iniciar", L"Hide buttons, cursor and Start menu", L"Ocultar botones, cursor y menú Inicio");
     float fs = 13;
     float wGo = 38 * s + measure(lGo, fs), wPause = 36 * s + measure(lPause, fs), wStop = 36 * s + measure(lStop, fs);
-    float wTime = measure(L"00:00:00", 15) + 26 * s;
+    float wTime = measure(L"00:00:00", 13.5f, DWRITE_FONT_WEIGHT_SEMI_BOLD) + 28 * s; // mede com a mesma fonte e o mesmo peso do desenho (antes cortava o último número)
     float wSys = 30 * s + measure(lSys, fs), wMic = 30 * s + measure(lMic, fs), wHide = 30 * s + measure(lHide, fs), wX = 32 * s;
     float Wc = pad + wGo + gap + wPause + gap + wStop + gap + wTime + gap + 1 * s + gap + wSys + gap + wMic + gap + wHide + (going || saving ? 0 : gap + wX) + pad;
     UINT W = (UINT)(Wc + 2 * M), Ht = (UINT)(H + 2 * M);
@@ -94,7 +95,7 @@ static void RecRender() {
         bool blink = going && !paused && (GetTickCount64() / 500) % 2 == 0;
         float k = 4 * s;
         p.Fill(D2D1::RectF(r.left + 4 * s, cy - k, r.left + 4 * s + 2 * k, cy + k), k, going ? ui::Rgba(0xFF3B30, paused ? 0.4f : blink ? 1.0f : 0.35f) : off);
-        p.Text(tb, D2D1::RectF(r.left + 18 * s, r.top, r.right, r.bottom), 15, going ? th.text : th.text2, DWRITE_FONT_WEIGHT_SEMI_BOLD);
+        p.Text(tb, D2D1::RectF(r.left + 18 * s, r.top, r.right + 4 * s, r.bottom), 13.5f, going ? th.text : th.text2, DWRITE_FONT_WEIGHT_SEMI_BOLD);
     }
     p.Fill(D2D1::RectF(x, cy - 14 * s, x + 1 * s, cy + 14 * s), 0, th.stroke);
     x += 1 * s + gap;

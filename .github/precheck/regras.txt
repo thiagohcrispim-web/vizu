@@ -162,8 +162,9 @@ origem: v19.6.0
 
 id: calendario-fundo-no-fundo
 arquivos: WallCal.inc.h
-exigido: hwndInsertAfter = HWND_BOTTOM
-motivo: o calendário do WallEngine é uma janela; sem forçar HWND_BOTTOM em WM_WINDOWPOSCHANGING ele sobe por cima dos programas ao ser clicado
+exigido: wp2->hwndInsertAfter = after
+proibido: hwndInsertAfter = HWND_BOTTOM
+motivo: o calendário precisa ficar logo acima da área de trabalho (WallCalAfter). Com HWND_BOTTOM ele ia para baixo da área de trabalho e sumia; sem mexer no WM_WINDOWPOSCHANGING subia por cima dos programas
 origem: v19.8.0
 
 id: tutorial-pular-grava
@@ -178,11 +179,6 @@ exigido: \\\[\\w\*\\\]
 motivo: campos de array na struct Config (wcColor[3]) eram dados como inexistentes pelo pré-teste
 origem: v19.8.0
 
-id: wallclock-fonte-gdi
-arquivos: Rain.inc.h
-exigido: CreateFontFromLOGFONT
-motivo: o seletor de fonte devolve o nome GDI (Arial Black, Bahnschrift SemiBold); passado direto ao DirectWrite a fonte não é achada e o WallClock cai na padrão
-origem: v19.8.1
 
 id: calendario-opacidade-sobre-chuva
 arquivos: WallCal.inc.h
@@ -195,3 +191,27 @@ arquivos: WallCal.inc.h
 exigido: D2D1_COMBINE_MODE_EXCLUDE
 motivo: a sombra desenhada por baixo do cartão escurecia o vidro e a opacidade baixa não ficava transparente
 origem: v19.8.1
+
+id: wallclock-contorno-gdi
+arquivos: Rain.inc.h
+exigido: CreateFontFaceFromHdc
+motivo: o WallClock desenha o contorno pela fonte do GDI (a mesma do seletor). Pelo nome no DirectWrite, itálicos, pesos e fontes do Adobe Fonts não eram achados
+origem: v19.8.2
+
+id: seletor-fonte-charset
+arquivos: Clock.inc.h
+exigido: lf.lfCharSet = DEFAULT_CHARSET
+motivo: sem DEFAULT_CHARSET o quadro Exemplo do seletor de fonte fica vazio
+origem: v19.8.2
+
+id: gravacao-tempo-medido
+arquivos: RecordUi.inc.h
+exigido: fonts::Has\(th.font\) \? fonts::Collection\(\)
+motivo: medir o tempo com outra coleção de fontes cortava o último número do relógio da gravação
+origem: v19.8.2
+
+id: tutorial-anel-real
+arquivos: Tutorial.inc.h
+exigido: ring = RingBitmap\(\)
+motivo: o tutorial mostra o anel de verdade do programa (RingBitmap), não um desenho aproximado
+origem: v19.8.2

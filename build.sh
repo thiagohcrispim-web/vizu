@@ -63,7 +63,7 @@ CDR_FLAGS="-I$CDR_SRC/libcdr-0.1.9/inc -I$CDR_SRC/librevenge-0.0.6/inc -I$CDR_SR
 ENGINE_SOURCES="engines/SvgWriter.h engines/EpsWriter.h engines/PdfWriter.h engines/Peek.h engines/Peek.cpp engines/IdmlWriter.h engines/VectorSink.cpp"
 $RC -c 65001 Vizu.rc -O coff -o Vizu.res.o # embute a DLL no EXE
 $CXX $FLAGS -municode -mwindows -D_WIN32_WINNT=0x0A00 -Wl,-Map=build/Vizu.map $CDR_FLAGS -o Vizu.exe Vizu.cpp Vizu.res.o build/webp/libwebp.a build/cdr/libvizucdr.a -lshlwapi -lole32 -loleaut32 -luuid -lgdi32 -ldwmapi -lshell32 -ld2d1 -ldwrite -lwindowscodecs -lruntimeobject -lshcore -lwinhttp -lurlmon -lcomctl32 -lcomdlg32 -lxmllite -lbcrypt -lmscms -lpdh -lsetupapi -lwinmm -ld3d11 -ldxgi -lmfplat -lmfreadwrite -lmfuuid
-# O próprio Vizu é o instalador. Ele leva a versão no nome: dist/Vizu_Setup_19.8.1_x64.exe
+# O próprio Vizu é o instalador. Ele leva a versão no nome: dist/Vizu_Setup_19.8.2_x64.exe
 VERSION=$(sed -n 's/.*VALUE "FileVersion", "\([0-9.]*\)".*/\1/p' Vizu.rc)
 mkdir -p dist
 cp Vizu.exe "dist/Vizu_Setup_${VERSION}_x64.exe"
