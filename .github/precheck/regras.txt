@@ -215,3 +215,27 @@ arquivos: Tutorial.inc.h
 exigido: ring = RingBitmap\(\)
 motivo: o tutorial mostra o anel de verdade do programa (RingBitmap), não um desenho aproximado
 origem: v19.8.2
+
+id: relogio-barra-eventos
+arquivos: Clock.inc.h
+exigido: SetWinEventHook\(EVENT_SYSTEM_FOREGROUND
+motivo: anexado à barra, o relógio sumia por até 1 s quando o Windows trazia a barra para a frente (Win+D, Alt+Tab, print). Volta para cima por eventos, na hora
+origem: v19.8.3
+
+id: configuracoes-fundo-85
+arquivos: Vizu.cpp
+exigido: SetLayeredWindowAttributes\(h, 0, 217, LWA_ALPHA\)
+motivo: o fundo das Configurações é preto a 85% sem desfoque, como o do tutorial (o acrylic ficava preto chapado)
+origem: v19.8.3
+
+id: calendario-opacidade-zero
+arquivos: WallCal.inc.h
+exigido: glassK
+motivo: em 0% de opacidade o box do calendário precisa sumir por inteiro (vidro, sombra e filetes), deixando só os números
+origem: v19.8.3
+
+id: pdf-texto-fora-do-limite
+arquivos: PdfEdit.h
+proibido: \(const char\*\)&data\[
+motivo: &data[data.size()] é acesso fora do vetor em PDFs truncados. Use data.data() + deslocamento já limitado
+origem: v19.8.3

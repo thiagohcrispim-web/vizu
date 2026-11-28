@@ -239,7 +239,7 @@ static void TutRender() {
         icon("play", 741, 351, 30, 0xFFFFFF, 1);
         if (!feather::FindFilled("play")) { // triângulo de "play" desenhado à mão se o ícone não existir
             ID2D1Factory* f = nullptr; rt->GetFactory(&f);
-            if (ID2D1PathGeometry* g = ui::SvgPath(f, "M8 5v14l11-7z", 30 * k / 24, OX + 741 * k, OY + 351 * k, true)) {
+            if (ID2D1PathGeometry* g = f ? ui::SvgPath(f, "M8 5v14l11-7z", 30 * k / 24, OX + 741 * k, OY + 351 * k, true) : nullptr) {
                 ID2D1SolidColorBrush* b = nullptr; if (SUCCEEDED(rt->CreateSolidColorBrush(ui::Rgba(0xFFFFFF), &b))) { rt->FillGeometry(g, b); b->Release(); }
                 g->Release();
             }

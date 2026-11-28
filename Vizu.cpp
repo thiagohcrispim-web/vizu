@@ -3282,8 +3282,8 @@ static void SettingsAction(int id) {
     case kCalOn: g_cfg.calOn = !g_cfg.calOn; SaveConfig(); WallApply(); return;
     case kCalBox: if (PickRgb(g_cfg.calBox)) { SaveConfig(); WallCalRender(); } return;
     case kCalNum: if (PickRgb(g_cfg.calNum)) { SaveConfig(); WallCalRender(); } return;
-    case kCalOpMinus: g_cfg.calOpacity = g_cfg.calOpacity >= 10 ? g_cfg.calOpacity - 10 : 0; SaveConfig(); WallCalRender(); return;
-    case kCalOpPlus: g_cfg.calOpacity = min(90ul, g_cfg.calOpacity + 10); SaveConfig(); WallCalRender(); return;
+    case kCalOpMinus: g_cfg.calOpacity = g_cfg.calOpacity >= 5 ? g_cfg.calOpacity - 5 : 0; SaveConfig(); WallCalRender(); return;
+    case kCalOpPlus: g_cfg.calOpacity = min(90ul, g_cfg.calOpacity + 5); SaveConfig(); WallCalRender(); return;
     case kCalReset: g_cfg.calBox = 0x000000; g_cfg.calOpacity = 40; g_cfg.calNum = 0xFFFFFF; g_cfg.calScale = 100; SaveConfig(); WallCalPlace(); return;
     // Chuva digital (tema Classic) - PLANO-CHUVA-DIGITAL
     case kRainEnabled:
@@ -4082,15 +4082,9 @@ static HWND ShowDim(HMONITOR mon) {
     RECT r = mi.rcWork; // a barra de tarefas continua visível
     HWND h = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_LAYERED, L"VizuDim", L"", WS_POPUP, r.left, r.top, r.right - r.left, r.bottom - r.top, nullptr, nullptr, g_inst, nullptr);
     if (!h) return nullptr;
-    // vidro escuro: desfoque "acrylic" com preto a 70%; sem ele, só o preto translúcido
-    struct AccentPolicy { int state, flags; DWORD color; int anim; };
-    struct CompositionData { int attrib; void* data; SIZE_T size; };
-    typedef BOOL(WINAPI * SetWca)(HWND, CompositionData*);
-    static SetWca set = (SetWca)(void*)GetProcAddress(GetModuleHandleW(L"user32.dll"), "SetWindowCompositionAttribute");
-    AccentPolicy ap = {4, 0, 0xB3000000, 0};
-    CompositionData cd = {19, &ap, sizeof(ap)};
-    bool blur = set && set(h, &cd);
-    SetLayeredWindowAttributes(h, 0, blur ? 255 : 178, LWA_ALPHA);
+    // preto a 85%, sem desfoque, como no tutorial: o que está atrás continua visível. (O "acrylic" de antes
+    // ficava preto chapado em vários PCs com janela layered.)
+    SetLayeredWindowAttributes(h, 0, 217, LWA_ALPHA);
     ShowWindow(h, SW_SHOWNOACTIVATE);
     return h;
 }

@@ -201,7 +201,7 @@ inline bool ToPdf(const std::wstring& src, const std::wstring& pdf, std::wstring
                 if (!before.count(id)) { HANDLE p = OpenProcess(PROCESS_TERMINATE, FALSE, id); if (p) { TerminateProcess(p, 1); CloseHandle(p); } }
             finished = WaitForSingleObject(h, 30000) == WAIT_OBJECT_0;
         }
-        HRESULT hr = finished ? task->hr : HRESULT_FROM_WIN32(ERROR_TIMEOUT);
+        HRESULT hr = finished && task ? task->hr : HRESULT_FROM_WIN32(ERROR_TIMEOUT);
         if (h) CloseHandle(h);
         if (task) release(task);
         if (SUCCEEDED(hr) && GetFileAttributesW(pdf.c_str()) != INVALID_FILE_ATTRIBUTES) return true;

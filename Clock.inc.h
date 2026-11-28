@@ -646,6 +646,33 @@ static void ClockMenu(POINT pt) {
     ClockRender();
 }
 
+// Anexado à barra: quando o Windows traz a barra de tarefas para a frente (Win+D, trocar de janela, print, Alt+Tab...)
+// ela cobria a caixa até o próximo segundo, e a caixa "piscava". Agora a caixa volta para cima na hora, por eventos do
+// Windows, e só quando algo visível está mesmo por cima dela (sem isso, o próprio SetWindowPos geraria eventos sem fim).
+static bool ClockCovered(HWND h) {
+    RECT me; if (!GetWindowRect(h, &me)) return false;
+    for (HWND w = GetWindow(h, GW_HWNDPREV); w; w = GetWindow(w, GW_HWNDPREV)) {
+        RECT r, x;
+        wchar_t cls[32];
+        if (IsWindowVisible(w) && GetWindowRect(w, &r) && IntersectRect(&x, &r, &me) && GetClassNameW(w, cls, 32) &&
+            (!wcscmp(cls, L"Shell_TrayWnd") || !wcscmp(cls, L"Shell_SecondaryTrayWnd"))) return true; // só a barra: menus e dicas por cima continuam por cima
+    }
+    return false;
+}
+static void ClockRaise() {
+    if (g_clock.wnd && g_clock.docked && IsWindowVisible(g_clock.wnd) && ClockCovered(g_clock.wnd))
+        SetWindowPos(g_clock.wnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+}
+static void CALLBACK ClockZEvent(HWINEVENTHOOK, DWORD, HWND, LONG, LONG, DWORD, DWORD) { ClockRaise(); }
+static HWINEVENTHOOK g_clockHooks[3];
+static void ClockHooks(bool on) {
+    for (auto& k : g_clockHooks) if (k) { UnhookWinEvent(k); k = nullptr; }
+    if (!on) return;
+    g_clockHooks[0] = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, nullptr, ClockZEvent, 0, 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
+    g_clockHooks[1] = SetWinEventHook(EVENT_SYSTEM_MINIMIZESTART, EVENT_SYSTEM_MINIMIZEEND, nullptr, ClockZEvent, 0, 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
+    g_clockHooks[2] = SetWinEventHook(EVENT_OBJECT_REORDER, EVENT_OBJECT_REORDER, nullptr, ClockZEvent, 0, 0, WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS);
+}
+
 static LRESULT CALLBACK ClockProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
     case WM_TIMER: {
@@ -653,7 +680,7 @@ static LRESULT CALLBACK ClockProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         SYSTEMTIME t; GetLocalTime(&t);
         if (t.wSecond != g_clock.lastSec) {
             g_clock.lastSec = t.wSecond;
-            if (g_clock.docked) SetWindowPos(h, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE); // fica por cima da barra
+            ClockRaise(); // fica por cima da barra (rede de segurança; os eventos fazem isso na hora)
             ClockRender();
             if (g_clock.agendaOn) CheckReminders();
         }
@@ -728,6 +755,7 @@ void ClockSync() {
     if (!on) {
         if (g_clock.theft) ToggleTheft(); // não perde o tempo que estava contando
         if (g_clock.docked) SetTrayClock(false);
+        ClockHooks(false);
         if (g_clock.wnd) { KillTimer(g_clock.wnd, 1); DestroyWindow(g_clock.wnd); g_clock.wnd = nullptr; }
         return;
     }
@@ -748,6 +776,7 @@ void ClockSync() {
     if (g_clock.docked) ClockDock(true);
     ClockRender();
     SetClockTimer(g_clock.wnd);
+    ClockHooks(true);
 }
 
 // Relógio do Windows na bandeja ("Mostrar hora e data na bandeja do sistema", Windows 11): desligado enquanto o

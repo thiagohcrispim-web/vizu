@@ -117,13 +117,16 @@ static void WallCalRender() {
     ui::Painter p(rt, g_dw, th, tk, s);
     D2D1_RECT_F card = D2D1::RectF(M, M, M + W, M + H);
     float rad = 16 * s;
-    { // sombra só por fora do cartão: por dentro ela escurecia o vidro e a opacidade baixa não ficava transparente
+    // Vidro, sombra e filetes acompanham a opacidade: de 0% a 20% vão sumindo; em 0% o box some e ficam só os números.
+    float glassK = min(1.0f, g_cfg.calOpacity / 20.0f);
+    if (glassK <= 0) p.Fill(card, rad, ui::Rgba(0x000000, 1.5f / 255)); // invisível, mas mantém o clique para arrastar
+    if (glassK > 0) { // sombra só por fora do cartão: por dentro ela escurecia o vidro e a opacidade baixa não ficava transparente
         ID2D1Factory* f0 = nullptr; rt->GetFactory(&f0);
         ID2D1RectangleGeometry* all = nullptr; ID2D1RoundedRectangleGeometry* in = nullptr; ID2D1PathGeometry* out = nullptr; ID2D1GeometrySink* sk = nullptr; ID2D1Layer* ly = nullptr;
         if (f0 && SUCCEEDED(f0->CreateRectangleGeometry(D2D1::RectF(0, 0, (float)CW, (float)CH), &all)) && SUCCEEDED(f0->CreateRoundedRectangleGeometry(D2D1::RoundedRect(card, rad, rad), &in)) &&
             SUCCEEDED(f0->CreatePathGeometry(&out)) && SUCCEEDED(out->Open(&sk)) && SUCCEEDED(all->CombineWithGeometry(in, D2D1_COMBINE_MODE_EXCLUDE, nullptr, sk)) && SUCCEEDED(sk->Close()) &&
             SUCCEEDED(rt->CreateLayer(&ly))) {
-            rt->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), out), ly);
+            rt->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), out, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE, D2D1::IdentityMatrix(), glassK), ly);
             p.Shadow(card, rad);
             rt->PopLayer();
         }
@@ -134,13 +137,13 @@ static void WallCalRender() {
     ID2D1Factory* fac = nullptr; rt->GetFactory(&fac);
     ID2D1RoundedRectangleGeometry* geo = nullptr; ID2D1Layer* layer = nullptr;
     bool clipped = fac && SUCCEEDED(fac->CreateRoundedRectangleGeometry(D2D1::RoundedRect(card, rad, rad), &geo)) && SUCCEEDED(rt->CreateLayer(&layer));
-    if (clipped) rt->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), geo), layer);
+    if (clipped) rt->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), geo, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE, D2D1::IdentityMatrix(), glassK), layer);
     // Com a chuva ligada, o que fica atrás do calendário é o fundo da chuva, não o arquivo do papel de parede:
     // desfocar o arquivo mostrava uma imagem que não está na tela e a opacidade parecia não mudar nada.
     // Nesse caso o vidro é um véu leve da cor da chuva e o que está atrás (chuva, WallClock) aparece.
     bool overRain = g_cfg.rainEnabled && rain::g_running;
-    if (!overRain) WallCalLoadBlur(mi.rcMonitor);
-    if (!overRain && !g_wcal.blur.empty()) {
+    if (!overRain && glassK > 0) WallCalLoadBlur(mi.rcMonitor);
+    if (!overRain && glassK > 0 && !g_wcal.blur.empty()) {
         ID2D1Bitmap* b = nullptr;
         if (SUCCEEDED(rt->CreateBitmap(D2D1::SizeU(g_wcal.blurW, g_wcal.blurH), g_wcal.blur.data(), g_wcal.blurW * 4,
                                        D2D1::BitmapProperties(D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED)), &b))) {
@@ -150,7 +153,7 @@ static void WallCalRender() {
             b->Release();
         }
     }
-    p.Fill(card, 0, ui::Rgba(g_cfg.calBox, g_cfg.calOpacity / 100.0f));
+    p.Fill(card, 0, ui::Rgba(g_cfg.calBox, min(1.0f, g_cfg.calOpacity / 100.0f / max(0.01f, glassK)))); // a camada já multiplica por glassK
     { // brilho do vidro: diagonal clara no alto, filetes de luz no topo e na lateral direita (sombra interna suave)
         D2D1_GRADIENT_STOP sheen[3] = {{0, ui::Rgba(0xFFFFFF, 0.10f)}, {0.45f, ui::Rgba(0xFFFFFF, 0.02f)}, {1, ui::Rgba(0xFFFFFF, 0)}}; // sem escurecer: a cor do box fica fiel
         if (auto* gb = p.Angle(card, 160, sheen, 3)) { rt->FillRectangle(card, gb); gb->Release(); }
@@ -162,9 +165,11 @@ static void WallCalRender() {
     }
     if (clipped) rt->PopLayer();
     if (layer) layer->Release(); if (geo) geo->Release(); if (fac) fac->Release();
-    p.Fill(D2D1::RectF(card.left + rad, card.top, card.right - rad, card.top + 1 * s), 0, ui::Rgba(0xFFFFFF, 0.35f));
-    p.Fill(D2D1::RectF(card.right - 1 * s, card.top + rad, card.right, card.bottom - rad), 0, ui::Rgba(0xFFFFFF, 0.22f));
-    p.Stroke(card, rad, ui::Rgba(0xFFFFFF, 0.12f), 1 * s);
+    if (glassK > 0) {
+        p.Fill(D2D1::RectF(card.left + rad, card.top, card.right - rad, card.top + 1 * s), 0, ui::Rgba(0xFFFFFF, 0.35f * glassK));
+        p.Fill(D2D1::RectF(card.right - 1 * s, card.top + rad, card.right, card.bottom - rad), 0, ui::Rgba(0xFFFFFF, 0.22f * glassK));
+        p.Stroke(card, rad, ui::Rgba(0xFFFFFF, 0.12f * glassK), 1 * s);
+    }
 
     // cabeçalho: "Novembro 2026", setas e "Hoje" (só fora do mês atual)
     SYSTEMTIME first = WallCalMonth(), today; GetLocalTime(&today);
@@ -207,10 +212,10 @@ static void WallCalRender() {
         g_wcal.days.push_back({d, c});
         bool isToday = !g_wcal.monthOff && d == today.wDay, hv = g_wcal.hot == 100 + d;
         if (isToday) p.Fill(c, dd / 2, acc);
-        else if (hv) p.Fill(c, dd / 2, ui::Rgba(0xFFFFFF, 0.12f));
-        p.Text(std::to_wstring(d), c, 13, isToday ? onAcc : ui::Rgba(g_cfg.calNum, col == 0 || col == 6 ? 0.5f : 0.82f),
-               isToday ? DWRITE_FONT_WEIGHT_SEMI_BOLD : DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER);
-        if (marks[d] && !isToday) p.Fill(D2D1::RectF((c.left + c.right) / 2 - 2 * s, c.bottom - 1 * s, (c.left + c.right) / 2 + 2 * s, c.bottom + 3 * s), 2 * s, ui::Rgba(g_cfg.calNum, 0.45f));
+        else if (hv) p.Fill(c, dd / 2, ui::Rgba(0xFFFFFF)); // hover: como o dia de hoje, mas bolinha branca e número preto
+        p.Text(std::to_wstring(d), c, 13, isToday ? onAcc : hv ? ui::Rgba(0x000000) : ui::Rgba(g_cfg.calNum, col == 0 || col == 6 ? 0.5f : 0.82f),
+               isToday || hv ? DWRITE_FONT_WEIGHT_SEMI_BOLD : DWRITE_FONT_WEIGHT_NORMAL, DWRITE_TEXT_ALIGNMENT_CENTER);
+        if (marks[d] && !isToday && !hv) p.Fill(D2D1::RectF((c.left + c.right) / 2 - 2 * s, c.bottom - 1 * s, (c.left + c.right) / 2 + 2 * s, c.bottom + 3 * s), 2 * s, ui::Rgba(g_cfg.calNum, 0.45f));
     }
     if (g_wcal.hot >= 10 && g_wcal.hot <= 13) { // canto sob o mouse: marca de redimensionar
         int k = g_wcal.hot - 10; // 10 sup-esq, 11 sup-dir, 12 inf-esq, 13 inf-dir

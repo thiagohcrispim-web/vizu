@@ -83,9 +83,6 @@ inline void InitCharset() {
 
 inline ID2D1Bitmap* g_wall = nullptr;   // papel de parede desenhado por baixo da chuva
 inline ID2D1Bitmap* g_blur = nullptr;   // o mesmo papel de parede em 1/16, desfocado (vidro do WallClock)
-inline IDWriteTextFormat* g_clockFmt = nullptr;
-inline float g_clockFmtSize = 0;
-inline std::wstring g_clockFmtFont;
 inline void ReleaseWall() {
     if (g_wall) { g_wall->Release(); g_wall = nullptr; }
     if (g_blur) { g_blur->Release(); g_blur = nullptr; }
@@ -211,7 +208,7 @@ inline void DrawClock() {
     if (!GetMonitorInfoW(MonitorFromPoint({0, 0}, MONITOR_DEFAULTTOPRIMARY), &mi)) return;
     float mx = (float)(mi.rcMonitor.left - g_area.left), my = (float)(mi.rcMonitor.top - g_area.top);
     float mw = (float)(mi.rcMonitor.right - mi.rcMonitor.left), mh = (float)(mi.rcMonitor.bottom - mi.rcMonitor.top);
-    const std::wstring& fam = g_cfg.clockFont.empty() ? std::wstring(L"Segoe UI") : g_cfg.clockFont;
+    const std::wstring fam = g_cfg.clockFont.empty() ? std::wstring(L"Segoe UI") : g_cfg.clockFont; // cópia: referência a temporário
     // Contorno dos números pela fonte do GDI, a mesma lista do seletor: funciona com qualquer fonte que ele mostre
     // (itálicos, pesos como "Arial Black", fontes do Adobe Fonts que o DirectWrite não enxerga). Guardado até mudar a hora ou a fonte.
     static ID2D1PathGeometry* geo = nullptr; static std::wstring geoKey; static D2D1_RECT_F gb{};
@@ -454,7 +451,6 @@ inline void Stop() {
     ReleaseWall();
     if (g_rt) { g_rt->Release(); g_rt = nullptr; }
     if (g_font) { g_font->Release(); g_font = nullptr; }
-    if (g_clockFmt) { g_clockFmt->Release(); g_clockFmt = nullptr; }
     g_workerW = nullptr;
 }
 

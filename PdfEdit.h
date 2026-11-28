@@ -203,7 +203,10 @@ public:
     }
 
 private:
-    std::string Text(size_t a, size_t b) { return std::string((const char*)&data[a], (const char*)&data[min(b, data.size())]); }
+    std::string Text(size_t a, size_t b) { // a/b além do fim: devolve só o que existe (antes &data[size()] era acesso fora do vetor)
+        b = min(b, data.size()); a = min(a, b);
+        return std::string((const char*)data.data() + a, (const char*)data.data() + b);
+    }
 
     // Dicionário que começa em `p` ("<<"), até o ">>" correspondente.
     size_t DictEnd(const std::string& s, size_t p) {
@@ -269,7 +272,7 @@ private:
         if (f.empty()) { out = o.stream; return true; }
         if (f.find("FlateDecode") == std::string::npos || f.find('/', f.find("FlateDecode") + 1) != std::string::npos) return false;
         if (o.stream.size() < 2) return false;
-        if (!fmt::Inflater(&o.stream[2], o.stream.size() - 2, out, 256u << 20).Run() && out.empty()) return false; // pula o cabeçalho zlib
+        if (!fmt::Inflater(o.stream.data() + 2, o.stream.size() - 2, out, 256u << 20).Run() && out.empty()) return false; // pula o cabeçalho zlib
         std::string parms = Get(o.dict, "/DecodeParms");
         int pred = atoi(Get(parms, "/Predictor").c_str()), cols = atoi(Get(parms, "/Columns").c_str());
         if (pred >= 10 && cols > 0) { // preditor PNG (linha a linha)
@@ -358,7 +361,7 @@ private:
                 while (p < data.size() && IsWs(data[p])) ++p;
                 for (unsigned i = 0; i < count && p + 18 <= data.size(); ++i, p += 20) {
                     std::string e = Text(p, p + 18);
-                    if (e.size() >= 17 && e[17] == 'n' && !xref.count(start + i)) xref[start + i] = {1, (size_t)atoll(e.c_str())};
+                    if (e.size() >= 18 && e[17] == 'n' && !xref.count(start + i)) xref[start + i] = {1, (size_t)atoll(e.c_str())};
                     // tolera finais de linha de 1 byte
                     if (p + 19 < data.size() && !IsWs(data[p + 19]) && IsWs(data[p + 18])) --p;
                 }
