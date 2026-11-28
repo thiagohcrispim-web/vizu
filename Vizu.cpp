@@ -49,7 +49,10 @@ enum {
 // ---------- configurações (HKCU\Software\DesignThumbs) ----------
 
 struct Config { DWORD themeMode = 0, webpQuality = 75, neon = 0xFF6633; bool tray = true; bool space = true, alt = true, picker = true, autoUpdate = true, dpi300 = false, pdfRaw = false, vectorTextPaths = false, tempPermanent = false; DWORD altDelay = 500, quality = 75;
-    bool rainEnabled = false; DWORD rainColor = 0x0E1014, rainOpacity = 22, rainCycleMs = 20000, rainHeadRatio = 15, rainCharset = 0, rainFps = 24; std::wstring rainCustomChars; };
+    bool rainEnabled = false; DWORD rainColor = 0x0E1014, rainOpacity = 22, rainCycleMs = 20000, rainHeadRatio = 15, rainCharset = 0, rainFps = 24; std::wstring rainCustomChars;
+    // WallEngine (v19.8): WallClock e Calendário no fundo. Cores iniciais do tema Vizu Classic.
+    bool wcOn = false, wcGlass = false; DWORD wcColor[3] = {0xFF6633, 0xFFFFFF, 0x4A4F57}, wcCount = 1, wcOpacity = 60, wcSize = 60; std::wstring wcFont;
+    bool calOn = false; DWORD calBox = 0x000000, calOpacity = 40, calNum = 0xFFFFFF, calScale = 100; LONG calX = LONG_MIN, calY = LONG_MIN; };
 static Config g_cfg;
 static bool g_lite = false; // Vizu Lite: só prévia com Espaço e miniaturas
 static const wchar_t* kCfgKey = L"Software\\DesignThumbs";
@@ -87,6 +90,23 @@ static void LoadConfig() {
     if (g_cfg.rainFps != 20 && g_cfg.rainFps != 24 && g_cfg.rainFps != 30) g_cfg.rainFps = 24;
     { wchar_t buf[512] = {}; DWORD cb = sizeof(buf);
       g_cfg.rainCustomChars = RegGetValueW(HKEY_CURRENT_USER, kCfgKey, L"RainCustomChars", RRF_RT_REG_SZ, nullptr, buf, &cb) == ERROR_SUCCESS ? buf : L""; }
+    // WallEngine
+    g_cfg.wcOn = ReadDword(L"WallClock", 0) != 0;
+    g_cfg.wcGlass = ReadDword(L"WallClockGlass", 0) != 0;
+    g_cfg.wcCount = max(1ul, min(3ul, (unsigned long)ReadDword(L"WallClockColors", 1)));
+    g_cfg.wcColor[0] = ReadDword(L"WallClockColor1", 0xFF6633) & 0xFFFFFF;
+    g_cfg.wcColor[1] = ReadDword(L"WallClockColor2", 0xFFFFFF) & 0xFFFFFF;
+    g_cfg.wcColor[2] = ReadDword(L"WallClockColor3", 0x4A4F57) & 0xFFFFFF;
+    g_cfg.wcOpacity = max(5ul, min(100ul, (unsigned long)ReadDword(L"WallClockOpacity", 60)));
+    g_cfg.wcSize = max(1ul, min(100ul, (unsigned long)ReadDword(L"WallClockSize", 60)));
+    { wchar_t buf[128] = {}; DWORD cb = sizeof(buf);
+      g_cfg.wcFont = RegGetValueW(HKEY_CURRENT_USER, kCfgKey, L"WallClockFont", RRF_RT_REG_SZ, nullptr, buf, &cb) == ERROR_SUCCESS ? buf : L""; }
+    g_cfg.calOn = ReadDword(L"WallCalendar", 0) != 0;
+    g_cfg.calBox = ReadDword(L"WallCalBox", 0x000000) & 0xFFFFFF;
+    g_cfg.calOpacity = max(0ul, min(95ul, (unsigned long)ReadDword(L"WallCalOpacity", 40)));
+    g_cfg.calNum = ReadDword(L"WallCalNumbers", 0xFFFFFF) & 0xFFFFFF;
+    g_cfg.calScale = max(60ul, min(250ul, (unsigned long)ReadDword(L"WallCalScale", 100)));
+    g_cfg.calX = (LONG)ReadDword(L"WallCalX", 0x80000000); g_cfg.calY = (LONG)ReadDword(L"WallCalY", 0x80000000);
 }
 static void SaveConfig() {
     WriteDword(L"SpacePreview", g_cfg.space); WriteDword(L"AltButtons", g_cfg.alt);
@@ -95,6 +115,13 @@ static void SaveConfig() {
     WriteDword(L"RainEnabled", g_cfg.rainEnabled); WriteDword(L"RainColor", g_cfg.rainColor); WriteDword(L"RainOpacity", g_cfg.rainOpacity); WriteDword(L"RainCycleMs", g_cfg.rainCycleMs);
     WriteDword(L"RainHeadRatio", g_cfg.rainHeadRatio); WriteDword(L"RainCharset", g_cfg.rainCharset); WriteDword(L"RainFps", g_cfg.rainFps);
     RegSetKeyValueW(HKEY_CURRENT_USER, kCfgKey, L"RainCustomChars", REG_SZ, g_cfg.rainCustomChars.c_str(), (DWORD)((g_cfg.rainCustomChars.size() + 1) * sizeof(wchar_t)));
+    WriteDword(L"WallClock", g_cfg.wcOn); WriteDword(L"WallClockGlass", g_cfg.wcGlass); WriteDword(L"WallClockColors", g_cfg.wcCount);
+    WriteDword(L"WallClockColor1", g_cfg.wcColor[0]); WriteDword(L"WallClockColor2", g_cfg.wcColor[1]); WriteDword(L"WallClockColor3", g_cfg.wcColor[2]);
+    WriteDword(L"WallClockOpacity", g_cfg.wcOpacity); WriteDword(L"WallClockSize", g_cfg.wcSize);
+    RegSetKeyValueW(HKEY_CURRENT_USER, kCfgKey, L"WallClockFont", REG_SZ, g_cfg.wcFont.c_str(), (DWORD)((g_cfg.wcFont.size() + 1) * sizeof(wchar_t)));
+    WriteDword(L"WallCalendar", g_cfg.calOn); WriteDword(L"WallCalBox", g_cfg.calBox); WriteDword(L"WallCalOpacity", g_cfg.calOpacity);
+    WriteDword(L"WallCalNumbers", g_cfg.calNum); WriteDword(L"WallCalScale", g_cfg.calScale);
+    WriteDword(L"WallCalX", (DWORD)g_cfg.calX); WriteDword(L"WallCalY", (DWORD)g_cfg.calY);
 }
 
 // ---------- estado ----------
@@ -1343,6 +1370,28 @@ static void SetMenuDarkMode(bool dark) {
 }
 
 // Tema: segue o Windows, claro, escuro ou Crispy. Reaplica o vidro e redesenha tudo.
+// WallEngine: a camada do papel de parede (Rain.inc.h) desenha o WallClock e a chuva; o calendário é uma janela à parte.
+static rain::Config RainCfg() {
+    rain::Config c{g_cfg.rainEnabled, g_cfg.rainColor, g_cfg.rainOpacity / 100.0f, (int)g_cfg.rainCycleMs, g_cfg.rainHeadRatio / 100.0f,
+                   (int)g_cfg.rainCharset, (int)g_cfg.rainFps, g_cfg.rainCustomChars};
+    c.clock = g_cfg.wcOn && !g_lite;
+    for (int i = 0; i < 3; ++i) c.clockColors[i] = g_cfg.wcColor[i];
+    c.clockCount = (int)g_cfg.wcCount; c.clockOpacity = g_cfg.wcOpacity / 100.0f; c.clockSize = (int)g_cfg.wcSize; c.clockGlass = g_cfg.wcGlass;
+    c.clockFont = g_cfg.wcFont.empty() ? std::wstring(g_uiFont.empty() ? DefaultUiFont() : g_uiFont.c_str()) : g_cfg.wcFont;
+    return c;
+}
+static void WallCalEnable(bool on);
+static void WallCalRender();
+// Liga, desliga ou redesenha a camada e o calendário depois de qualquer mudança no WallEngine.
+static void WallApply() {
+    rain::UpdateConfig(RainCfg());
+    bool run = rain::ShouldRun((int)g_cfg.themeMode);
+    if (run && !rain::g_running) rain::Start();
+    else if (!run && rain::g_running) rain::Stop();
+    WallCalEnable(g_cfg.calOn && !g_lite);
+    WallCalRender();
+}
+
 static void ApplyTheme() {
     bool dark = g_cfg.themeMode == ui::kThemeWindows ? ui::SystemDark() : g_cfg.themeMode != ui::kThemeLight;
     bool glass = true;
@@ -1359,15 +1408,12 @@ static void ApplyTheme() {
     // Atualizar chuva digital baseado no tema - PLANO-CHUVA-DIGITAL
     bool shouldRun = rain::ShouldRun((int)g_cfg.themeMode);
     if (shouldRun && !rain::g_running) {
-        rain::UpdateConfig(rain::Config{
-            g_cfg.rainEnabled, g_cfg.rainColor, g_cfg.rainOpacity / 100.0f,
-            (int)g_cfg.rainCycleMs, g_cfg.rainHeadRatio / 100.0f,
-            (int)g_cfg.rainCharset, (int)g_cfg.rainFps, g_cfg.rainCustomChars
-        });
+        rain::UpdateConfig(RainCfg());
         rain::Start();
     } else if (!shouldRun && rain::g_running) {
         rain::Stop();
     }
+    WallCalRender(); // o calendário no fundo usa a cor de destaque do tema
 }
 
 // ---------- janela do preview ----------
@@ -2788,6 +2834,7 @@ static bool AutostartEnabled();
 #include "OcrUi.inc.h"
 #include "RecordUi.inc.h"
 #include "Agenda.inc.h"
+#include "WallCal.inc.h"
 #include "Hearts.inc.h"
 #include "CleanUi.inc.h"
 #include "Widgets.inc.h"
@@ -2812,7 +2859,10 @@ enum { kTogSpace = 1, kTogAlt, kDelayMinus, kDelayPlus, kDpi72, kDpi300, kPdfSma
        kRainEnabled, kRainColor0, kRainColor1, kRainColor2, kRainColor3, kRainColor4, kRainColorCustom,
        kRainOpacityMinus, kRainOpacityPlus, kRainCycleMinus, kRainCyclePlus,
        kRainHeadMinus, kRainHeadPlus, kRainChar0, kRainChar1, kRainChar2,
-       kRainFps0, kRainFps1, kRainFps2, kRainCustomChars, kSecRain };
+       kRainFps0, kRainFps1, kRainFps2, kRainCustomChars, kSecRain,
+       // WallEngine (v19.8): WallClock e Calendário no fundo
+       kWcOn, kWcFont, kWcCol0, kWcCol1, kWcCol2, kWcColMinus, kWcColPlus, kWcOpMinus, kWcOpPlus, kWcSizeMinus, kWcSizePlus, kWcGlass,
+       kCalOn, kCalBox, kCalOpMinus, kCalOpPlus, kCalNum, kCalReset };
 static const UINT kNeonPresets[6] = {0xFF6633, 0xFF2D95, 0x00E5FF, 0xB6FF3B, 0xA855F7, 0xFFD400};
 
 
@@ -3062,6 +3112,16 @@ static void EditChatButton(HWND owner) {
 static std::string RunSelfTest();
 #include "Inspect.inc.h" // Configurações › Sistema › Avançado › Inspeção do Vizu
 
+// Escolhe uma cor (0xRRGGBB) no seletor do Windows; true se mudou.
+static bool PickRgb(DWORD& c) {
+    static COLORREF custom[16];
+    CHOOSECOLORW cc = {sizeof(cc)};
+    cc.hwndOwner = g_settingsWnd; cc.lpCustColors = custom; cc.Flags = CC_FULLOPEN | CC_RGBINIT;
+    cc.rgbResult = RGB(c >> 16 & 255, c >> 8 & 255, c & 255);
+    if (!ChooseColorW(&cc)) return false;
+    c = GetRValue(cc.rgbResult) << 16 | GetGValue(cc.rgbResult) << 8 | GetBValue(cc.rgbResult);
+    return true;
+}
 static void SettingsAction(int id) {
     if (g_capHot && id != kHkOcr && id != kHkClean && id != kHkRec) CaptureHotkey(g_capHot); // clicar em outro lugar cancela a captura
     if (!g_lite && g_preset != kPresetCustom && PresetOption(id)) { g_preset = kPresetCustom; WriteDword(L"SettingsPreset", kPresetCustom); }
@@ -3192,23 +3252,33 @@ static void SettingsAction(int id) {
         i18n::Load();
         return;
     }
+    // WallEngine: WallClock e calendário no fundo
+    case kWcOn: g_cfg.wcOn = !g_cfg.wcOn; SaveConfig(); WallApply(); return;
+    case kWcGlass: g_cfg.wcGlass = !g_cfg.wcGlass; SaveConfig(); WallApply(); return;
+    case kWcFont: { std::wstring f = g_cfg.wcFont.empty() ? std::wstring(g_uiFont.empty() ? DefaultUiFont() : g_uiFont.c_str()) : g_cfg.wcFont;
+        if (PickFont(g_settingsWnd, &f, nullptr)) { g_cfg.wcFont = f; SaveConfig(); WallApply(); } return; }
+    case kWcCol0: case kWcCol1: case kWcCol2: if (PickRgb(g_cfg.wcColor[id - kWcCol0])) { SaveConfig(); WallApply(); } return;
+    case kWcColMinus: if (g_cfg.wcCount > 1) { --g_cfg.wcCount; SaveConfig(); WallApply(); } return;
+    case kWcColPlus: if (g_cfg.wcCount < 3) { ++g_cfg.wcCount; SaveConfig(); WallApply(); } return;
+    case kWcOpMinus: g_cfg.wcOpacity = max(10ul, g_cfg.wcOpacity - 10); SaveConfig(); WallApply(); return;
+    case kWcOpPlus: g_cfg.wcOpacity = min(100ul, g_cfg.wcOpacity + 10); SaveConfig(); WallApply(); return;
+    case kWcSizeMinus: g_cfg.wcSize = g_cfg.wcSize > 5 ? g_cfg.wcSize - 5 : 1; SaveConfig(); WallApply(); return;
+    case kWcSizePlus: g_cfg.wcSize = g_cfg.wcSize < 5 ? 5 : min(100ul, g_cfg.wcSize + 5); SaveConfig(); WallApply(); return;
+    case kCalOn: g_cfg.calOn = !g_cfg.calOn; SaveConfig(); WallApply(); return;
+    case kCalBox: if (PickRgb(g_cfg.calBox)) { SaveConfig(); WallCalRender(); } return;
+    case kCalNum: if (PickRgb(g_cfg.calNum)) { SaveConfig(); WallCalRender(); } return;
+    case kCalOpMinus: g_cfg.calOpacity = g_cfg.calOpacity >= 10 ? g_cfg.calOpacity - 10 : 0; SaveConfig(); WallCalRender(); return;
+    case kCalOpPlus: g_cfg.calOpacity = min(90ul, g_cfg.calOpacity + 10); SaveConfig(); WallCalRender(); return;
+    case kCalReset: g_cfg.calBox = 0x000000; g_cfg.calOpacity = 40; g_cfg.calNum = 0xFFFFFF; g_cfg.calScale = 100; SaveConfig(); WallCalPlace(); return;
     // Chuva digital (tema Classic) - PLANO-CHUVA-DIGITAL
     case kRainEnabled:
         g_cfg.rainEnabled = !g_cfg.rainEnabled;
-        rain::UpdateConfig(rain::Config{
-            g_cfg.rainEnabled, g_cfg.rainColor, g_cfg.rainOpacity / 100.0f,
-            (int)g_cfg.rainCycleMs, g_cfg.rainHeadRatio / 100.0f,
-            (int)g_cfg.rainCharset, (int)g_cfg.rainFps, g_cfg.rainCustomChars
-        });
+        rain::UpdateConfig(RainCfg());
         SaveConfig(); ApplyTheme(); return;
     case kRainColor0: case kRainColor1: case kRainColor2: case kRainColor3: case kRainColor4: {
         static const UINT rainColors[5] = {0x0E1014, 0xFF6633, 0x00FF88, 0x00AAFF, 0xFF0066};
         g_cfg.rainColor = rainColors[id - kRainColor0];
-        rain::UpdateConfig(rain::Config{
-            g_cfg.rainEnabled, g_cfg.rainColor, g_cfg.rainOpacity / 100.0f,
-            (int)g_cfg.rainCycleMs, g_cfg.rainHeadRatio / 100.0f,
-            (int)g_cfg.rainCharset, (int)g_cfg.rainFps, g_cfg.rainCustomChars
-        });
+        rain::UpdateConfig(RainCfg());
         SaveConfig(); ApplyTheme(); return;
     }
     case kRainColorCustom: {
@@ -3219,73 +3289,37 @@ static void SettingsAction(int id) {
         cc.rgbResult = RGB(g_cfg.rainColor >> 16, g_cfg.rainColor >> 8 & 255, g_cfg.rainColor & 255);
         if (ChooseColorW(&cc)) {
             g_cfg.rainColor = GetRValue(cc.rgbResult) << 16 | GetGValue(cc.rgbResult) << 8 | GetBValue(cc.rgbResult);
-            rain::UpdateConfig(rain::Config{
-                g_cfg.rainEnabled, g_cfg.rainColor, g_cfg.rainOpacity / 100.0f,
-                (int)g_cfg.rainCycleMs, g_cfg.rainHeadRatio / 100.0f,
-                (int)g_cfg.rainCharset, (int)g_cfg.rainFps, g_cfg.rainCustomChars
-            });
+            rain::UpdateConfig(RainCfg());
             SaveConfig(); ApplyTheme();
         }
         return;
     }
     case kRainOpacityMinus: g_cfg.rainOpacity = max(5ul, g_cfg.rainOpacity - 5);
-        rain::UpdateConfig(rain::Config{
-            g_cfg.rainEnabled, g_cfg.rainColor, g_cfg.rainOpacity / 100.0f,
-            (int)g_cfg.rainCycleMs, g_cfg.rainHeadRatio / 100.0f,
-            (int)g_cfg.rainCharset, (int)g_cfg.rainFps, g_cfg.rainCustomChars
-        });
+        rain::UpdateConfig(RainCfg());
         SaveConfig(); ApplyTheme(); return;
     case kRainOpacityPlus: g_cfg.rainOpacity = min(60ul, g_cfg.rainOpacity + 5);
-        rain::UpdateConfig(rain::Config{
-            g_cfg.rainEnabled, g_cfg.rainColor, g_cfg.rainOpacity / 100.0f,
-            (int)g_cfg.rainCycleMs, g_cfg.rainHeadRatio / 100.0f,
-            (int)g_cfg.rainCharset, (int)g_cfg.rainFps, g_cfg.rainCustomChars
-        });
+        rain::UpdateConfig(RainCfg());
         SaveConfig(); ApplyTheme(); return;
     case kRainCycleMinus: g_cfg.rainCycleMs = max(10000ul, g_cfg.rainCycleMs - 5000);
-        rain::UpdateConfig(rain::Config{
-            g_cfg.rainEnabled, g_cfg.rainColor, g_cfg.rainOpacity / 100.0f,
-            (int)g_cfg.rainCycleMs, g_cfg.rainHeadRatio / 100.0f,
-            (int)g_cfg.rainCharset, (int)g_cfg.rainFps, g_cfg.rainCustomChars
-        });
+        rain::UpdateConfig(RainCfg());
         SaveConfig(); ApplyTheme(); return;
     case kRainCyclePlus: g_cfg.rainCycleMs = min(40000ul, g_cfg.rainCycleMs + 5000);
-        rain::UpdateConfig(rain::Config{
-            g_cfg.rainEnabled, g_cfg.rainColor, g_cfg.rainOpacity / 100.0f,
-            (int)g_cfg.rainCycleMs, g_cfg.rainHeadRatio / 100.0f,
-            (int)g_cfg.rainCharset, (int)g_cfg.rainFps, g_cfg.rainCustomChars
-        });
+        rain::UpdateConfig(RainCfg());
         SaveConfig(); ApplyTheme(); return;
     case kRainHeadMinus: g_cfg.rainHeadRatio = max(0ul, g_cfg.rainHeadRatio - 5);
-        rain::UpdateConfig(rain::Config{
-            g_cfg.rainEnabled, g_cfg.rainColor, g_cfg.rainOpacity / 100.0f,
-            (int)g_cfg.rainCycleMs, g_cfg.rainHeadRatio / 100.0f,
-            (int)g_cfg.rainCharset, (int)g_cfg.rainFps, g_cfg.rainCustomChars
-        });
+        rain::UpdateConfig(RainCfg());
         SaveConfig(); ApplyTheme(); return;
     case kRainHeadPlus: g_cfg.rainHeadRatio = min(60ul, g_cfg.rainHeadRatio + 5);
-        rain::UpdateConfig(rain::Config{
-            g_cfg.rainEnabled, g_cfg.rainColor, g_cfg.rainOpacity / 100.0f,
-            (int)g_cfg.rainCycleMs, g_cfg.rainHeadRatio / 100.0f,
-            (int)g_cfg.rainCharset, (int)g_cfg.rainFps, g_cfg.rainCustomChars
-        });
+        rain::UpdateConfig(RainCfg());
         SaveConfig(); ApplyTheme(); return;
     case kRainChar0: case kRainChar1: case kRainChar2:
         g_cfg.rainCharset = id - kRainChar0;
-        rain::UpdateConfig(rain::Config{
-            g_cfg.rainEnabled, g_cfg.rainColor, g_cfg.rainOpacity / 100.0f,
-            (int)g_cfg.rainCycleMs, g_cfg.rainHeadRatio / 100.0f,
-            (int)g_cfg.rainCharset, (int)g_cfg.rainFps, g_cfg.rainCustomChars
-        });
+        rain::UpdateConfig(RainCfg());
         SaveConfig(); ApplyTheme(); return;
     case kRainFps0: case kRainFps1: case kRainFps2: {
         static const int fpsVals[3] = {20, 24, 30};
         g_cfg.rainFps = fpsVals[id - kRainFps0];
-        rain::UpdateConfig(rain::Config{
-            g_cfg.rainEnabled, g_cfg.rainColor, g_cfg.rainOpacity / 100.0f,
-            (int)g_cfg.rainCycleMs, g_cfg.rainHeadRatio / 100.0f,
-            (int)g_cfg.rainCharset, (int)g_cfg.rainFps, g_cfg.rainCustomChars
-        });
+        rain::UpdateConfig(RainCfg());
         SaveConfig(); ApplyTheme(); return;
     }
     case kRainCustomChars: {
@@ -3709,6 +3743,112 @@ static void PaintSettings(HWND h) {
     }
     drawSection(T(L"Outros", L"Other", L"Otros"), rows);
 
+    // WALLENGINE: chuva, WallClock e calendário no papel de parede (cada um com o seu Avançado, só quando ligado)
+    if (!g_lite) {
+        rows.clear();
+        rows.push_back({RH, 0, [&](D2D1_RECT_F r) {
+            rlabel(r, T(L"Chuva no fundo", L"Rain in background", L"Lluvia en el fondo"), T(L"Ativa a chuva digital no papel de parede", L"Enable digital rain on the wallpaper", L"Activa la lluvia digital en el fondo de pantalla"));
+            rtoggle(kRainEnabled, r, g_cfg.rainEnabled);
+        }});
+        if (g_cfg.rainEnabled) {
+            rows.push_back({SH, 1, [&](D2D1_RECT_F r) {
+                rlabel(r, T(L"Cor da chuva", L"Rain color", L"Color de la lluvia"), T(L"Escolha a cor dos caracteres", L"Choose character color", L"Elige el color de los caracteres"));
+                D2D1_RECT_F box = rbox(r, 6 * 30 * s);
+                float d = 22 * s, cy = (box.top + box.bottom) / 2;
+                UINT rainColors[5] = {0x0E1014, 0xFF6633, 0x00FF88, 0x00AAFF, 0xFF0066};
+                for (int i = 0; i < 5; ++i) {
+                    float cx = box.left + 6 * s + i * 30 * s;
+                    D2D1_RECT_F rr = D2D1::RectF(cx - d / 2, cy - d / 2, cx + d / 2, cy + d / 2);
+                    bool hh = hit(kRainColor0 + i, D2D1::RectF(rr.left - 4 * s, rr.top - 4 * s, rr.right + 4 * s, rr.bottom + 4 * s));
+                    bool sel = g_cfg.rainColor == rainColors[i];
+                    p.Fill(rr, d / 2, ui::Rgba(rainColors[i]));
+                    if (sel || hh) p.Stroke(D2D1::RectF(rr.left - 4 * s, rr.top - 4 * s, rr.right + 4 * s, rr.bottom + 4 * s), d / 2 + 4 * s, sel ? ui::Rgba(0xFFFFFF, 0.9f) : ui::Rgba(0xFFFFFF, 0.35f), 1.4f * s);
+                }
+                // RGB personalizado
+                float cx = box.left + 6 * s + 5 * 30 * s;
+                D2D1_RECT_F rr = D2D1::RectF(cx - d / 2, cy - d / 2, cx + d / 2, cy + d / 2);
+                bool hh = hit(kRainColorCustom, D2D1::RectF(rr.left - 4 * s, rr.top - 4 * s, rr.right + 4 * s, rr.bottom + 4 * s));
+                bool sel = std::find(rainColors, rainColors + 5, (UINT)g_cfg.rainColor) == rainColors + 5;
+                p.Fill(rr, d / 2, sel ? ui::Rgba(g_cfg.rainColor) : ui::Rgba(0xFFFFFF, 0.08f));
+                p.Text(L"RGB", D2D1::RectF(rr.left - 6 * s, rr.top, rr.right + 6 * s, rr.bottom), 8.5f, sel ? ui::Rgba(0x0E1014) : th.text, DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
+                if (sel || hh) p.Stroke(D2D1::RectF(rr.left - 4 * s, rr.top - 4 * s, rr.right + 4 * s, rr.bottom + 4 * s), d / 2 + 4 * s, sel ? ui::Rgba(0xFFFFFF, 0.9f) : ui::Rgba(0xFFFFFF, 0.35f), 1.4f * s);
+            }});
+            rows.push_back({SH, 1, [&](D2D1_RECT_F r) {
+                rlabel(r, T(L"Opacidade", L"Opacity", L"Opacidad"), T(L"5% a 60%", L"5% to 60%", L"5% a 60%"));
+                rstep(r, kRainOpacityMinus, kRainOpacityPlus, std::to_wstring(g_cfg.rainOpacity) + L"%");
+            }});
+            rows.push_back({SH, 1, [&](D2D1_RECT_F r) {
+                rlabel(r, T(L"Ciclo do loop", L"Loop cycle", L"Ciclo del bucle"), T(L"10s a 40s (passos de 5s)", L"10s to 40s (5s steps)", L"10s a 40s (pasos de 5s)"));
+                rstep(r, kRainCycleMinus, kRainCyclePlus, std::to_wstring(g_cfg.rainCycleMs / 1000) + L"s");
+            }});
+            rows.push_back({SH, 1, [&](D2D1_RECT_F r) {
+                rlabel(r, T(L"Cabeça", L"Head", L"Cabeza"), T(L"0% a 60% da coluna", L"0% to 60% of column", L"0% a 60% de la columna"));
+                rstep(r, kRainHeadMinus, kRainHeadPlus, std::to_wstring(g_cfg.rainHeadRatio) + L"%");
+            }});
+            rows.push_back({SH, 1, [&](D2D1_RECT_F r) {
+                rlabel(r, T(L"Caracteres", L"Characters", L"Caracteres"), T(L"Conjunto de caracteres da chuva", L"Character set for rain", L"Conjunto de caracteres de la lluvia"));
+                rseg(r, 240 * s, {T(L"Katakana", L"Katakana", L"Katakana"), T(L"Latin", L"Latin", L"Latino"), T(L"Personalizado", L"Custom", L"Personalizado")}, (int)g_cfg.rainCharset, kRainChar0);
+            }});
+            rows.push_back({SH, 1, [&](D2D1_RECT_F r) {
+                rlabel(r, T(L"FPS", L"FPS", L"FPS"), T(L"Taxa de quadros da animação", L"Animation frame rate", L"Tasa de fotogramas de la animación"));
+                rseg(r, 200 * s, {L"20", L"24", L"30"}, g_cfg.rainFps == 20 ? 0 : g_cfg.rainFps == 24 ? 1 : 2, kRainFps0);
+            }});
+            rows.push_back({SH, 1, [&](D2D1_RECT_F r) {
+                rlabel(r, T(L"Caracteres personalizados", L"Custom characters", L"Caracteres personalizados"), T(L"Clique para editar (máx 100 caracteres)", L"Click to edit (max 100 chars)", L"Haz clic para editar (máx 100 caracteres)"));
+                wchar_t b[128];
+                swprintf(b, 128, L"%ls", g_cfg.rainCustomChars.empty() ? T(L"(vazio - usa Katakana)", L"(empty - uses Katakana)", L"(vacío - usa Katakana)") : g_cfg.rainCustomChars.c_str());
+                rpill(r, kRainCustomChars, b, 300 * s);
+            }});
+        }
+        rows.push_back({RH, 0, [&](D2D1_RECT_F r) {
+            rlabel(r, L"WallClock", T(L"Relógio grande no centro do papel de parede", L"Big clock in the middle of the wallpaper", L"Reloj grande en el centro del fondo"));
+            rtoggle(kWcOn, r, g_cfg.wcOn); }});
+        if (g_cfg.wcOn) {
+            rows.push_back({SH, 1, [&](D2D1_RECT_F r) {
+                rlabel(r, T(L"Fonte", L"Font", L"Fuente"), nullptr);
+                rpill(r, kWcFont, g_cfg.wcFont.empty() ? std::wstring(g_uiFont.empty() ? DefaultUiFont() : g_uiFont.c_str()) : g_cfg.wcFont, 170 * s); }});
+            rows.push_back({SH, 1, [&](D2D1_RECT_F r) {
+                rlabel(r, T(L"Cores", L"Colors", L"Colores"), T(L"Até 3, em degradê de cima para baixo", L"Up to 3, as a top-to-bottom gradient", L"Hasta 3, en degradado de arriba abajo"));
+                D2D1_RECT_F box = rbox(r, 3 * 30 * s + 64 * s);
+                float d = 22 * s, cy = (box.top + box.bottom) / 2;
+                for (int i = 0; i < (int)g_cfg.wcCount; ++i) {
+                    float cx = box.left + 6 * s + i * 30 * s + d / 2;
+                    D2D1_RECT_F rr = D2D1::RectF(cx - d / 2, cy - d / 2, cx + d / 2, cy + d / 2);
+                    bool hh = hit(kWcCol0 + i, D2D1::RectF(rr.left - 4 * s, rr.top - 4 * s, rr.right + 4 * s, rr.bottom + 4 * s));
+                    p.Fill(rr, d / 2, ui::Rgba(g_cfg.wcColor[i]));
+                    p.Stroke(D2D1::RectF(rr.left - 4 * s, rr.top - 4 * s, rr.right + 4 * s, rr.bottom + 4 * s), d / 2 + 4 * s, ui::Rgba(0xFFFFFF, hh ? 0.6f : 0.2f), 1.4f * s);
+                }
+                for (int k = 0; k < 2; ++k) {
+                    float bx = box.right - (2 - k) * 30 * s;
+                    D2D1_RECT_F rr = D2D1::RectF(bx, cy - 13 * s, bx + 26 * s, cy + 13 * s);
+                    bool can = k ? g_cfg.wcCount < 3 : g_cfg.wcCount > 1;
+                    bool hh = can && hit(k ? kWcColPlus : kWcColMinus, rr);
+                    p.Fill(rr, 13 * s, ui::Rgba(0xFFFFFF, hh ? 0.14f : 0.06f));
+                    p.Text(k ? L"+" : L"\u2212", rr, 14, can ? th.text : th.text2, DWRITE_FONT_WEIGHT_MEDIUM, DWRITE_TEXT_ALIGNMENT_CENTER);
+                } }});
+            rows.push_back({SH, 1, [&](D2D1_RECT_F r) { rlabel(r, T(L"Opacidade", L"Opacity", L"Opacidad"), T(L"10% a 100%", L"10% to 100%", L"10% a 100%")); rstep(r, kWcOpMinus, kWcOpPlus, std::to_wstring(g_cfg.wcOpacity) + L"%"); }});
+            rows.push_back({SH, 1, [&](D2D1_RECT_F r) { rlabel(r, T(L"Tamanho", L"Size", L"Tamaño"), T(L"1% a 100% da largura, sempre centralizado", L"1% to 100% of the width, always centered", L"1% a 100% del ancho, siempre centrado")); rstep(r, kWcSizeMinus, kWcSizePlus, std::to_wstring(g_cfg.wcSize) + L"%"); }});
+            rows.push_back({SH, 1, [&](D2D1_RECT_F r) { rlabel(r, T(L"Modo vidro", L"Glass mode", L"Modo vidrio"), T(L"Os números mostram o papel de parede desfocado", L"The digits show the blurred wallpaper", L"Los números muestran el fondo desenfocado")); rtoggle(kWcGlass, r, g_cfg.wcGlass); }});
+        }
+        rows.push_back({RH, 0, [&](D2D1_RECT_F r) {
+            rlabel(r, T(L"Calendário no fundo", L"Background calendar", L"Calendario en el fondo"), T(L"Arraste para mover, puxe os cantos para o tamanho, clique num dia para a Agenda", L"Drag to move, pull the corners to resize, click a day for the Agenda", L"Arrastra para mover, tira de las esquinas para el tamaño, clic en un día para la Agenda"));
+            rtoggle(kCalOn, r, g_cfg.calOn); }});
+        if (g_cfg.calOn) {
+            auto dot = [&](D2D1_RECT_F r, int id, DWORD c) {
+                D2D1_RECT_F b = rbox(r, 30 * s); float d = 22 * s, cx = (b.left + b.right) / 2, cy = (b.top + b.bottom) / 2;
+                D2D1_RECT_F rr = D2D1::RectF(cx - d / 2, cy - d / 2, cx + d / 2, cy + d / 2);
+                bool hh = hit(id, D2D1::RectF(rr.left - 4 * s, rr.top - 4 * s, rr.right + 4 * s, rr.bottom + 4 * s));
+                p.Fill(rr, d / 2, ui::Rgba(c));
+                p.Stroke(D2D1::RectF(rr.left - 4 * s, rr.top - 4 * s, rr.right + 4 * s, rr.bottom + 4 * s), d / 2 + 4 * s, ui::Rgba(0xFFFFFF, hh ? 0.6f : 0.25f), 1.4f * s);
+            };
+            rows.push_back({SH, 1, [&](D2D1_RECT_F r) { rlabel(r, T(L"Cor do box", L"Box color", L"Color de la caja"), nullptr); dot(r, kCalBox, g_cfg.calBox); }});
+            rows.push_back({SH, 1, [&](D2D1_RECT_F r) { rlabel(r, T(L"Opacidade do box", L"Box opacity", L"Opacidad de la caja"), T(L"0% a 90%", L"0% to 90%", L"0% a 90%")); rstep(r, kCalOpMinus, kCalOpPlus, std::to_wstring(g_cfg.calOpacity) + L"%"); }});
+            rows.push_back({SH, 1, [&](D2D1_RECT_F r) { rlabel(r, T(L"Cor dos números", L"Number color", L"Color de los números"), nullptr); dot(r, kCalNum, g_cfg.calNum); }});
+            rows.push_back({SH, 1, [&](D2D1_RECT_F r) { rlabel(r, T(L"Cores e tamanho originais", L"Original colors and size", L"Colores y tamaño originales"), T(L"Volta ao padrão Classic", L"Back to the Classic default", L"Vuelve al estándar Classic")); rpill(r, kCalReset, T(L"Restaurar", L"Restore", L"Restaurar"), 110 * s); }});
+        }
+        drawSection(L"WallEngine", rows);
+    }
+
     // SISTEMA: só Avançado
     rows.clear();
     advanced(rows, kSecSys, {
@@ -3782,65 +3922,6 @@ static void PaintSettings(HWND h) {
                 if (sel || hh) p.Stroke(D2D1::RectF(rr.left - 4 * s, rr.top - 4 * s, rr.right + 4 * s, rr.bottom + 4 * s), d / 2 + 4 * s, sel ? ui::Rgba(0xFFFFFF, 0.9f) : ui::Rgba(0xFFFFFF, 0.35f), 1.4f * s);
             }
         }});
-    // Chuva digital: temas Classic e Crispy
-    if (g_cfg.themeMode == ui::kThemeClassic || g_cfg.themeMode == ui::kThemeCrispy) { // chuva: Classic e Crispy
-        rows.push_back({RH, 0, [&](D2D1_RECT_F r) {
-            rlabel(r, T(L"Chuva no fundo", L"Rain in background", L"Lluvia en el fondo"), T(L"Ativa a chuva digital no papel de parede", L"Enable digital rain on the wallpaper", L"Activa la lluvia digital en el fondo de pantalla"));
-            rtoggle(kRainEnabled, r, g_cfg.rainEnabled);
-        }});
-        {
-            std::vector<SRow> adv;
-            adv.push_back({SH, 1, [&](D2D1_RECT_F r) {
-                rlabel(r, T(L"Cor da chuva", L"Rain color", L"Color de la lluvia"), T(L"Escolha a cor dos caracteres", L"Choose character color", L"Elige el color de los caracteres"));
-                D2D1_RECT_F box = rbox(r, 6 * 30 * s);
-                float d = 22 * s, cy = (box.top + box.bottom) / 2;
-                UINT rainColors[5] = {0x0E1014, 0xFF6633, 0x00FF88, 0x00AAFF, 0xFF0066};
-                for (int i = 0; i < 5; ++i) {
-                    float cx = box.left + 6 * s + i * 30 * s;
-                    D2D1_RECT_F rr = D2D1::RectF(cx - d / 2, cy - d / 2, cx + d / 2, cy + d / 2);
-                    bool hh = hit(kRainColor0 + i, D2D1::RectF(rr.left - 4 * s, rr.top - 4 * s, rr.right + 4 * s, rr.bottom + 4 * s));
-                    bool sel = g_cfg.rainColor == rainColors[i];
-                    p.Fill(rr, d / 2, ui::Rgba(rainColors[i]));
-                    if (sel || hh) p.Stroke(D2D1::RectF(rr.left - 4 * s, rr.top - 4 * s, rr.right + 4 * s, rr.bottom + 4 * s), d / 2 + 4 * s, sel ? ui::Rgba(0xFFFFFF, 0.9f) : ui::Rgba(0xFFFFFF, 0.35f), 1.4f * s);
-                }
-                // RGB personalizado
-                float cx = box.left + 6 * s + 5 * 30 * s;
-                D2D1_RECT_F rr = D2D1::RectF(cx - d / 2, cy - d / 2, cx + d / 2, cy + d / 2);
-                bool hh = hit(kRainColorCustom, D2D1::RectF(rr.left - 4 * s, rr.top - 4 * s, rr.right + 4 * s, rr.bottom + 4 * s));
-                bool sel = std::find(rainColors, rainColors + 5, (UINT)g_cfg.rainColor) == rainColors + 5;
-                p.Fill(rr, d / 2, sel ? ui::Rgba(g_cfg.rainColor) : ui::Rgba(0xFFFFFF, 0.08f));
-                p.Text(L"RGB", D2D1::RectF(rr.left - 6 * s, rr.top, rr.right + 6 * s, rr.bottom), 8.5f, sel ? ui::Rgba(0x0E1014) : th.text, DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
-                if (sel || hh) p.Stroke(D2D1::RectF(rr.left - 4 * s, rr.top - 4 * s, rr.right + 4 * s, rr.bottom + 4 * s), d / 2 + 4 * s, sel ? ui::Rgba(0xFFFFFF, 0.9f) : ui::Rgba(0xFFFFFF, 0.35f), 1.4f * s);
-            }});
-            adv.push_back({SH, 1, [&](D2D1_RECT_F r) {
-                rlabel(r, T(L"Opacidade", L"Opacity", L"Opacidad"), T(L"5% a 60%", L"5% to 60%", L"5% a 60%"));
-                rstep(r, kRainOpacityMinus, kRainOpacityPlus, std::to_wstring(g_cfg.rainOpacity) + L"%");
-            }});
-            adv.push_back({SH, 1, [&](D2D1_RECT_F r) {
-                rlabel(r, T(L"Ciclo do loop", L"Loop cycle", L"Ciclo del bucle"), T(L"10s a 40s (passos de 5s)", L"10s to 40s (5s steps)", L"10s a 40s (pasos de 5s)"));
-                rstep(r, kRainCycleMinus, kRainCyclePlus, std::to_wstring(g_cfg.rainCycleMs / 1000) + L"s");
-            }});
-            adv.push_back({SH, 1, [&](D2D1_RECT_F r) {
-                rlabel(r, T(L"Cabeça", L"Head", L"Cabeza"), T(L"0% a 60% da coluna", L"0% to 60% of column", L"0% a 60% de la columna"));
-                rstep(r, kRainHeadMinus, kRainHeadPlus, std::to_wstring(g_cfg.rainHeadRatio) + L"%");
-            }});
-            adv.push_back({SH, 1, [&](D2D1_RECT_F r) {
-                rlabel(r, T(L"Caracteres", L"Characters", L"Caracteres"), T(L"Conjunto de caracteres da chuva", L"Character set for rain", L"Conjunto de caracteres de la lluvia"));
-                rseg(r, 240 * s, {T(L"Katakana", L"Katakana", L"Katakana"), T(L"Latin", L"Latin", L"Latino"), T(L"Personalizado", L"Custom", L"Personalizado")}, (int)g_cfg.rainCharset, kRainChar0);
-            }});
-            adv.push_back({SH, 1, [&](D2D1_RECT_F r) {
-                rlabel(r, T(L"FPS", L"FPS", L"FPS"), T(L"Taxa de quadros da animação", L"Animation frame rate", L"Tasa de fotogramas de la animación"));
-                rseg(r, 200 * s, {L"20", L"24", L"30"}, g_cfg.rainFps == 20 ? 0 : g_cfg.rainFps == 24 ? 1 : 2, kRainFps0);
-            }});
-            adv.push_back({SH, 1, [&](D2D1_RECT_F r) {
-                rlabel(r, T(L"Caracteres personalizados", L"Custom characters", L"Caracteres personalizados"), T(L"Clique para editar (máx 100 caracteres)", L"Click to edit (max 100 chars)", L"Haz clic para editar (máx 100 caracteres)"));
-                wchar_t b[128];
-                swprintf(b, 128, L"%ls", g_cfg.rainCustomChars.empty() ? T(L"(vazio - usa Katakana)", L"(empty - uses Katakana)", L"(vacío - usa Katakana)") : g_cfg.rainCustomChars.c_str());
-                rpill(r, kRainCustomChars, b, 300 * s);
-            }});
-            advanced(rows, kSecRainAdv, std::move(adv));
-        }
-    }
     drawSection(T(L"Temas", L"Themes", L"Temas"), rows);
 
     if (g_lite) { // quadro do Lite: o que fica de fora e como conseguir
@@ -4796,19 +4877,13 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmd, int) {
 
     // Inicializar chuva digital se tema Classic ativo - PLANO-CHUVA-DIGITAL
     rain::InitFactories(g_d2d, g_dw);
-    rain::g_cfg.enabled = g_cfg.rainEnabled;
-    rain::g_cfg.color = g_cfg.rainColor;
-    rain::g_cfg.opacity = g_cfg.rainOpacity / 100.0f;
-    rain::g_cfg.cycleMs = (int)g_cfg.rainCycleMs;
-    rain::g_cfg.headRatio = g_cfg.rainHeadRatio / 100.0f;
-    rain::g_cfg.charset = (int)g_cfg.rainCharset;
-    rain::g_cfg.fps = (int)g_cfg.rainFps;
-    rain::g_cfg.customChars = g_cfg.rainCustomChars;
+    rain::g_cfg = RainCfg(); // chuva e WallClock (WallEngine)
     if (rain::ShouldRun((int)g_cfg.themeMode)) {
         rain::Start();
     }
 
     ClockLoad();
+    WallCalEnable(g_cfg.calOn && !g_lite); // calendário no fundo (WallEngine)
     LoadPreset();
     RegisterGlobalHotkeys(); // OCR funciona mesmo com o relógio desligado
     g_taskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");

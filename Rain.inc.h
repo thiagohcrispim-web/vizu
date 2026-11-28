@@ -24,6 +24,14 @@ struct Config {
     int charset = 0;                // Conjunto de caracteres (0=Katakana espelhado, 1=Latin, 2=Custom)
     int fps = 24;                   // FPS 20/24/30, padrão 24
     std::wstring customChars;       // Caracteres personalizados se charset=2
+    // WallClock (WallEngine, v19.8): relógio gigante na mesma camada, por baixo da chuva.
+    bool clock = false;
+    UINT clockColors[3] = {0xFF6633, 0xFFFFFF, 0x4A4F57};
+    int clockCount = 1;              // 1 a 3 cores (degradê de cima para baixo)
+    float clockOpacity = 0.6f;
+    int clockSize = 60;              // % da largura do monitor principal (1 a 100)
+    bool clockGlass = false;         // vidro: o papel de parede desfocado dentro dos números
+    std::wstring clockFont = L"Segoe UI";
 };
 
 inline Config g_cfg;
@@ -72,6 +80,14 @@ inline void InitCharset() {
 }
 
 inline ID2D1Bitmap* g_wall = nullptr;   // papel de parede desenhado por baixo da chuva
+inline ID2D1Bitmap* g_blur = nullptr;   // o mesmo papel de parede em 1/16, desfocado (vidro do WallClock)
+inline IDWriteTextFormat* g_clockFmt = nullptr;
+inline float g_clockFmtSize = 0;
+inline std::wstring g_clockFmtFont;
+inline void ReleaseWall() {
+    if (g_wall) { g_wall->Release(); g_wall = nullptr; }
+    if (g_blur) { g_blur->Release(); g_blur = nullptr; }
+}
 inline HWND g_insertAfter = nullptr;    // 24H2: fica logo abaixo dos ícones (SHELLDLL_DefView)
 inline RECT g_area = {};                // área da janela (coordenadas da tela)
 
@@ -101,7 +117,7 @@ inline HWND FindWallpaperParent(HWND* insertAfter) {
 
 // Carrega o papel de parede atual como bitmap do Direct2D (nulo se não houver imagem).
 inline void LoadWallpaper() {
-    if (g_wall) { g_wall->Release(); g_wall = nullptr; }
+    ReleaseWall();
     wchar_t path[MAX_PATH] = {};
     if (!SystemParametersInfoW(SPI_GETDESKWALLPAPER, MAX_PATH, path, 0) || !path[0] || !g_rt) return;
     IWICImagingFactory* wic = nullptr; IWICBitmapDecoder* dec = nullptr; IWICBitmapFrameDecode* fr = nullptr; IWICFormatConverter* cv = nullptr;
@@ -155,6 +171,101 @@ inline bool ShouldPause() {
     return why[0] != 0;
 }
 
+// Papel de parede reduzido a 1/16 com filtro cúbico: ampliado de volta com filtro linear, vira um desfoque suave.
+inline void MakeBlur() {
+    if (g_blur || !g_wall || !g_rt) return;
+    D2D1_SIZE_F full = g_rt->GetSize();
+    ID2D1BitmapRenderTarget* brt = nullptr;
+    if (FAILED(g_rt->CreateCompatibleRenderTarget(D2D1::SizeF(std::max(1.0f, full.width / 16), std::max(1.0f, full.height / 16)), &brt))) return;
+    ID2D1DeviceContext* dc = nullptr;
+    brt->QueryInterface(IID_PPV_ARGS(&dc));
+    brt->BeginDraw();
+    brt->Clear(D2D1::ColorF(0, 0, 0));
+    struct Ctx { ID2D1BitmapRenderTarget* brt; ID2D1DeviceContext* dc; } ctx = {brt, dc};
+    EnumDisplayMonitors(nullptr, nullptr, [](HMONITOR, HDC, LPRECT m, LPARAM lp) -> BOOL {
+        auto* c = (Ctx*)lp;
+        D2D1_SIZE_F ws = g_wall->GetSize();
+        float mw = (float)(m->right - m->left), mh = (float)(m->bottom - m->top);
+        float k = std::max(mw / ws.width, mh / ws.height), w = ws.width * k, h = ws.height * k;
+        float x = m->left - g_area.left + (mw - w) / 2, y = m->top - g_area.top + (mh - h) / 2;
+        D2D1_RECT_F clip = D2D1::RectF((m->left - g_area.left) / 16.0f, (m->top - g_area.top) / 16.0f, (m->right - g_area.left) / 16.0f, (m->bottom - g_area.top) / 16.0f);
+        D2D1_RECT_F dst = D2D1::RectF(x / 16, y / 16, (x + w) / 16, (y + h) / 16);
+        c->brt->PushAxisAlignedClip(clip, D2D1_ANTIALIAS_MODE_ALIASED);
+        if (c->dc) c->dc->DrawBitmap(g_wall, &dst, 1.0f, D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC, nullptr, nullptr);
+        else c->brt->DrawBitmap(g_wall, dst, 1.0f, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
+        c->brt->PopAxisAlignedClip();
+        return TRUE;
+    }, (LPARAM)&ctx);
+    if (SUCCEEDED(brt->EndDraw())) brt->GetBitmap(&g_blur);
+    if (dc) dc->Release();
+    brt->Release();
+}
+
+// WallClock: HH:MM centralizado no monitor principal, com a largura escolhida (1% a 100% do monitor).
+inline void DrawClock() {
+    SYSTEMTIME t; GetLocalTime(&t);
+    wchar_t txt[8]; swprintf(txt, 8, L"%02d:%02d", t.wHour, t.wMinute);
+    MONITORINFO mi = {sizeof(mi)};
+    if (!GetMonitorInfoW(MonitorFromPoint({0, 0}, MONITOR_DEFAULTTOPRIMARY), &mi)) return;
+    float mx = (float)(mi.rcMonitor.left - g_area.left), my = (float)(mi.rcMonitor.top - g_area.top);
+    float mw = (float)(mi.rcMonitor.right - mi.rcMonitor.left), mh = (float)(mi.rcMonitor.bottom - mi.rcMonitor.top);
+    const std::wstring& fam = g_cfg.clockFont.empty() ? std::wstring(L"Segoe UI") : g_cfg.clockFont;
+    // largura do texto a 100 px; o tamanho final sai por regra de três
+    auto layoutAt = [&](float size) -> IDWriteTextLayout* {
+        if (!g_clockFmt || g_clockFmtSize != size || g_clockFmtFont != fam) {
+            if (g_clockFmt) { g_clockFmt->Release(); g_clockFmt = nullptr; }
+            if (FAILED(g_dw->CreateTextFormat(fam.c_str(), nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, size, L"pt-br", &g_clockFmt))) return nullptr;
+            g_clockFmt->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+            g_clockFmtSize = size; g_clockFmtFont = fam;
+        }
+        IDWriteTextLayout* l = nullptr;
+        g_dw->CreateTextLayout(txt, (UINT32)wcslen(txt), g_clockFmt, 100000, 100000, &l);
+        return l;
+    };
+    IDWriteTextLayout* probe = layoutAt(100);
+    if (!probe) return;
+    DWRITE_TEXT_METRICS pm; probe->GetMetrics(&pm); probe->Release();
+    if (pm.width < 1) return;
+    float target = mw * std::max(1, std::min(100, g_cfg.clockSize)) / 100.0f;
+    float size = std::max(4.0f, std::min(100.0f * target / pm.width, mh * 0.9f / (pm.height / 100.0f)));
+    size = floorf(size);
+    IDWriteTextLayout* lay = layoutAt(size);
+    if (!lay) return;
+    DWRITE_TEXT_METRICS m; lay->GetMetrics(&m);
+    float x = mx + (mw - m.width) / 2 - m.left, y = my + (mh - m.height) / 2 - m.top;
+    float op = std::max(0.05f, std::min(1.0f, g_cfg.clockOpacity));
+    if (g_cfg.clockGlass) { // vidro: o papel de parede desfocado preenche os números, com um véu claro por cima
+        MakeBlur();
+        if (g_blur) {
+            ID2D1BitmapBrush* bb = nullptr;
+            if (SUCCEEDED(g_rt->CreateBitmapBrush(g_blur, D2D1::BitmapBrushProperties(D2D1_EXTEND_MODE_CLAMP, D2D1_EXTEND_MODE_CLAMP, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR), &bb))) {
+                bb->SetTransform(D2D1::Matrix3x2F::Scale(16, 16));
+                g_rt->DrawTextLayout(D2D1::Point2F(x, y), lay, bb);
+                bb->Release();
+            }
+        }
+        ID2D1SolidColorBrush* veil = nullptr;
+        if (SUCCEEDED(g_rt->CreateSolidColorBrush(D2D1::ColorF(1, 1, 1, 0.18f * op + 0.04f), &veil))) { g_rt->DrawTextLayout(D2D1::Point2F(x, y), lay, veil); veil->Release(); }
+    } else {
+        int n = std::max(1, std::min(3, g_cfg.clockCount));
+        auto col = [&](int i) { UINT c = g_cfg.clockColors[i]; return D2D1::ColorF(((c >> 16) & 255) / 255.0f, ((c >> 8) & 255) / 255.0f, (c & 255) / 255.0f, op); };
+        if (n == 1) {
+            ID2D1SolidColorBrush* b = nullptr;
+            if (SUCCEEDED(g_rt->CreateSolidColorBrush(col(0), &b))) { g_rt->DrawTextLayout(D2D1::Point2F(x, y), lay, b); b->Release(); }
+        } else { // degradê sempre de cima para baixo (90°)
+            D2D1_GRADIENT_STOP st[3];
+            for (int i = 0; i < n; ++i) st[i] = {(float)i / (n - 1), col(i)};
+            ID2D1GradientStopCollection* sc = nullptr; ID2D1LinearGradientBrush* lb = nullptr;
+            float top = y + m.top, bottom = y + m.top + m.height;
+            if (SUCCEEDED(g_rt->CreateGradientStopCollection(st, (UINT32)n, &sc)) &&
+                SUCCEEDED(g_rt->CreateLinearGradientBrush(D2D1::LinearGradientBrushProperties(D2D1::Point2F(0, top), D2D1::Point2F(0, bottom)), sc, &lb)))
+                g_rt->DrawTextLayout(D2D1::Point2F(x, y), lay, lb);
+            if (lb) lb->Release(); if (sc) sc->Release();
+        }
+    }
+    lay->Release();
+}
+
 // Desenha um quadro: papel de parede (em cada monitor, preenchendo) e a chuva por cima.
 inline void DrawFrame() {
     if (!g_running || !g_rainWnd) return;
@@ -187,8 +298,10 @@ inline void DrawFrame() {
             return TRUE;
         }, (LPARAM)&ws);
     }
+    if (g_cfg.clock) DrawClock(); // WallClock: camada de baixo
     float r = ((g_cfg.color >> 16) & 0xFF) / 255.0f, g = ((g_cfg.color >> 8) & 0xFF) / 255.0f, b = (g_cfg.color & 0xFF) / 255.0f;
     ID2D1SolidColorBrush* brush = nullptr; ID2D1SolidColorBrush* head = nullptr;
+    if (g_cfg.enabled) { // chuva: camada do meio
     g_rt->CreateSolidColorBrush(D2D1::ColorF(r, g, b), &brush);
     g_rt->CreateSolidColorBrush(D2D1::ColorF(r + (1 - r) * 0.85f, g + (1 - g) * 0.85f, b + (1 - b) * 0.85f), &head); // cabeça quase branca: aparece até com a cor grafite
     int frame = (int)(elapsedMs / (1000.0f / std::max(1, g_cfg.fps)));
@@ -211,9 +324,10 @@ inline void DrawFrame() {
             g_rt->DrawTextW(&wc, 1, g_font, D2D1::RectF(x, row * g_charH, x + g_charW, (row + 1) * g_charH), br);
         }
     }
+    }
     if (brush) brush->Release(); if (head) head->Release();
     HRESULT hr = g_rt->EndDraw();
-    if (hr == D2DERR_RECREATE_TARGET) { if (g_wall) { g_wall->Release(); g_wall = nullptr; } g_rt->Release(); g_rt = nullptr; }
+    if (hr == D2DERR_RECREATE_TARGET) { ReleaseWall(); g_rt->Release(); g_rt = nullptr; }
     else if (FAILED(hr)) DIAG_HR("chuva: desenho falhou", hr);
 }
 
@@ -234,9 +348,9 @@ inline bool CreateRainWindow() {
             case WM_PAINT: { PAINTSTRUCT ps; BeginPaint(hw, &ps); EndPaint(hw, &ps); DrawFrame(); return 0; }
             case WM_ERASEBKGND: return 1;
             case WM_TIMER: if (!ShouldPause()) DrawFrame(); return 0;
-            case WM_SETTINGCHANGE: if (wp == SPI_SETDESKWALLPAPER && g_rt) LoadWallpaper(); DrawFrame(); return 0;
+            case WM_SETTINGCHANGE: if (wp == SPI_SETDESKWALLPAPER && g_rt) LoadWallpaper(); DrawFrame(); return 0; // LoadWallpaper também descarta o desfoque
             case WM_DISPLAYCHANGE: case WM_SIZE:
-                if (g_wall) { g_wall->Release(); g_wall = nullptr; }
+                ReleaseWall();
                 if (g_rt) { g_rt->Release(); g_rt = nullptr; }
                 return 0;
             }
@@ -279,7 +393,7 @@ inline bool CreateRainWindow() {
     QueryPerformanceFrequency(&g_freq);
     QueryPerformanceCounter(&g_startTime);
     g_running = true;
-    g_timerId = SetTimer(g_rainWnd, 1, 1000 / std::max(1, g_cfg.fps), nullptr);
+    g_timerId = SetTimer(g_rainWnd, 1, g_cfg.enabled ? 1000 / std::max(1, g_cfg.fps) : 1000, nullptr); // só o relógio: 1 quadro por segundo
     DrawFrame();
     diag::Log("chuva: ligada (" + std::string(g_insertAfter ? "Progman/24H2" : "WorkerW") + ")");
     return true;
@@ -312,9 +426,10 @@ inline void Stop() {
     g_running = false;
     if (g_timerId) { KillTimer(g_rainWnd, g_timerId); g_timerId = 0; }
     if (g_rainWnd) { DestroyWindow(g_rainWnd); g_rainWnd = nullptr; }
-    if (g_wall) { g_wall->Release(); g_wall = nullptr; }
+    ReleaseWall();
     if (g_rt) { g_rt->Release(); g_rt = nullptr; }
     if (g_font) { g_font->Release(); g_font = nullptr; }
+    if (g_clockFmt) { g_clockFmt->Release(); g_clockFmt = nullptr; }
     g_workerW = nullptr;
 }
 
@@ -328,9 +443,9 @@ inline void UpdateConfig(const Config& cfg) {
     }
 }
 
-// Verifica se deve rodar (tema Classic ativo + enabled)
+// Roda com a chuva ou o WallClock ligado, em qualquer tema (WallEngine, v19.8).
 inline bool ShouldRun(int currentTheme) {
-    return (currentTheme == ui::kThemeClassic || currentTheme == ui::kThemeCrispy) && g_cfg.enabled; // Classic e Crispy
+    return g_cfg.enabled || g_cfg.clock;
 }
 
 } // namespace rain

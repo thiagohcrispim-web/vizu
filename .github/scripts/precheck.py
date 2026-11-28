@@ -169,7 +169,7 @@ def check_junk():
 def members(struct_src):
     body = re.sub(r'\{[^{}]*\}', '{}', struct_src[1:-1])  # tira inicializadores {..} e corpos de funções
     body = re.sub(r'\([^()]*\)', '()', body)
-    names = set(re.findall(r'\b(\w+)\s*(?:\{\}|=[^,;]*)?\s*(?=[,;])', body))
+    names = set(re.findall(r'\b(\w+)\s*(?:\[\w*\])?\s*(?:\{\}|=[^,;]*)?\s*(?=[,;])', body))  # aceita arrays: cor[3] = {..}
     names |= set(re.findall(r'\b(\w+)\s*\(', body))
     return names
 
