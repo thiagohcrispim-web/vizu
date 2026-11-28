@@ -50,6 +50,12 @@ jobs:
           x86_64-w64-mingw32-g++ -O2 -DUNICODE -D_UNICODE -static -municode -Ithird_party/mingw-w64-headers -o build/clean-tests.exe tests/clean_tests.cpp -lshell32 -lole32 -luuid
           WINEDEBUG=-all timeout 120 wine build/clean-tests.exe
 
+      # Gravar tela: relógio com pausa, áudio alinhado (silêncio do loopback), mixagem sem estouro, nome do arquivo.
+      - name: Testar a gravação de tela
+        run: |
+          x86_64-w64-mingw32-g++ -O2 -std=c++20 -DUNICODE -D_UNICODE -static -municode -Ithird_party/mingw-w64-headers -o build/record-tests.exe tests/record_tests.cpp -ld3d11 -ldxgi -lmfplat -lmfreadwrite -lmfuuid -lole32 -luuid -lgdi32 -lshell32
+          WINEDEBUG=-all timeout 120 wine build/record-tests.exe
+
       # PDF -> PPT: texto editável, vetores no fundo, texto girado no fundo, Form XObject, camada de scan.
       - name: Testar PDF para PPT
         run: |

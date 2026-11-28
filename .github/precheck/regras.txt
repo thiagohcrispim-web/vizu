@@ -141,3 +141,21 @@ arquivos: Vizu.cpp
 exigido: float hotCov = max\(0\.0f, min\(1\.0f, dist \+ 0\.5f\)\)
 motivo: a fatia acesa do menu circular era decidida com "if (dist > 0)", sem meio-termo, e a borda ficava serrilhada. Mantenha a cobertura parcial (hotCov) na borda
 origem: v19.5.10
+
+id: gravacao-barra-fora-do-video
+arquivos: RecordUi.inc.h
+exigido: SetWindowDisplayAffinity\(g_rec\.wnd, WDA_EXCLUDEFROMCAPTURE\)
+motivo: a barra de gravação não pode aparecer no vídeo. Mantenha WDA_EXCLUDEFROMCAPTURE na janela da barra
+origem: v19.6.0
+
+id: gravacao-finalize-ao-sair
+arquivos: Vizu.cpp
+exigido: case WM_DESTROY:[^\n]*RecShutdown\(\)
+motivo: sair do Vizu no meio da gravação sem Finalize deixa um MP4 que não abre. Chame RecShutdown() no WM_DESTROY da janela principal
+origem: v19.6.0
+
+id: gravacao-tamanho-par
+arquivos: Record.h
+exigido: crop = EvenRect\(
+motivo: o H.264 recusa largura ou altura ímpar (barra de tarefas de 41 px, telas 1366x767). Passe o recorte por EvenRect
+origem: v19.6.0

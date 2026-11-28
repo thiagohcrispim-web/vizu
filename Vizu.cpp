@@ -947,11 +947,15 @@ static void CleanOnTheme();
 static void CloseCleanBeforeQuit();
 
 static void StartOcr();
+static void RecordShortcut();
+static void RecShutdown();
 static const int kHotOcr = 77;   // ler texto da tela (padrão Ctrl+Alt+T; chave OcrHotkey)
 static const int kHotClean = 78; // abrir a Limpeza (sem padrão; chave CleanHotkey)
+static const int kHotRec = 79;   // gravar a tela (padrão Ctrl+Alt+R; chave RecHotkey)
 static void OnHotkey(int id) {
     if (id == kHotOcr) { StartOcr(); return; }
     if (id == kHotClean) { OpenCleanWindow(); return; }
+    if (id == kHotRec) { RecordShortcut(); return; }
     switch (id) {
     case kHotSpace:
         if (g_open) ClosePreview();
@@ -1554,7 +1558,7 @@ static LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         EndPaint(h, &ps);
         return 0;
     }
-    case WM_DESTROY: rain::Stop(); CloseCleanBeforeQuit(); RemoveTrayIcon(); PostQuitMessage(0); return 0;
+    case WM_DESTROY: rain::Stop(); RecShutdown(); CloseCleanBeforeQuit(); RemoveTrayIcon(); PostQuitMessage(0); return 0;
     }
     if (msg == g_taskbarCreated && g_taskbarCreated) { UpdateTrayIcon(); return 0; } // Explorer reiniciou: recoloca o ícone
     return DefWindowProcW(h, msg, wp, lp);
@@ -2782,6 +2786,7 @@ static bool AutostartEnabled();
 
 #include "Clock.inc.h"
 #include "OcrUi.inc.h"
+#include "RecordUi.inc.h"
 #include "Agenda.inc.h"
 #include "Hearts.inc.h"
 #include "CleanUi.inc.h"
@@ -2802,7 +2807,7 @@ enum { kTogSpace = 1, kTogAlt, kDelayMinus, kDelayPlus, kDpi72, kDpi300, kPdfSma
        kClockOn, kClockFont, kPomoT0, kPomoT1, kPomoT2, kPomoC0, kPomoC1, kPomoC2, kPomoC3, kTheftHist, kUiFont, kOcrOn, kOcrKeep, kOcrJoin, kOcrLang, kClk100, kClk90, kClk70, kClockDock, kSte, kTheme4, kTheftOn, kFocoOn, kAgendaOn, kVecText, kVecCurves, kSysToggle,
        kClOpen, kAge1, kAge7, kAge30, kTogCleanBin, kTogDiskW, kTogDiskWarn, kDiskLimMinus, kDiskLimPlus, kDiskAll0, kDiskAll1, kTogPerfW, kTogAiW, kTogBatW, kAiInstall, kAiEdge0, kAiEdge1, kAiEdge2, kAiEdge3, kAiRecenter, kAiShowLeft, kAiWarnMinus, kAiWarnPlus, kAiCritMinus, kAiCritPlus, kAiLimReset,
        kAiWeek0, kAiWeek1, kAiWeek2, kAiShow0, kAiShow1, kAiShow2, kAiHideFull, kAiNotify, kAiSound, kAiPreview, kAiSize0, kAiSize1, kAiSize2, kTogBatDock, kTogClockClean, kPrimao,
-       kPreset0, kPreset1, kPreset2, kTogOcrBtn, kHkOcr, kHkClean, kAdv0, kAdv1, kAdv2, kAdv3, kAdv4, kAdv5, kLinkAbout, kLinkThanks, kBack, kBtnUninstall, kBtnLiteUpgrade, kTogChat, kChatEdit, kRingReset, kInspect, kTogReports, kLinkTerms,
+       kPreset0, kPreset1, kPreset2, kTogOcrBtn, kHkOcr, kHkClean, kRecOpen, kTogRecBtn, kHkRec, kAdv0, kAdv1, kAdv2, kAdv3, kAdv4, kAdv5, kLinkAbout, kLinkThanks, kBack, kBtnUninstall, kBtnLiteUpgrade, kTogChat, kChatEdit, kRingReset, kInspect, kTogReports, kLinkTerms,
        // Chuva digital (tema Classic) - PLANO-CHUVA-DIGITAL
        kRainEnabled, kRainColor0, kRainColor1, kRainColor2, kRainColor3, kRainColor4, kRainColorCustom,
        kRainOpacityMinus, kRainOpacityPlus, kRainCycleMinus, kRainCyclePlus,
@@ -2869,7 +2874,7 @@ static bool g_setDown, g_setClosing;
 enum { kSetOpenKey = 0x40000 };
 static void CloseSettings();
 static int g_setPage; // 0 = Configurações, 1 = Sobre o programa, 2 = Agradecimentos
-static int g_capHot;  // capturando atalho: kHkOcr ou kHkClean (0 = não)
+static int g_capHot;  // capturando atalho: kHkOcr, kHkClean ou kHkRec (0 = não)
 static bool g_capFail; // o último atalho escolhido já era usado por outro programa
 static int g_capLast; // qual atalho falhou
 
@@ -2877,12 +2882,16 @@ static int g_capLast; // qual atalho falhou
 static const DWORD kOcrHotkeyDefault = (MOD_CONTROL | MOD_ALT) << 16 | 'T';
 static DWORD OcrHotkey() { return ReadDword(L"OcrHotkey", kOcrHotkeyDefault); }
 static DWORD CleanHotkey() { return g_lite ? 0 : ReadDword(L"CleanHotkey", 0); }
+// Ctrl+Alt+R: o Windows não usa (Win+Alt+R é o da Xbox Game Bar). Se outro programa já usar, o registro falha e a tela de atalhos avisa.
+static const DWORD kRecHotkeyDefault = (MOD_CONTROL | MOD_ALT) << 16 | 'R';
+static DWORD RecHotkey() { return g_lite ? 0 : ReadDword(L"RecHotkey", kRecHotkeyDefault); }
 static bool RegisterGlobalHotkeys() {
-    UnregisterHotKey(g_wnd, kHotOcr); UnregisterHotKey(g_wnd, kHotClean);
+    UnregisterHotKey(g_wnd, kHotOcr); UnregisterHotKey(g_wnd, kHotClean); UnregisterHotKey(g_wnd, kHotRec);
     bool ok = true;
-    DWORD o = OcrHotkey(), c = CleanHotkey();
+    DWORD o = OcrHotkey(), c = CleanHotkey(), r = RecHotkey();
     if (g_clock.ocr && (o & 0xFFFF)) ok = RegisterHotKey(g_wnd, kHotOcr, (o >> 16) | MOD_NOREPEAT, o & 0xFFFF) && ok;
     if (c & 0xFFFF) ok = RegisterHotKey(g_wnd, kHotClean, (c >> 16) | MOD_NOREPEAT, c & 0xFFFF) && ok;
+    if (r & 0xFFFF) ok = RegisterHotKey(g_wnd, kHotRec, (r >> 16) | MOD_NOREPEAT, r & 0xFFFF) && ok;
     return ok;
 }
 static std::wstring HotkeyName(DWORD k) {
@@ -2904,30 +2913,31 @@ static std::wstring HotkeyName(DWORD k) {
 static void CaptureHotkey(int id) { // entra (ou sai) do modo "aperte o atalho"
     g_capFail = false;
     g_capHot = g_capHot == id ? 0 : id;
-    if (g_capHot) { UnregisterHotKey(g_wnd, kHotOcr); UnregisterHotKey(g_wnd, kHotClean); } // o atalho atual também pode ser escolhido
+    if (g_capHot) { UnregisterHotKey(g_wnd, kHotOcr); UnregisterHotKey(g_wnd, kHotClean); UnregisterHotKey(g_wnd, kHotRec); } // o atalho atual também pode ser escolhido
     else RegisterGlobalHotkeys();
 }
 // Tecla durante a captura. Esc cancela; Backspace/Delete sem modificador volta ao padrão (OCR) ou remove (Limpeza).
 static bool CaptureKey(UINT vk) {
     if (!g_capHot) return false;
-    const wchar_t* key = g_capHot == kHkOcr ? L"OcrHotkey" : L"CleanHotkey";
+    const wchar_t* key = g_capHot == kHkOcr ? L"OcrHotkey" : g_capHot == kHkRec ? L"RecHotkey" : L"CleanHotkey";
+    DWORD def = g_capHot == kHkOcr ? kOcrHotkeyDefault : g_capHot == kHkRec ? kRecHotkeyDefault : 0;
     if (vk == VK_CONTROL || vk == VK_MENU || vk == VK_SHIFT || vk == VK_LWIN || vk == VK_RWIN || vk == VK_LCONTROL || vk == VK_RCONTROL ||
         vk == VK_LMENU || vk == VK_RMENU || vk == VK_LSHIFT || vk == VK_RSHIFT) return true; // espera a tecla principal
     UINT mod = (GetKeyState(VK_CONTROL) < 0 ? MOD_CONTROL : 0) | (GetKeyState(VK_MENU) < 0 ? MOD_ALT : 0) | (GetKeyState(VK_SHIFT) < 0 ? MOD_SHIFT : 0) |
                (GetKeyState(VK_LWIN) < 0 || GetKeyState(VK_RWIN) < 0 ? MOD_WIN : 0);
     if (vk == VK_ESCAPE && !mod) { CaptureHotkey(g_capHot); return true; }
     if ((vk == VK_BACK || vk == VK_DELETE) && !mod) {
-        WriteDword(key, g_capHot == kHkOcr ? kOcrHotkeyDefault : 0);
+        WriteDword(key, def);
         g_capHot = 0; g_capFail = false; RegisterGlobalHotkeys(); return true;
     }
     bool fkey = vk >= VK_F1 && vk <= VK_F24;
     if (!(mod & (MOD_CONTROL | MOD_ALT | MOD_WIN)) && !fkey) return true; // letra sozinha atrapalharia a digitação: exige Ctrl, Alt ou Win
-    DWORD old = ReadDword(key, g_capHot == kHkOcr ? kOcrHotkeyDefault : 0), now = mod << 16 | vk;
-    DWORD other = g_capHot == kHkOcr ? CleanHotkey() : OcrHotkey();
+    DWORD old = ReadDword(key, def), now = mod << 16 | vk;
+    bool clash = (g_capHot != kHkOcr && now == OcrHotkey()) || (g_capHot != kHkClean && now == CleanHotkey()) || (g_capHot != kHkRec && now == RecHotkey());
     g_capLast = g_capHot;
     WriteDword(key, now);
     g_capHot = 0;
-    g_capFail = now == other || !RegisterGlobalHotkeys();
+    g_capFail = clash || !RegisterGlobalHotkeys();
     if (g_capFail) { WriteDword(key, old); RegisterGlobalHotkeys(); } // em uso: mantém o anterior
     return true;
 }
@@ -2950,9 +2960,9 @@ static void ApplyPreset(int pr) {
         bool full = d && !g_lite;
         if (!full && g_clock.theft) ToggleTheft();
         if (!full && g_clock.phase) PomoStop();
-        g_clock.theftOn = full; g_clock.pomoOn = full; g_clock.agendaOn = full; g_clock.clean = full; g_clock.ocr = true; g_clock.ocrBtn = full; g_clock.chat = full;
+        g_clock.theftOn = full; g_clock.pomoOn = full; g_clock.agendaOn = full; g_clock.clean = full; g_clock.ocr = true; g_clock.ocrBtn = full; g_clock.chat = full; g_clock.recBtn = full;
         WriteDword(L"ClockTheft", full); WriteDword(L"ClockPomo", full); WriteDword(L"ClockAgenda", full); WriteDword(L"ClockClean", full);
-        WriteDword(L"OcrOn", 1); WriteDword(L"ClockOcr", full); WriteDword(L"ClockChat", full);
+        WriteDword(L"OcrOn", 1); WriteDword(L"ClockOcr", full); WriteDword(L"ClockChat", full); WriteDword(L"ClockRec", full);
         WriteDword(L"CleanRecycle", 0); // Lixeira fora da análise nos dois presets
         for (int k : {kWDisk, kWPerf, kWAi, kWBat}) if (WidgetOn(k)) { WriteDword(WKey(k), 0); WidgetEnable(k, false); }
         if (!g_lite && g_clock.time != full) { if (!full && g_clock.docked) ClockDock(false); ClockEnable(full); }
@@ -2979,7 +2989,7 @@ static bool PresetOption(int id) {
     switch (id) {
     case kTogSpace: case kTogPicker: case kTogAlt: case kDelayMinus: case kDelayPlus: case kDpi72: case kDpi300: case kPdfSmall: case kPdfRaw:
     case kVecText: case kVecCurves: case kQualMinus: case kQualPlus: case kWebpMinus: case kWebpPlus: case kClockOn: case kTheftOn: case kFocoOn:
-    case kAgendaOn: case kTogClockClean: case kTogTempDel: case kTogCleanBin: case kTogDiskW: case kTogPerfW: case kTogAiW: case kTogBatW: case kOcrOn: case kTogOcrBtn: case kTogChat:
+    case kAgendaOn: case kTogClockClean: case kTogTempDel: case kTogCleanBin: case kTogDiskW: case kTogPerfW: case kTogAiW: case kTogBatW: case kOcrOn: case kTogOcrBtn: case kTogChat: case kTogRecBtn:
     case kTogAuto: case kTogTray: case kTogUpdate: return true;
     default: return false;
     }
@@ -3053,14 +3063,16 @@ static std::string RunSelfTest();
 #include "Inspect.inc.h" // Configurações › Sistema › Avançado › Inspeção do Vizu
 
 static void SettingsAction(int id) {
-    if (g_capHot && id != kHkOcr && id != kHkClean) CaptureHotkey(g_capHot); // clicar em outro lugar cancela a captura
+    if (g_capHot && id != kHkOcr && id != kHkClean && id != kHkRec) CaptureHotkey(g_capHot); // clicar em outro lugar cancela a captura
     if (!g_lite && g_preset != kPresetCustom && PresetOption(id)) { g_preset = kPresetCustom; WriteDword(L"SettingsPreset", kPresetCustom); }
     switch (id) {
     case kPreset0: case kPreset1: case kPreset2: ApplyPreset(id - kPreset0); return;
     case kTogChat: g_clock.chat = !g_clock.chat; WriteDword(L"ClockChat", g_clock.chat); ClockSync(); return;
     case kChatEdit: EditChatButton(g_settingsWnd); return;
     case kTogOcrBtn: g_clock.ocrBtn = !g_clock.ocrBtn; WriteDword(L"ClockOcr", g_clock.ocrBtn); ClockSync(); return;
-    case kHkOcr: case kHkClean: CaptureHotkey(id); return;
+    case kHkOcr: case kHkClean: case kHkRec: CaptureHotkey(id); return;
+    case kTogRecBtn: g_clock.recBtn = !g_clock.recBtn; WriteDword(L"ClockRec", g_clock.recBtn); ClockSync(); return;
+    case kRecOpen: OpenRecordBar(); return;
     case kAdv0: case kAdv1: case kAdv2: case kAdv3: case kAdv4: case kAdv5: g_advOpen[id - kAdv0] = !g_advOpen[id - kAdv0]; return;
     case kLinkAbout: case kLinkThanks: g_setPage = id == kLinkAbout ? 1 : 2; g_setScroll = 0; return;
     case kLinkTerms: g_setPage = 3; g_setScroll = 0; return;
@@ -3652,6 +3664,11 @@ static void PaintSettings(HWND h) {
     rows = {{RH, 0, [&](D2D1_RECT_F r) { rlabel(r, L"OCR", ocrSub.c_str()); rtoggle(kOcrOn, r, g_clock.ocr); }}};
     if (!g_lite) rows.push_back({RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Botão na caixa", L"Button in the box", L"Botón en la caja"), T(L"O botão de ler texto no relógio abre o OCR", L"The read-text button on the clock opens OCR", L"El botón de leer texto en el reloj abre el OCR")); rtoggle(kTogOcrBtn, r, g_clock.ocrBtn); }});
     rows.push_back(hotkeyRow(kHkOcr, OcrHotkey(), T(L"do OCR", L"OCR", L"del OCR")));
+    if (!g_lite) { // Gravar tela
+        rows.push_back({RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Gravar tela", L"Record screen", L"Grabar pantalla"), T(L"Vídeo MP4 com som do computador e microfone, salvo na pasta Vídeos", L"MP4 video with computer sound and microphone, saved to Videos", L"Video MP4 con sonido del equipo y micrófono, guardado en Videos")); rpill(r, kRecOpen, T(L"Abrir", L"Open", L"Abrir"), 90 * s); }});
+        rows.push_back({RH, 0, [&](D2D1_RECT_F r) { rlabel(r, T(L"Botão na caixa", L"Button in the box", L"Botón en la caja"), T(L"A bolinha vermelha no relógio abre a barra de gravação", L"The red dot on the clock opens the recording bar", L"El punto rojo del reloj abre la barra de grabación")); rtoggle(kTogRecBtn, r, g_clock.recBtn); }});
+        rows.push_back(hotkeyRow(kHkRec, RecHotkey(), T(L"de gravar a tela", L"screen recording", L"de grabar la pantalla")));
+    }
     std::wstring chatSub; // o que o botão abre hoje
     if (!g_lite) {
         chatSub = g_clock.app == L"https://chatgpt.com" ? std::wstring(T(L"Abre o ChatGPT no relógio", L"Opens ChatGPT from the clock", L"Abre ChatGPT desde el reloj"))

@@ -1,4 +1,5 @@
 static void StartOcr();
+static void OpenRecordBar();
 // Clock.inc.h - DesktopClock integrado ao Vizu: relógio na área de trabalho, agenda, Pomodoro e Roubo de Tempo.
 // Incluído dentro do Vizu.cpp (usa g_theme, g_dw, g_inst, T(), ReadDword...). Desligado até o usuário ativar.
 
@@ -35,13 +36,14 @@ struct ClockState {
     ULONGLONG theftStart = 0; // GetTickCount64
     SYSTEMTIME theftWall = {};
     int hot = -1, lastSec = -1;
-    D2D1_RECT_F rTri{}, rChip[5]{}; // 0 roubo, 1 Pomodoro, 2 atalho, 3 OCR, 4 Limpeza
+    D2D1_RECT_F rTri{}, rChip[6]{}; // 0 roubo, 1 Pomodoro, 2 atalho, 3 OCR, 4 Limpeza, 5 Gravar tela
     float s = 1;
     bool reminderOpen = false;
     bool ocr = true;          // botão e atalho Ctrl+Alt+T do OCR
     bool clean = true;        // botão da Limpeza (antes do OCR)
     bool chat = true;         // botão do ChatGPT (ou do site/programa escolhido em ClockApp)
     bool ocrBtn = true;       // botão do OCR no relógio (o atalho vale mesmo sem ele)
+    bool recBtn = true;       // botão de gravar a tela (bolinha vermelha, depois do OCR)
     bool theftOn = true, pomoOn = true, agendaOn = true; // recursos do relógio que o usuário pode desligar
     bool time = false;        // mostra a hora ("Relógio na área de trabalho"); a caixa existe com a hora OU com algum botão
     DWORD scalePct = 70;      // tamanho: 100, 90 ou 70% (padrão 70%)
@@ -51,7 +53,7 @@ struct ClockState {
 static ClockState g_clock;
 static void SetClockTimer(HWND h);
 void ClockSync();
-enum { kClkTri = 0, kClkChip0 = 1, kClkChip1, kClkChip2, kClkChip3, kClkChip4 };
+enum { kClkTri = 0, kClkChip0 = 1, kClkChip1, kClkChip2, kClkChip3, kClkChip4, kClkChip5 };
 
 static ULONGLONG ClockLeft() {
     if (!g_clock.phase) return 0;
@@ -404,7 +406,7 @@ static void ClockRender() {
     float timeW = 2 * w2 + wc, chip = 40 * s, gap = 6 * s, theftW = g_clock.theft ? 104 * s : chip;
     bool showTime = pomo || g_clock.time;                 // sem a hora, a caixa mostra só os botões
     bool showTri = pomo || (g_clock.time && g_clock.agendaOn);
-    float Wc = 14 * s + (showTri ? 20 * s + 12 * s : 0) + (showTime ? timeW + 12 * s : 0) + (g_clock.theftOn ? theftW + gap : 0) + (g_clock.pomoOn ? chip + gap : 0) + (pomo || g_clock.chat ? chip : -gap) + (g_clock.clean ? gap + chip : 0) + (g_clock.ocr && g_clock.ocrBtn ? gap + chip : 0) + 10 * s;
+    float Wc = 14 * s + (showTri ? 20 * s + 12 * s : 0) + (showTime ? timeW + 12 * s : 0) + (g_clock.theftOn ? theftW + gap : 0) + (g_clock.pomoOn ? chip + gap : 0) + (pomo || g_clock.chat ? chip : -gap) + (g_clock.clean ? gap + chip : 0) + (g_clock.ocr && g_clock.ocrBtn ? gap + chip : 0) + (g_clock.recBtn ? gap + chip : 0) + 10 * s;
     UINT W = (UINT)(Wc + 2 * M), Ht = (UINT)(H + 2 * M);
     fmt::Canvas cv(W, Ht);
     if (!cv.rt) return;
@@ -532,6 +534,13 @@ static void ClockRender() {
         { bool hv_ = g_clock.hot == kClkChip3; if (th.neon && hv_) p.Neon(g_clock.rChip[3], chip / 2, 0.7f); p.Fill(g_clock.rChip[3], chip / 2, hv_ ? hotBg : chipBg); if (th.neon) p.Stroke(g_clock.rChip[3], chip / 2, hv_ ? th.accent : ui::Rgba(0xFFFFFF, 0.06f)); }
         p.FilledIcon("scan-text", g_clock.rChip[3], 22 * s, ico(kClkChip3));
     }
+    if (g_clock.recBtn) { // gravar a tela: bolinha vermelha
+        g_clock.rChip[5] = chipRect(chip);
+        D2D1_RECT_F r = g_clock.rChip[5];
+        { bool hv_ = g_clock.hot == kClkChip5; if (th.neon && hv_) p.Neon(r, chip / 2, 0.7f); p.Fill(r, chip / 2, hv_ ? hotBg : chipBg); if (th.neon) p.Stroke(r, chip / 2, hv_ ? th.accent : ui::Rgba(0xFFFFFF, 0.06f)); }
+        float k = 7 * s, mx = (r.left + r.right) / 2, my = (r.top + r.bottom) / 2;
+        p.Fill(D2D1::RectF(mx - k, my - k, mx + k, my + k), k, ui::Rgba(0xFF3B30, g_clock.hot == kClkChip5 ? 1.0f : 0.85f));
+    }
 
     HBITMAP bmp = nullptr;
     if (FAILED(cv.Finish(&bmp)) || !bmp) return;
@@ -553,7 +562,7 @@ static void ClockRender() {
 static int ClockHit(POINT pt) {
     auto in = [&](const D2D1_RECT_F& r) { return pt.x >= r.left && pt.x < r.right && pt.y >= r.top && pt.y < r.bottom; };
     if (in(g_clock.rTri)) return kClkTri;
-    for (int i = 0; i < 5; ++i) if (in(g_clock.rChip[i])) return kClkChip0 + i;
+    for (int i = 0; i < 6; ++i) if (in(g_clock.rChip[i])) return kClkChip0 + i;
     return -1;
 }
 
@@ -668,6 +677,7 @@ static LRESULT CALLBACK ClockProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             else ShellExecuteW(nullptr, L"open", g_clock.app.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
         } else if (hit == kClkChip3) { StartOcr(); return 0; }
         else if (hit == kClkChip4) { OpenCleanWindow(); return 0; }
+        else if (hit == kClkChip5) { OpenRecordBar(); return 0; }
         ClockRender();
         return 0;
     }
@@ -696,7 +706,7 @@ static LRESULT CALLBACK ClockProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
 void ClockDock(bool on);
 static void SetTrayClock(bool docking);
 static bool ClockAnyButton() {
-    return g_clock.theftOn || g_clock.pomoOn || g_clock.chat || g_clock.clean || (g_clock.ocr && g_clock.ocrBtn) || g_clock.phase != 0 || g_clock.theft;
+    return g_clock.theftOn || g_clock.pomoOn || g_clock.chat || g_clock.clean || (g_clock.ocr && g_clock.ocrBtn) || g_clock.recBtn || g_clock.phase != 0 || g_clock.theft;
 }
 // Liga/desliga a HORA. A caixa continua enquanto houver algum botão ligado.
 void ClockEnable(bool on) {
@@ -784,13 +794,14 @@ static void ClockLoad() {
     g_clock.ocr = ReadDword(L"OcrOn", 1) != 0;
     g_clock.clean = ReadDword(L"ClockClean", 1) != 0;
     g_clock.ocrBtn = ReadDword(L"ClockOcr", 1) != 0;
+    g_clock.recBtn = ReadDword(L"ClockRec", 1) != 0;
     g_clock.chat = ReadDword(L"ClockChat", 1) != 0;
     g_clock.theftOn = ReadDword(L"ClockTheft", 1) != 0;
     g_clock.pomoOn = ReadDword(L"ClockPomo", 1) != 0;
     g_clock.agendaOn = ReadDword(L"ClockAgenda", 1) != 0;
     { DWORD sc = ReadDword(L"ClockScale", 70); g_clock.scalePct = sc == 100 || sc == 90 ? sc : 70; }
     g_clock.docked = ReadDword(L"ClockDocked", 0) != 0;
-    if (g_lite) { g_clock.clean = false; return; } // Vizu Lite: sem relógio (o OCR fica, pelo atalho)
+    if (g_lite) { g_clock.clean = false; g_clock.recBtn = false; return; } // Vizu Lite: sem relógio (o OCR fica, pelo atalho)
     g_clock.time = ReadDword(L"ClockOn", 0) != 0; // a hora começa desligada
     ClockSync();                                    // botões aparecem mesmo sem a hora
 }
