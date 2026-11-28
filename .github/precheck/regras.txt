@@ -123,3 +123,21 @@ arquivos: Rain.inc.h
 exigido: inline bool MonitorCovered\(
 motivo: na 19.5.9 uma janela maximizada em qualquer monitor (ou "Mostrar animações" desligado) congelava a chuva toda; ela só pausa com TODOS os monitores cobertos, tela bloqueada ou bateria fraca
 origem: v19.5.9
+
+id: gravacao-barra-fora-do-video
+arquivos: RecordUi.inc.h
+exigido: SetWindowDisplayAffinity\(g_rec\.wnd, WDA_EXCLUDEFROMCAPTURE\)
+motivo: a barra de gravação não pode aparecer no vídeo. Mantenha WDA_EXCLUDEFROMCAPTURE na janela da barra
+origem: v19.6.0
+
+id: gravacao-finalize-ao-sair
+arquivos: Vizu.cpp
+exigido: case WM_DESTROY:[^\n]*RecShutdown\(\)
+motivo: sair do Vizu no meio da gravação sem Finalize deixa um MP4 que não abre. Chame RecShutdown() no WM_DESTROY da janela principal
+origem: v19.6.0
+
+id: gravacao-tamanho-par
+arquivos: Record.h
+exigido: crop = EvenRect\(
+motivo: o H.264 recusa largura ou altura ímpar (barra de tarefas de 41 px, telas 1366x767). Passe o recorte por EvenRect
+origem: v19.6.0
