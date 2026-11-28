@@ -108,6 +108,7 @@ struct OcrCard {
     int state = 0;            // 0 copiado, 1 traduzindo, 2 traduzido, 3 erro
     std::wstring target;      // pt / es / en
     bool joined = false;
+    bool upper = false;       // botão A/a: mostra e copia em CAIXA ALTA
     int hot = -1;
     D2D1_RECT_F r[8]{};       // 0 PT, 1 ES, 2 EN, 3 juntar, 4 abrir no Google, 5 fechar, 6 copiar original
     POINT anchor{};           // canto da seleção
@@ -115,7 +116,7 @@ struct OcrCard {
     ULONGLONG lastHover = 0;
 };
 static OcrCard g_card;
-enum { kCardPt, kCardEs, kCardEn, kCardJoin, kCardWeb, kCardClose, kCardOrig };
+enum { kCardPt, kCardEs, kCardEn, kCardJoin, kCardWeb, kCardClose, kCardOrig, kCardCase };
 
 static std::wstring LangName(const std::wstring& tag) {
     std::wstring t = tag.substr(0, 2);
@@ -127,6 +128,16 @@ static std::wstring LangName(const std::wstring& tag) {
     if (t == L"it") return T(L"italiano", L"Italian", L"italiano");
     return tag;
 }
+// A/a: CAIXA ALTA pela regra do Windows (acentos e ß corretos); desligado, o texto volta como foi lido.
+static std::wstring UpperText(const std::wstring& t) {
+    if (t.empty()) return t;
+    int n = LCMapStringEx(LOCALE_NAME_USER_DEFAULT, LCMAP_UPPERCASE | LCMAP_LINGUISTIC_CASING, t.c_str(), (int)t.size(), nullptr, 0, nullptr, nullptr, 0);
+    if (n <= 0) return t;
+    std::wstring r(n, L'\0');
+    LCMapStringEx(LOCALE_NAME_USER_DEFAULT, LCMAP_UPPERCASE | LCMAP_LINGUISTIC_CASING, t.c_str(), (int)t.size(), &r[0], n, nullptr, nullptr, 0);
+    return r;
+}
+static std::wstring CardOut(const std::wstring& t);
 static std::wstring JoinLines(const std::wstring& t) {
     std::wstring r;
     for (size_t i = 0; i < t.size(); ++i) {
@@ -137,6 +148,7 @@ static std::wstring JoinLines(const std::wstring& t) {
     return r;
 }
 
+static std::wstring CardOut(const std::wstring& t) { return g_card.upper ? UpperText(t) : t; }
 static void CardRender() {
     HWND w = g_card.wnd;
     if (!w) return;
@@ -147,7 +159,8 @@ static void CardRender() {
     float W = 440 * s, pad = tk.sp_4 * s, M = tk.r_card * s;
     D2D1_COLOR_F accent = th.classic ? ui::Rgba(0xFF6633) : th.neon ? ui::Rgba(ui::NeonColor()) : g_cfg.themeMode == ui::kThemeWindows ? th.accent : th.dark ? ui::Rgba(0xE6E6E8) : ui::Rgba(0x1D1D1F);
     D2D1_COLOR_F onAccent = th.classic ? ui::Rgba(0x000000) : th.neon || (th.dark && g_cfg.themeMode != ui::kThemeWindows) ? ui::Rgba(0x0E0E10) : ui::Rgba(0xFFFFFF);
-    std::wstring disp = g_card.shown.size() > 700 ? g_card.shown.substr(0, 700) + L"…" : g_card.shown;
+    std::wstring shownCase = g_card.upper ? UpperText(g_card.shown) : g_card.shown;
+    std::wstring disp = shownCase.size() > 700 ? shownCase.substr(0, 700) + L"…" : shownCase;
     // mede o texto
     float textW = W - 2 * pad - 24 * s, textH = 20 * s;
     {
@@ -224,6 +237,16 @@ static void CardRender() {
         p.FeatherIcon(k == kCardWeb ? "external-link" : "align-justify", b, tk.r_control * s, th.text);
         rx -= 40 * s;
     }
+    { // A/a: CAIXA ALTA liga e desliga
+        D2D1_RECT_F b = D2D1::RectF(rx - 40 * s, y, rx, y + tk.sp_6 * s * 1.5f);
+        g_card.r[kCardCase] = b;
+        if (g_card.upper) p.Fill(b, tk.r_chip * s, accent);
+        else {
+            if (g_card.hot == kCardCase) p.Fill(b, tk.r_chip * s, th.dark ? ui::Rgba(0xFFFFFF, 0.08f) : ui::Rgba(0x000000, 0.05f));
+            p.Stroke(b, tk.r_chip * s, th.dark ? ui::Rgba(0xFFFFFF, 0.16f) : ui::Rgba(0x000000, 0.12f), 1 * s);
+        }
+        p.Text(L"A/a", b, tk.t_caption.size, g_card.upper ? onAccent : th.text, DWRITE_FONT_WEIGHT_BOLD, DWRITE_TEXT_ALIGNMENT_CENTER);
+    }
     y += tk.sp_6 * s * 1.5f;
     g_card.r[kCardOrig] = D2D1::RectF(0, 0, 0, 0);
     if (g_card.state == 2) {
@@ -271,7 +294,7 @@ static void CardTranslate(const wchar_t* to) {
 static void CardClose() { if (g_card.wnd) { DestroyWindow(g_card.wnd); g_card.wnd = nullptr; } }
 
 static int CardHit(POINT pt) {
-    for (int i = 0; i < 7; ++i) {
+    for (int i = 0; i < 8; ++i) {
         const D2D1_RECT_F& r = g_card.r[i];
         if (pt.x >= r.left && pt.x < r.right && pt.y >= r.top && pt.y < r.bottom) return i;
     }
@@ -298,12 +321,16 @@ static LRESULT CALLBACK CardProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         if (hit <= kCardEn) CardTranslate(tags[hit]);
         else if (hit == kCardJoin) {
             g_card.joined = !g_card.joined;
-            if (g_card.state != 2) { g_card.shown = g_card.joined ? JoinLines(g_card.original) : g_card.original; CopyText(g_card.shown); }
+            if (g_card.state != 2) { g_card.shown = g_card.joined ? JoinLines(g_card.original) : g_card.original; CopyText(CardOut(g_card.shown)); }
             CardRender();
         } else if (hit == kCardWeb) {
             std::wstring t = g_card.joined ? JoinLines(g_card.original) : g_card.original;
             std::wstring url = L"https://translate.google.com/?sl=auto&tl=" + (g_card.target.empty() ? std::wstring(L"pt") : g_card.target) + L"&op=translate&text=" + UrlEncode(t.substr(0, 4000));
             ShellExecuteW(nullptr, L"open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+        } else if (hit == kCardCase) {
+            g_card.upper = !g_card.upper;
+            if (g_card.state != 1) CopyText(CardOut(g_card.shown));
+            CardRender();
         } else if (hit == kCardClose) CardClose();
         else if (hit == kCardOrig) {
             CopyText(g_card.joined ? JoinLines(g_card.original) : g_card.original);
@@ -317,7 +344,7 @@ static LRESULT CALLBACK CardProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         auto* r = (TransResult*)lp;
         if (r->to == g_card.target) {
             if (r->ok) {
-                g_card.state = 2; g_card.shown = r->text; CopyText(r->text);
+                g_card.state = 2; g_card.shown = r->text; CopyText(CardOut(r->text));
                 std::wstring from = r->from.empty() ? g_card.lang : r->from;
                 g_card.status = std::wstring(r->partial ? T(L"Tradução parcial (texto longo) · ", L"Partial translation (long text) · ", L"Traducción parcial (texto largo) · ") : T(L"Tradução copiada · ", L"Translation copied · ", L"Traducción copiada · ")) + LangName(from) + L" \u203A " + LangName(r->to);
             } else {
